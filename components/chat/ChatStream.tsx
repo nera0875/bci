@@ -333,11 +333,12 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
           }
         }
 
-        // Parse commands only after streaming is complete
-        await parseAndExecuteCommands(fullContent)
+        // Parse commands and clean the message
+        const cleanedContent = await parseAndExecuteCommands(fullContent)
+        fullContent = cleanedContent // Use cleaned version
       }
 
-      // Save complete message to database
+      // Save complete message to database (cleaned version)
       if (fullContent) {
         const { data: newMessage } = await supabase
           .from('chat_messages')
