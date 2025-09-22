@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase/client'
+import { generateUUID } from '@/lib/utils/uuid'
 import type { Project, HttpRequest, Task, ChatMessage, EmbeddingRule, ApiConfig } from '@/lib/types'
 
 interface AppState {
@@ -60,7 +61,7 @@ export const useAppStore = create<AppState>()(
         },
         claude: {
           apiKey: '',
-          model: 'claude-opus-4-1-20250805', // Claude Opus 4.1
+          model: 'claude-3-opus-20240229', // Claude 3 Opus
           maxTokens: 4096,
         },
       },
@@ -83,7 +84,7 @@ export const useAppStore = create<AppState>()(
       // Project Actions
       createProject: async (name, description) => {
         const project: Project = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           name,
           description,
           requests: [],

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-opus-4-1-20250805', // Claude Opus 4.1
+              model: 'claude-3-haiku-20240307', // Using Claude 3 Haiku (compatible model)
               max_tokens: 4096,
               messages: [
                 { role: 'user', content: message }
@@ -121,29 +121,62 @@ export async function POST(request: NextRequest) {
 }
 
 function createSystemPrompt(context: any): string {
-  return `You are Claude, an AI penetration testing assistant integrated into the BCI Tool.
+  // Format memory nodes for context
+  const memoryContext = context?.memory?.map((node: any) =>
+    `[${node.type}] ${node.name}: ${JSON.stringify(node.content)}`
+  ).join('\n') || 'No memory nodes yet';
 
-Your capabilities:
-1. Analyze HTTP requests for vulnerabilities
-2. Generate and evolve attack payloads
+  // Format rules as directives
+  const rulesContext = context?.rules?.filter((r: any) => r.enabled)
+    .map((rule: any) => `- ${rule.name}: When ${rule.trigger}, then ${rule.action}`)
+    .join('\n') || '';
+
+  // Similar content from RAG
+  const similarContext = context?.similar?.map((item: any) =>
+    `[Similarity: ${item.similarity}] ${item.content}`
+  ).join('\n') || '';
+
+  return `You are Claude, an advanced AI penetration testing assistant integrated into the BCI Tool v2.
+
+CORE CAPABILITIES:
+1. Analyze HTTP requests for vulnerabilities (XSS, SQLi, CSRF, etc.)
+2. Generate and evolve attack payloads using genetic algorithms
 3. Learn from successful and failed attempts
-4. Manage a dynamic memory system
+4. Manage a dynamic memory system with real-time updates
+5. Use RAG to retrieve similar patterns from memory
 
-Context:
-- Project Goal: ${context?.goal || 'Find vulnerabilities'}
-- Memory Nodes: ${JSON.stringify(context?.memory || [])}
+PROJECT CONTEXT:
+- Goal: ${context?.goal || 'Find and exploit vulnerabilities'}
+- Current Memory State:
+${memoryContext}
 
-Memory Management Commands (use in your responses):
-- To create a memory node: [CREATE_NODE: {"type": "folder", "name": "XSS Patterns", "color": "#FF0000"}]
-- To update a node: [UPDATE_NODE: {"id": "node_id", "data": {...}}]
-- To create a widget: [CREATE_WIDGET: {"type": "metric", "name": "Success Rate", "value": 95}]
+SIMILAR PATTERNS (from RAG):
+${similarContext}
 
-Rules:
-1. Be concise and technical
-2. Focus on finding vulnerabilities
-3. Learn from each interaction
-4. Organize findings in the memory system
+ACTIVE RULES:
+${rulesContext}
+
+MEMORY MANAGEMENT COMMANDS:
+Use these commands in your responses to modify the memory system:
+- [CREATE_NODE: {"type": "folder|document|widget|pattern", "name": "Name", "content": {...}, "color": "#HEX"}]
+- [UPDATE_NODE: {"id": "uuid", "content": {...}}]
+- [DELETE_NODE: {"id": "uuid"}]
+- [CREATE_WIDGET: {"type": "metric|chart|live", "name": "Name", "data": {...}}]
+- [STORE_PATTERN: {"pattern": "...", "type": "xss|sqli|csrf", "success_rate": 0.95}]
+
+RESPONSE FORMAT:
+1. First, analyze the user's request
+2. Check memory for similar patterns
+3. Generate response with technical details
+4. Include memory commands to store findings
 5. Suggest next steps based on patterns
+
+IMPORTANT:
+- Be technical and precise
+- Store all successful patterns in memory
+- Learn from each interaction
+- Organize findings hierarchically
+- Track success rates and confidence scores
 
 When analyzing requests:
 - Look for injection points

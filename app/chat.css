@@ -1,0 +1,107 @@
+/* Smooth text streaming animation - ChatGPT style */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes smoothCursor {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes wordAppear {
+  from {
+    opacity: 0;
+    transform: translateX(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Main streaming container */
+.streaming-text-container {
+  position: relative;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Streaming message animations */
+.message-streaming {
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.streaming-text-container p {
+  margin: 0;
+  line-height: 1.6;
+  word-spacing: 0.05em;
+  letter-spacing: 0.01em;
+}
+
+/* Each word animation */
+.streaming-text-container span {
+  display: inline-block;
+  animation: wordAppear 0.08s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Smooth typing cursor like ChatGPT */
+.typing-cursor-smooth {
+  display: inline-block;
+  width: 3px;
+  height: 1.1em;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    currentColor 10%,
+    currentColor 90%,
+    transparent 100%
+  );
+  animation: smoothCursor 1.2s ease-in-out infinite;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+  border-radius: 1px;
+  opacity: 0.8;
+}
+
+/* Old cursor for compatibility */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: currentColor;
+  animation: smoothCursor 1s infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}
+
+/* Smooth scroll */
+.chat-container {
+  scroll-behavior: smooth;
+}
+
+/* Message fade in */
+.message-enter {
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

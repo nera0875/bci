@@ -9,6 +9,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
 
 // For server-side operations requiring elevated privileges
 export const createServerClient = () => {
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
-  return createClient<Database>(supabaseUrl, supabaseServiceKey)
+  // Use anon key if service key is not available
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || supabaseAnonKey
+  return createClient<Database>(supabaseUrl, supabaseKey)
 }

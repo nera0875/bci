@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-opus-4-1-20250805", // Claude Opus 4.1 - Latest and most powerful
+        model: "claude-3-opus-20240229", // Claude 3 Opus
         max_tokens: 10,
         messages: [
           { role: "user", content: "test" }

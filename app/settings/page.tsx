@@ -9,13 +9,25 @@ import toast, { Toaster } from 'react-hot-toast'
 export default function SettingsPage() {
   const router = useRouter()
   const { apiConfig, updateApiConfig, testApiConnection, connectionStatus } = useAppStore()
+  const [isLoading, setIsLoading] = useState(true)
 
   const [localConfig, setLocalConfig] = useState({
-    openai: apiConfig.openai.apiKey,
-    claude: apiConfig.claude.apiKey
+    openai: '',
+    claude: ''
   })
   const [isTesting, setIsTesting] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+
+  useEffect(() => {
+    // Simulate initial load
+    setTimeout(() => {
+      setLocalConfig({
+        openai: apiConfig.openai.apiKey,
+        claude: apiConfig.claude.apiKey
+      })
+      setIsLoading(false)
+    }, 100)
+  }, [apiConfig])
 
   useEffect(() => {
     // Check if config has changed
@@ -61,31 +73,42 @@ export default function SettingsPage() {
   }
 
   const ConnectionIndicator = ({ status }: { status: string }) => {
-    if (status === 'connected') return <CheckCircle className="w-5 h-5 text-success" />
-    if (status === 'error') return <XCircle className="w-5 h-5 text-error" />
-    if (status === 'checking') return <Loader2 className="w-5 h-5 text-warning animate-spin" />
-    return <div className="w-5 h-5 rounded-full bg-muted" />
+    if (status === 'connected') return <CheckCircle className="w-5 h-5 text-green-500" />
+    if (status === 'error') return <XCircle className="w-5 h-5 text-red-500" />
+    if (status === 'checking') return <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />
+    return <div className="w-5 h-5 rounded-full bg-gray-300" />
   }
 
   const canAccessProjects = connectionStatus.openai === 'connected' && connectionStatus.claude === 'connected'
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-gray-900 animate-spin" />
+          <p className="text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white">
       <Toaster position="top-right" />
 
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-gray-200 bg-white">
         <div className="max-w-4xl mx-auto px-8 py-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push('/projects')}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-6 h-6 text-gray-700" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-              <p className="text-muted-foreground text-sm">Configure your API connections</p>
+              <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+              <p className="text-gray-500 text-sm">Configure your API connections</p>
             </div>
           </div>
         </div>
@@ -93,23 +116,23 @@ export default function SettingsPage() {
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-8 py-12">
-        <div className="bg-card border border-border rounded-2xl p-8 space-y-8">
+        <div className="bg-white border border-gray-200 rounded-2xl p-8 space-y-8">
           {/* Status Overview */}
-          <div className="bg-muted rounded-lg p-6">
-            <h3 className="font-semibold text-foreground mb-4">Connection Status</h3>
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h3 className="font-semibold text-gray-900 mb-4 text-lg">Connection Status</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm">OpenAI API</span>
+                <span className="text-base text-gray-700">OpenAI API</span>
                 <ConnectionIndicator status={connectionStatus.openai} />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Claude API</span>
+                <span className="text-base text-gray-700">Claude API</span>
                 <ConnectionIndicator status={connectionStatus.claude} />
               </div>
             </div>
             {!canAccessProjects && (
-              <div className="mt-4 p-3 bg-warning/10 border border-warning/20 rounded-lg">
-                <p className="text-sm text-warning">
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
                   Both API connections must be active to access projects
                 </p>
               </div>
@@ -118,40 +141,40 @@ export default function SettingsPage() {
 
           {/* API Keys Configuration */}
           <div className="space-y-6">
-            <h3 className="font-semibold text-foreground">API Keys</h3>
+            <h3 className="font-semibold text-gray-900 text-lg">API Keys</h3>
 
             {/* OpenAI */}
             <div className="space-y-2">
-              <label className="flex items-center justify-between text-sm font-medium text-foreground">
+              <label className="flex items-center justify-between text-base font-medium text-gray-900">
                 <span>OpenAI API Key</span>
                 <ConnectionIndicator status={connectionStatus.openai} />
               </label>
               <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="password"
                   value={localConfig.openai}
                   onChange={(e) => setLocalConfig({ ...localConfig, openai: e.target.value })}
                   placeholder="sk-..."
-                  className="w-full pl-11 pr-4 py-3 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-foreground text-foreground placeholder:text-muted-foreground"
+                  className="w-full pl-11 pr-4 py-4 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 />
               </div>
             </div>
 
             {/* Claude */}
             <div className="space-y-2">
-              <label className="flex items-center justify-between text-sm font-medium text-foreground">
+              <label className="flex items-center justify-between text-base font-medium text-gray-900">
                 <span>Claude API Key</span>
                 <ConnectionIndicator status={connectionStatus.claude} />
               </label>
               <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="password"
                   value={localConfig.claude}
                   onChange={(e) => setLocalConfig({ ...localConfig, claude: e.target.value })}
                   placeholder="sk-ant-..."
-                  className="w-full pl-11 pr-4 py-3 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-foreground text-foreground placeholder:text-muted-foreground"
+                  className="w-full pl-11 pr-4 py-4 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 />
               </div>
             </div>
@@ -162,11 +185,11 @@ export default function SettingsPage() {
             <button
               onClick={handleTestConnections}
               disabled={isTesting || (!localConfig.openai && !localConfig.claude)}
-              className="px-5 py-2.5 border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-3 text-base border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isTesting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                   Testing...
                 </>
               ) : (
@@ -176,20 +199,20 @@ export default function SettingsPage() {
             <button
               onClick={handleSave}
               disabled={isTesting || !hasChanges}
-              className="px-5 py-2.5 bg-foreground text-background rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-3 text-base bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              <Save className="w-4 h-4" />
+              <Save className="w-5 h-5" />
               Save
             </button>
           </div>
 
           {/* Info */}
-          <div className="text-center text-muted-foreground text-sm">
+          <div className="text-center text-gray-500 text-base">
             Your API keys are stored locally and used to connect with AI services.
             {canAccessProjects ? (
-              <p className="text-success mt-2">✓ All connections active - You can access projects</p>
+              <p className="text-green-600 mt-2 font-medium">✓ All connections active - You can access projects</p>
             ) : (
-              <p className="text-error mt-2">⚠ Configure both APIs to access projects</p>
+              <p className="text-red-600 mt-2 font-medium">⚠ Configure both APIs to access projects</p>
             )}
           </div>
         </div>
