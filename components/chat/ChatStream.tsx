@@ -335,7 +335,12 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
 
         // Parse commands and clean the message
         const cleanedContent = await parseAndExecuteCommands(fullContent)
-        fullContent = cleanedContent // Use cleaned version
+        // Only update if content was actually cleaned
+        if (cleanedContent !== fullContent && cleanedContent.trim()) {
+          fullContent = cleanedContent
+          // Update streaming display with cleaned content
+          setStreamingContent(cleanedContent)
+        }
       }
 
       // Save complete message to database (cleaned version)
@@ -434,10 +439,46 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
   }
 
   // Parse and execute memory commands from Claude's response
-  const parseAndExecuteCommands = async (text: string) => {
-    // Match commands like [CREATE_NODE: {...}] or /memory_add ...
+  const parseAndExecuteCommands = async (text: string): Promise<string> => {
+    // Remove and execute hidden memory actions
+    const hiddenRegex = /<!--MEMORY_ACTION\s*([\s\S]*?)\s*-->/g
+    let cleanedText = text
+    let hasActions = false
+
+    // Find all matches first
+    const matches = [...text.matchAll(hiddenRegex)]
+
+    // Process each action
+    for (const match of matches) {
+      try {
+        const actionData = JSON.parse(match[1])
+        const { operation, data } = actionData
+        hasActions = true
+
+        console.log('Processing memory action:', operation, data)
+
+        // Execute memory operation
+        switch (operation) {
+          case 'create':
+            await createMemoryNode(data)
+            break
+          case 'update':
+            await updateMemoryNode(data)
+            break
+          case 'delete':
+            await deleteMemoryNode(data)
+            break
+        }
+
+        // Remove the hidden block from displayed text
+        cleanedText = cleanedText.replace(match[0], '')
+      } catch (e) {
+        console.error('Hidden action parsing error:', e)
+      }
+    }
+
+    // Also handle old bracket format for backward compatibility
     const bracketRegex = /\[(CREATE_NODE|UPDATE_NODE|DELETE_NODE|CREATE_WIDGET|STORE_PATTERN|MEMORY_ADD|MEMORY_FOLDER):\s*({[^}]+})\]/g
-    const slashRegex = /\/memory_(add|folder|doc|update|delete|list)\s+([^\n]+)/g
     let match
 
     // Handle bracket commands [COMMAND: {...}]
@@ -505,6 +546,9 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
         console.error('Slash command error:', e)
       }
     }
+
+    // Return cleaned text or original if no actions found
+    return cleanedText.trim() || text
   }
 
   // Create memory node
