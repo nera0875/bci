@@ -21,11 +21,22 @@ export default function RulesTable({ projectId }: RulesTableProps) {
     action: '',
     description: ''
   })
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     loadRules()
-    subscribeToRules()
-  }, [projectId])
+    const cleanup = subscribeToRules()
+
+    // Polling fallback pour garantir la synchronisation
+    const interval = setInterval(() => {
+      loadRules()
+    }, 2000)
+
+    return () => {
+      cleanup()
+      clearInterval(interval)
+    }
+  }, [projectId, refreshKey])
 
   const loadRules = async () => {
     const { data, error } = await supabase
@@ -41,7 +52,7 @@ export default function RulesTable({ projectId }: RulesTableProps) {
 
   const subscribeToRules = () => {
     const channel = supabase
-      .channel(`rules_${projectId}`)
+      .channel(`rules_${projectId}_${Date.now()}`)
       .on(
         'postgres_changes',
         {
@@ -50,8 +61,10 @@ export default function RulesTable({ projectId }: RulesTableProps) {
           table: 'rules',
           filter: `project_id=eq.${projectId}`
         },
-        () => {
+        (payload) => {
+          console.log('Rules change detected:', payload)
           loadRules()
+          setRefreshKey(prev => prev + 1)
         }
       )
       .subscribe()
@@ -66,6 +79,9 @@ export default function RulesTable({ projectId }: RulesTableProps) {
       .from('rules')
       .update({ enabled: !rule.enabled })
       .eq('id', rule.id)
+
+    // Force refresh immédiat
+    setTimeout(() => loadRules(), 100)
   }
 
   const deleteRule = async (id: string) => {
@@ -74,6 +90,9 @@ export default function RulesTable({ projectId }: RulesTableProps) {
         .from('rules')
         .delete()
         .eq('id', id)
+
+      // Force refresh immédiat
+      setTimeout(() => loadRules(), 100)
     }
   }
 
@@ -106,6 +125,9 @@ export default function RulesTable({ projectId }: RulesTableProps) {
     setEditingId(null)
     setIsCreating(false)
     setEditForm({ name: '', trigger: '', action: '', description: '' })
+
+    // Force refresh immédiat
+    setTimeout(() => loadRules(), 100)
   }
 
   const startEdit = (rule: Rule) => {

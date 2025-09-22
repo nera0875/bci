@@ -39,8 +39,12 @@ Supabase Database
 ### ✅ [Done] Phase 3: Interface Principale
 - Chat avec streaming de messages ✓
 - Sidebar dynamique (mémoire virtuelle) ✓
+  - Création de sous-dossiers hiérarchiques ✓
+  - Éditeur de texte inline pour documents ✓
+  - Éditeur de tableaux structurés ✓
+  - IA peut modifier sa mémoire via commandes ✓
 - Goal bar en haut ✓
-- Rules table avec CRUD ✓
+- Rules table avec CRUD + refresh temps réel ✓
 - Widgets dynamiques JSON Schema ✓
 - API routes pour Claude streaming ✓
 

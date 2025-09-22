@@ -434,18 +434,24 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
 
   // Parse and execute memory commands from Claude's response
   const parseAndExecuteCommands = async (text: string) => {
-    // Match commands like [CREATE_NODE: {...}]
-    const commandRegex = /\[(CREATE_NODE|UPDATE_NODE|DELETE_NODE|CREATE_WIDGET|STORE_PATTERN):\s*({[^}]+})\]/g
+    // Match commands like [CREATE_NODE: {...}] or /memory_add ...
+    const bracketRegex = /\[(CREATE_NODE|UPDATE_NODE|DELETE_NODE|CREATE_WIDGET|STORE_PATTERN|MEMORY_ADD|MEMORY_FOLDER):\s*({[^}]+})\]/g
+    const slashRegex = /\/memory_(add|folder|doc|update|delete|list)\s+([^\n]+)/g
     let match
 
-    while ((match = commandRegex.exec(text)) !== null) {
+    // Handle bracket commands [COMMAND: {...}]
+    while ((match = bracketRegex.exec(text)) !== null) {
       const [_, command, jsonStr] = match
       try {
         const data = JSON.parse(jsonStr)
 
         switch (command) {
           case 'CREATE_NODE':
+          case 'MEMORY_ADD':
             await createMemoryNode(data)
+            break
+          case 'MEMORY_FOLDER':
+            await createMemoryNode({ ...data, type: 'folder' })
             break
           case 'UPDATE_NODE':
             await updateMemoryNode(data)
@@ -462,6 +468,40 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
         }
       } catch (e) {
         console.error('Command parsing error:', e)
+      }
+    }
+
+    // Handle slash commands /memory_add ...
+    while ((match = slashRegex.exec(text)) !== null) {
+      const [_, action, params] = match
+      try {
+        // Parse params as path/to/folder "Item name" type=document content="..."
+        const pathMatch = params.match(/^([^\s"]+)/)
+        const nameMatch = params.match(/"([^"]+)"/)
+        const typeMatch = params.match(/type=(\w+)/)
+        const contentMatch = params.match(/content="([^"]+)"/)
+
+        if (pathMatch && nameMatch) {
+          const path = pathMatch[1].split('/')
+          const name = nameMatch[1]
+          const type = typeMatch ? typeMatch[1] : 'document'
+          const content = contentMatch ? contentMatch[1] : ''
+
+          // Find parent folder by path
+          let parentId = null
+          if (path[0] && path[0] !== '.') {
+            // TODO: Implement path resolution
+          }
+
+          await createMemoryNode({
+            name,
+            type,
+            content,
+            parent_id: parentId
+          })
+        }
+      } catch (e) {
+        console.error('Slash command error:', e)
       }
     }
   }
