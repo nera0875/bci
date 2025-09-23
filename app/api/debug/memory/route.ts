@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 
 export async function GET() {
-  const supabase = createServerClient()
+  const supabase = createClient()
 
   const projectId = 'default-project-001'
 

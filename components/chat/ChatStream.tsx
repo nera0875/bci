@@ -10,6 +10,7 @@ import { MemoryActionButtons } from './MemoryActionButtons'
 // import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
 import { checkFolderRules, loadUserFolderRules } from '@/lib/memory/folderRules'
 import { ConversationManager } from '@/lib/services/conversation'
+import { getMemoryBridge } from '@/lib/services/memoryBridge'
 import '@/app/chat.css'
 
 type ChatMessage = Database['public']['Tables']['chat_messages']['Row']
@@ -393,7 +394,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
       }
 
       // Get additional context
-      const memoryContext = await getMemoryContext()
+      const memoryContext = await getMemoryContext(userMessage)
       const similarContent = await searchSimilarContent(userMessage)
       const rulesContext = await getRulesContext()
       const projectGoal = await getProjectGoal()
@@ -570,8 +571,30 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
-  const getMemoryContext = async () => {
-    // Get relevant memory nodes for context
+  const getMemoryContext = async (userMessage?: string) => {
+    // Try hybrid search first if we have Mem0 configured
+    const bridge = getMemoryBridge(projectId)
+    await bridge.initialize()
+
+    if (userMessage) {
+      const hybridResults = await bridge.hybridSearch(userMessage, {
+        useVectorSearch: true,
+        limit: 10,
+        includeHierarchy: true
+      })
+
+      if (hybridResults.merged && hybridResults.merged.length > 0) {
+        // Return merged results from both Mem0 and Supabase
+        return hybridResults.merged.map((item: any) => ({
+          name: item.name || item.memory || 'Unknown',
+          type: item.type || item.source || 'memory',
+          content: item.content || item.data || '',
+          relevance: item.relevance || 0.5
+        }))
+      }
+    }
+
+    // Fallback to simple Supabase query
     const { data } = await supabase
       .from('memory_nodes')
       .select('name, type, content')
@@ -887,6 +910,17 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
     if (!error && created?.[0]) {
       console.log('✅ Created memory node:', name, 'type:', nodeType)
+
+      // Sync to Mem0 if available
+      try {
+        const bridge = getMemoryBridge(projectId)
+        await bridge.initialize()
+        await bridge.syncNodeToMem0(created[0])
+        console.log('✅ Synced to Mem0')
+      } catch (e) {
+        console.log('⚠️ Mem0 sync skipped:', e)
+      }
+
       return created[0]
     } else if (error) {
       console.error('❌ Error creating node:', error.message)
@@ -981,6 +1015,25 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
       if (!error) {
         console.log('✅ Updated memory node:', name || nodeId, append ? '(appended)' : '')
+
+        // Sync to Mem0 if available
+        try {
+          const bridge = getMemoryBridge(projectId)
+          await bridge.initialize()
+          // Get the updated node for sync
+          const { data: updatedNode } = await supabase
+            .from('memory_nodes')
+            .select('*')
+            .eq('id', nodeId)
+            .single()
+          if (updatedNode) {
+            await bridge.syncNodeToMem0(updatedNode)
+            console.log('✅ Synced update to Mem0')
+          }
+        } catch (e) {
+          console.log('⚠️ Mem0 sync skipped:', e)
+        }
+
         showToast(`Document "${name || 'mémoire'}" mis à jour avec succès`, 'success')
       } else {
         console.error('❌ Error updating node:', error.message)
