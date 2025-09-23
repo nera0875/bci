@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, ChevronRight, ChevronDown, Folder, FileText, BarChart3, Zap, Target, Activity, Edit2, Trash2, Save, X, FolderPlus, Table } from 'lucide-react'
+import { Plus, ChevronRight, ChevronDown, Folder, FileText, Edit2, Trash2, Save, X, FolderPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { Database } from '@/lib/supabase/database.types'
-import DynamicWidget from './DynamicWidget'
-import TableEditor from './TableEditor'
+import CentralEditor from './CentralEditor'
 
 type MemoryNode = Database['public']['Tables']['memory_nodes']['Row']
 
@@ -15,11 +14,7 @@ interface MemorySidebarProps {
 
 const NODE_ICONS = {
   folder: Folder,
-  document: FileText,
-  widget: BarChart3,
-  pattern: Zap,
-  exploit: Target,
-  metric: Activity
+  document: FileText
 }
 
 export default function MemorySidebar({ projectId }: MemorySidebarProps) {
@@ -33,7 +28,11 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
   const [editingNode, setEditingNode] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [creatingInFolder, setCreatingInFolder] = useState<string | null>(null)
-  const [editMode, setEditMode] = useState<'text' | 'table'>('text')
+  const [fullEditNode, setFullEditNode] = useState<MemoryNode | null>(null)
+  const [renamingNode, setRenamingNode] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [draggedNode, setDraggedNode] = useState<MemoryNode | null>(null)
+  const [dragOverNode, setDragOverNode] = useState<string | null>(null)
 
   useEffect(() => {
     loadNodes()
@@ -97,7 +96,7 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
         name: newNodeName,
         type: newNodeType,
         icon: newNodeType === 'folder' ? '📁' : '📄',
-        color: newNodeType === 'pattern' ? '#FF0000' : '#6E6E80',
+        color: '#6E6E80',
         content: newNodeType === 'document' ? '# ' + newNodeName + '\n\nContent here...' : null
       })
 
@@ -136,6 +135,30 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
     }
   }
 
+  const renameNode = async (nodeId: string, newName: string) => {
+    const { error } = await supabase
+      .from('memory_nodes')
+      .update({ name: newName, updated_at: new Date().toISOString() })
+      .eq('id', nodeId)
+
+    if (!error) {
+      setRenamingNode(null)
+      setRenameValue('')
+      setTimeout(() => loadNodes(), 100)
+    }
+  }
+
+  const moveNode = async (nodeId: string, newParentId: string | null) => {
+    const { error } = await supabase
+      .from('memory_nodes')
+      .update({ parent_id: newParentId, updated_at: new Date().toISOString() })
+      .eq('id', nodeId)
+
+    if (!error) {
+      setTimeout(() => loadNodes(), 100)
+    }
+  }
+
   const toggleExpand = (nodeId: string) => {
     const newExpanded = new Set(expandedNodes)
     if (newExpanded.has(nodeId)) {
@@ -152,6 +175,8 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
     const isExpanded = expandedNodes.has(node.id)
     const isSelected = selectedNode === node.id
     const isEditing = editingNode === node.id
+    const isRenaming = renamingNode === node.id
+    const isDragOver = dragOverNode === node.id
 
     const Icon = NODE_ICONS[node.type] || Folder
 
@@ -161,14 +186,40 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
           className={`
             flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-background/50 transition-colors group
             ${isSelected ? 'bg-background border-l-2 border-foreground' : ''}
+            ${isDragOver ? 'bg-foreground/10 border-2 border-dashed border-foreground/30' : ''}
           `}
           style={{ paddingLeft: `${level * 20 + 12}px` }}
+          draggable
+          onDragStart={(e) => {
+            setDraggedNode(node)
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            if (draggedNode && node.type === 'folder' && draggedNode.id !== node.id) {
+              setDragOverNode(node.id)
+            }
+          }}
+          onDragLeave={() => {
+            setDragOverNode(null)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            if (draggedNode && node.type === 'folder' && draggedNode.id !== node.id) {
+              moveNode(draggedNode.id, node.id)
+            }
+            setDraggedNode(null)
+            setDragOverNode(null)
+          }}
           onClick={() => {
             setSelectedNode(node.id)
             if (hasChildren) toggleExpand(node.id)
           }}
+          onDoubleClick={() => {
+            setFullEditNode(node)
+          }}
         >
-          {hasChildren && (
+          {hasChildren ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -182,11 +233,12 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
                 <ChevronRight className="w-3 h-3" />
               )}
             </button>
+          ) : (
+            <div className="w-4 h-4" />
           )}
-
           <div
             className="w-5 h-5 flex items-center justify-center flex-shrink-0"
-            style={{ color: node.color }}
+            style={{ color: node.color || '#6E6E80' }}
           >
             {node.icon ? (
               <span className="text-sm">{node.icon}</span>
@@ -195,15 +247,33 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
             )}
           </div>
 
-          <span className="text-sm text-foreground truncate flex-1">
-            {node.name}
-          </span>
-
-          {node.type === 'metric' && node.metadata && (node.metadata as any).value && (
-            <span className="text-xs text-muted-foreground px-2 py-0.5 bg-background rounded">
-              {(node.metadata as any).value}%
+          {isRenaming ? (
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  renameNode(node.id, renameValue)
+                }
+                if (e.key === 'Escape') {
+                  setRenamingNode(null)
+                  setRenameValue('')
+                }
+              }}
+              onBlur={() => {
+                renameNode(node.id, renameValue)
+              }}
+              className="flex-1 px-1 py-0 text-sm bg-muted border border-input rounded focus:outline-none focus:ring-1 focus:ring-foreground"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="text-sm text-foreground truncate flex-1">
+              {node.name}
             </span>
           )}
+
 
           {/* Action buttons */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -221,30 +291,21 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
                 <FolderPlus className="w-3 h-3" />
               </button>
             )}
-            {node.type === 'document' && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setEditingNode(node.id)
-                  setEditContent(node.content || '')
-                  // Détecter si c'est un tableau JSON
-                  try {
-                    const parsed = JSON.parse(node.content || '{}')
-                    if (parsed.columns && parsed.rows) {
-                      setEditMode('table')
-                    } else {
-                      setEditMode('text')
-                    }
-                  } catch {
-                    setEditMode('text')
-                  }
-                }}
-                className="p-1 hover:bg-muted rounded"
-                title="Edit content"
-              >
-                <Edit2 className="w-3 h-3" />
-              </button>
-            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (node.type === 'folder') {
+                  setRenamingNode(node.id)
+                  setRenameValue(node.name)
+                } else {
+                  setFullEditNode(node)
+                }
+              }}
+              className="p-1 hover:bg-muted rounded"
+              title={node.type === 'folder' ? 'Rename folder' : 'Edit document'}
+            >
+              <Edit2 className="w-3 h-3" />
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -258,83 +319,6 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
           </div>
         </div>
 
-        {/* Edit content area */}
-        {isEditing && node.type === 'document' && (
-          <div className="p-3 bg-background border-l-2 border-foreground" style={{ marginLeft: `${level * 20 + 12}px` }}>
-            {/* Edit mode selector */}
-            <div className="flex gap-2 mb-2">
-              <button
-                onClick={() => setEditMode('text')}
-                className={`px-3 py-1 text-sm rounded ${
-                  editMode === 'text'
-                    ? 'bg-foreground text-background'
-                    : 'border border-border hover:bg-muted'
-                }`}
-              >
-                <FileText className="w-3 h-3 inline mr-1" />
-                Text
-              </button>
-              <button
-                onClick={() => setEditMode('table')}
-                className={`px-3 py-1 text-sm rounded ${
-                  editMode === 'table'
-                    ? 'bg-foreground text-background'
-                    : 'border border-border hover:bg-muted'
-                }`}
-              >
-                <Table className="w-3 h-3 inline mr-1" />
-                Table
-              </button>
-            </div>
-
-            {/* Text editor */}
-            {editMode === 'text' ? (
-              <>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-32 p-2 text-sm bg-muted border border-input rounded focus:outline-none focus:ring-1 focus:ring-foreground font-mono"
-                  placeholder="Document content..."
-                  autoFocus
-                />
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => updateNodeContent(node.id, editContent)}
-                    className="px-3 py-1 text-sm bg-foreground text-background rounded hover:opacity-90"
-                  >
-                    <Save className="w-3 h-3 inline mr-1" />
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingNode(null)
-                      setEditContent('')
-                      setEditMode('text')
-                    }}
-                    className="px-3 py-1 text-sm border border-border rounded hover:bg-muted"
-                  >
-                    <X className="w-3 h-3 inline mr-1" />
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              /* Table editor */
-              <TableEditor
-                content={editContent}
-                onSave={(content) => {
-                  updateNodeContent(node.id, content)
-                  setEditMode('text')
-                }}
-                onCancel={() => {
-                  setEditingNode(null)
-                  setEditContent('')
-                  setEditMode('text')
-                }}
-              />
-            )}
-          </div>
-        )}
 
         {isExpanded && hasChildren && (
           <div>
@@ -368,8 +352,6 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
               >
                 <option value="folder">📁 Folder</option>
                 <option value="document">📄 Document</option>
-                <option value="pattern">⚡ Pattern</option>
-                <option value="widget">📊 Widget</option>
               </select>
               <button
                 onClick={createNode}
@@ -381,11 +363,6 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
           </div>
         )}
 
-        {isExpanded && node.type === 'widget' && node.content && (
-          <div className="px-4 py-2" style={{ paddingLeft: `${level * 20 + 24}px` }}>
-            <DynamicWidget content={node.content} />
-          </div>
-        )}
       </div>
     )
   }
@@ -431,10 +408,6 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
               >
                 <option value="folder">📁 Folder</option>
                 <option value="document">📄 Document</option>
-                <option value="pattern">⚡ Pattern</option>
-                <option value="exploit">🎯 Exploit</option>
-                <option value="widget">📊 Widget</option>
-                <option value="metric">📈 Metric</option>
               </select>
               <button
                 onClick={createNode}
@@ -462,8 +435,20 @@ export default function MemorySidebar({ projectId }: MemorySidebarProps) {
 
       {/* Footer Info */}
       <div className="p-4 border-t border-border text-xs text-muted-foreground">
-        {nodes.length} items • Claude can modify
+        {nodes.length} items • AI Memory System
       </div>
+
+      {/* Full Memory Editor Modal */}
+      {fullEditNode && (
+        <CentralEditor
+          node={fullEditNode}
+          onClose={() => setFullEditNode(null)}
+          onSave={() => {
+            loadNodes()
+            setRefreshKey(prev => prev + 1)
+          }}
+        />
+      )}
     </div>
   )
 }

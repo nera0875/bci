@@ -42,7 +42,7 @@ export interface Database {
         Row: {
           id: string
           project_id: string
-          type: 'folder' | 'document' | 'widget' | 'pattern' | 'exploit' | 'metric'
+          type: 'folder' | 'document'
           name: string
           content: Json
           embedding: number[] | null
@@ -57,7 +57,7 @@ export interface Database {
         Insert: {
           id?: string
           project_id: string
-          type: 'folder' | 'document' | 'widget' | 'pattern' | 'exploit' | 'metric'
+          type: 'folder' | 'document'
           name: string
           content?: Json
           embedding?: number[] | null
@@ -72,7 +72,7 @@ export interface Database {
         Update: {
           id?: string
           project_id?: string
-          type?: 'folder' | 'document' | 'widget' | 'pattern' | 'exploit' | 'metric'
+          type?: 'folder' | 'document'
           name?: string
           content?: Json
           embedding?: number[] | null

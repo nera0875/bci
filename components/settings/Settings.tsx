@@ -192,9 +192,9 @@ export default function Settings() {
                   }
                   className="w-full px-4 py-3 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base"
                 >
-                  <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                  <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
-                  <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                  <option value="claude-opus-4-1-20250805">Claude Opus 4.1</option>
+                  <option value="claude-opus-4-20250805">Claude Opus 4</option>
+                  <option value="claude-sonnet-4-20250805">Claude Sonnet 4</option>
                 </select>
               </div>
 

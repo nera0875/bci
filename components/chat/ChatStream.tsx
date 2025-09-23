@@ -6,6 +6,10 @@ import { supabase } from '@/lib/supabase/client'
 import { Database } from '@/lib/supabase/database.types'
 import ReactMarkdown from 'react-markdown'
 import StreamingText from './StreamingText'
+import { MemoryActionButtons } from './MemoryActionButtons'
+// import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
+import { checkFolderRules, loadUserFolderRules } from '@/lib/memory/folderRules'
+import { ConversationManager } from '@/lib/services/conversation'
 import '@/app/chat.css'
 
 type ChatMessage = Database['public']['Tables']['chat_messages']['Row']
@@ -18,23 +22,35 @@ const StreamingMessageWrapper = React.memo(({
   content: string
   isComplete: boolean
 }) => (
-  <div className="flex gap-4 justify-start message-streaming">
+  <div className="flex gap-4 justify-start message-streaming chat-message" data-streaming="true">
     <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
       <Bot className="w-4 h-4 text-background" />
     </div>
-    <div className="max-w-[80%] px-4 py-3 rounded-xl bg-muted text-foreground">
-      <StreamingText
-        content={content}
-        isComplete={isComplete}
-      />
+    <div className="max-w-[80%] px-4 py-3 rounded-xl bg-muted text-foreground streaming-text-container">
+      <div className="message-content">
+        <StreamingText
+          content={content}
+          isComplete={isComplete}
+        />
+      </div>
     </div>
   </div>
 ))
 
 // Memoized message component for performance
-const MessageComponent = React.memo(({ message }: { message: ChatMessage }) => (
+const MessageComponent = React.memo(({
+  message,
+  pendingAction,
+  onConfirmAction,
+  onRejectAction
+}: {
+  message: ChatMessage
+  pendingAction?: any
+  onConfirmAction?: () => void
+  onRejectAction?: () => void
+}) => (
   <div
-    className={`flex gap-4 message-enter ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+    className={`flex gap-4 message-enter chat-message ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
   >
     {message.role === 'assistant' && (
       <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
@@ -60,6 +76,16 @@ const MessageComponent = React.memo(({ message }: { message: ChatMessage }) => (
       ) : (
         <div className="whitespace-pre-wrap">{message.content}</div>
       )}
+
+      {/* Afficher les boutons d'action si c'est le dernier message assistant avec une action */}
+      {message.role === 'assistant' && pendingAction && (
+        <MemoryActionButtons
+          action={pendingAction}
+          onConfirm={onConfirmAction!}
+          onReject={onRejectAction!}
+          confidence={pendingAction.confidence}
+        />
+      )}
     </div>
 
     {message.role === 'user' && (
@@ -72,20 +98,40 @@ const MessageComponent = React.memo(({ message }: { message: ChatMessage }) => (
 
 interface ChatStreamProps {
   projectId: string
+  conversationId?: string | null
+  onConversationCreated?: (conversationId: string) => void
 }
 
-export default function ChatStream({ projectId }: ChatStreamProps) {
+export default function ChatStream({ projectId, conversationId: propConversationId, onConversationCreated }: ChatStreamProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreamComplete, setIsStreamComplete] = useState(false)
+  const [pendingMemoryAction, setPendingMemoryAction] = useState<any>(null)
+  const [pendingActions, setPendingActions] = useState<any[]>([])
+  const [lastUserMessage, setLastUserMessage] = useState<string>('')
   const lastProcessedMessageId = useRef<string | null>(null)
   const bufferRef = useRef<string>('')
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastMessageCountRef = useRef<number>(0)
+  const conversationManagerRef = useRef<ConversationManager | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(propConversationId || null)
+
+  // Update conversation when prop changes OR when internal conversationId changes
+  useEffect(() => {
+    if (propConversationId !== undefined) {
+      setConversationId(propConversationId || null)
+      setMessages([]) // Clear messages when conversation changes
+      if (propConversationId) {
+        loadMessages()
+      }
+      initializeConversation()
+    }
+  }, [propConversationId])
 
   useEffect(() => {
     loadMessages()
+    initializeConversation()
 
     // Start polling for new messages
     // NOTE: Only polling triggers Claude responses to avoid duplicates
@@ -93,10 +139,14 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
       // Skip polling while streaming to avoid refresh
       if (isStreaming) return
 
+      // Don't poll if no conversation ID yet
+      if (!conversationId) return
+
       const { data } = await supabase
         .from('chat_messages')
         .select('*')
         .eq('project_id', projectId)
+        .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
 
       if (data && data.length > 0) {
@@ -109,6 +159,16 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
           lastProcessedMessageId.current = lastMessage.id
           lastMessageCountRef.current = data.length
           setMessages(data)
+          // Store user message for context
+          setLastUserMessage(lastMessage.content)
+          // Save user message to ConversationManager
+          if (conversationManagerRef.current) {
+            await conversationManagerRef.current.saveMessage({
+              role: 'user',
+              content: lastMessage.content
+            })
+          }
+          // intentAnalyzer.addToContext(lastMessage.content) // DÉSACTIVÉ
           // Trigger Claude response (ONLY here, not in subscription)
           streamClaudeResponse(lastMessage.content)
         } else if (data.length !== lastMessageCountRef.current && !isStreaming) {
@@ -133,7 +193,7 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
         clearTimeout(debouncedScrollRef.current)
       }
     }
-  }, [projectId, isStreaming])
+  }, [projectId, isStreaming, conversationId])
 
   // Smart scroll management without jumps using RAF
   const rafRef = useRef<number>()
@@ -190,21 +250,42 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
   }, [messages, debouncedScroll])
 
   useEffect(() => {
-    // Auto-scroll during streaming
-    if (isStreaming) {
+    // Auto-scroll only when streaming content updates, not when streaming ends
+    if (isStreaming && streamingContent) {
       debouncedScroll()
     }
-  }, [isStreaming, streamingContent, debouncedScroll])
+  }, [streamingContent, debouncedScroll])
 
   const loadMessages = async () => {
+    // Don't load any messages if no conversation ID (new conversation)
+    if (!conversationId) {
+      setMessages([])
+      return
+    }
+
     const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
       .eq('project_id', projectId)
+      .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
     if (data && !error) {
       setMessages(data)
+    }
+  }
+
+  const initializeConversation = async () => {
+    // Initialize ConversationManager
+    conversationManagerRef.current = new ConversationManager(projectId)
+
+    // If we have a specific conversation ID, use it
+    if (propConversationId) {
+      await conversationManagerRef.current.initConversation(propConversationId)
+      setConversationId(propConversationId)
+    } else {
+      // Don't auto-create conversation here, wait for first message
+      setConversationId(null)
     }
   }
 
@@ -232,7 +313,14 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
 
           // Only update messages, don't trigger Claude here
           // (Polling will handle Claude responses to avoid duplicates)
-          setMessages(prev => [...prev, newMessage])
+          // Check if message already exists to avoid duplicates
+          setMessages(prev => {
+            const exists = prev.some(msg => msg.id === newMessage.id)
+            if (exists) {
+              return prev
+            }
+            return [...prev, newMessage]
+          })
         }
       )
       .subscribe((status) => {
@@ -260,13 +348,60 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
     bufferRef.current = ''
 
     try {
-      // Get memory context with RAG similarity search
+      // Initialize ConversationManager if not done
+      if (!conversationManagerRef.current) {
+        conversationManagerRef.current = new ConversationManager(projectId)
+      }
+
+      // Create new conversation if needed
+      let currentConvId = conversationId
+      if (!currentConvId) {
+        const conversation = await conversationManagerRef.current.initConversation()
+        if (conversation) {
+          currentConvId = conversation.id
+          setConversationId(conversation.id)
+          // Notify parent component about new conversation
+          if (onConversationCreated) {
+            onConversationCreated(conversation.id)
+          }
+        }
+      } else {
+        await conversationManagerRef.current.initConversation(currentConvId)
+      }
+
+      // Get optimized context from ConversationManager
+      const convContext = await conversationManagerRef.current.getOptimizedContext(userMessage)
+
+      // If we have a cached response, use it!
+      if (convContext.cachedResponse) {
+        console.log('💰 Using cached response - saving tokens!')
+        setStreamingContent(convContext.cachedResponse)
+        setIsStreamComplete(true)
+
+        // Save to database with conversation ID
+        await supabase
+          .from('chat_messages')
+          .insert({
+            project_id: projectId,
+            role: 'assistant' as const,
+            content: convContext.cachedResponse,
+            conversation_id: currentConvId
+          })
+
+        setIsStreaming(false)
+        return
+      }
+
+      // Get additional context
       const memoryContext = await getMemoryContext()
       const similarContent = await searchSimilarContent(userMessage)
       const rulesContext = await getRulesContext()
       const projectGoal = await getProjectGoal()
 
       console.log('Context prepared, calling Claude API...')
+
+      // Combine recent messages from ConversationManager with similar messages
+      const conversationHistory = [...convContext.recentMessages, ...convContext.similarMessages]
 
       const response = await fetch('/api/claude/stream', {
         method: 'POST',
@@ -276,6 +411,8 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
         body: JSON.stringify({
           message: userMessage,
           projectId,
+          conversationId: currentConvId,
+          conversationHistory,
           context: {
             memory: memoryContext,
             similar: similarContent,
@@ -310,8 +447,15 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
                 const data = JSON.parse(line.slice(6))
 
                 if (data.type === 'content') {
-                  fullContent += data.text
-                  bufferRef.current = fullContent
+                  fullContent += data.text // Keep original for command execution
+
+                  // Build cleaned version for display - more aggressive cleaning
+                  const displayContent = fullContent
+                    .replace(/<!--MEMORY_ACTION[^>]*>[\s\S]*?<!--END_MEMORY_ACTION-->/g, '')
+                    .replace(/\[MEMORY:[\s\S]*?\]/g, '')
+                    .replace(/\/memory_\w+\s+[^\n]+/g, '')
+
+                  bufferRef.current = displayContent
 
                   // Clear previous buffer timeout
                   if (bufferTimeoutRef.current) {
@@ -333,47 +477,96 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
           }
         }
 
-        // Parse commands and clean the message
-        const cleanedContent = await parseAndExecuteCommands(fullContent)
-        // Only update if content was actually cleaned
-        if (cleanedContent !== fullContent && cleanedContent.trim()) {
-          fullContent = cleanedContent
-          // Update streaming display with cleaned content
-          setStreamingContent(cleanedContent)
-        }
+        // DÉSACTIVÉ : Plus de parsing automatique des commandes
+        // Les commandes ne sont parsées que si explicitement demandées
+
+        // Just clean the content for display
+        fullContent = fullContent
+          .replace(/<!--MEMORY_ACTION[^>]*>[\s\S]*?<!--END_MEMORY_ACTION-->/g, '')
+          .replace(/\[MEMORY:[\s\S]*?\]/g, '')
+          .replace(/\/memory_\w+\s+[^\n]+/g, '')
       }
 
-      // Save complete message to database (cleaned version)
+      // Save complete message to database and ConversationManager
       if (fullContent) {
+        // Save assistant message to ConversationManager with caching
+        if (conversationManagerRef.current) {
+          await conversationManagerRef.current.saveMessage({
+            role: 'assistant',
+            content: fullContent
+          })
+
+          // Cache the response for future identical questions
+          await conversationManagerRef.current.cacheResponse(userMessage, fullContent)
+        }
+
         const { data: newMessage } = await supabase
           .from('chat_messages')
           .insert({
             project_id: projectId,
             role: 'assistant' as const,
-            content: fullContent
+            content: fullContent,
+            conversation_id: currentConvId
           })
           .select()
           .single()
 
         // Add the new message directly without reloading all
         if (newMessage) {
-          setMessages(prev => {
-            lastMessageCountRef.current = prev.length + 1
-            return [...prev, newMessage]
+          // Use requestAnimationFrame for seamless transition without visual jumps
+          await new Promise<void>(resolve => {
+            requestAnimationFrame(() => {
+              // Mark streaming as complete but keep content visible
+              setIsStreamComplete(true)
+
+              requestAnimationFrame(() => {
+                // Add the final message while streaming content is still showing
+                setMessages(prev => {
+                  // Check if message already exists to avoid duplicates
+                  const exists = prev.some(msg => msg.id === newMessage.id)
+                  if (exists) {
+                    return prev
+                  }
+                  lastMessageCountRef.current = prev.length + 1
+                  return [...prev, newMessage]
+                })
+
+                // Hide streaming content after the message is in DOM
+                requestAnimationFrame(() => {
+                  setIsStreaming(false)
+                  setStreamingContent('')
+                  resolve()
+                })
+              })
+            })
           })
+
+          // DÉSACTIVÉ : Plus d'analyse automatique d'intention
+          // L'utilisateur doit demander explicitement les actions mémoire
+
+          // Analyser SEULEMENT si l'utilisateur demande explicitement
+          if (checkExplicitMemoryRequest(lastUserMessage)) {
+            // Parse les actions depuis la réponse de Claude
+            const actions = await parseMemoryActions(fullContent)
+            if (actions.length > 0) {
+              setPendingActions(actions)
+              setPendingMemoryAction(actions[0])
+            }
+          }
+        } else {
+          // If no message saved, still clean up smoothly
+          setIsStreamComplete(true)
+          await new Promise(resolve => setTimeout(resolve, 50))
+          setIsStreaming(false)
+          setStreamingContent('')
         }
       }
     } catch (error) {
       console.error('Streaming error:', error)
       setStreamingContent('Error: Failed to get response from Claude.')
-    } finally {
       setIsStreamComplete(true)
-      // Clean up streaming state after animation completes
-      setTimeout(() => {
-        setIsStreaming(false)
-        setStreamingContent('')
-        // No need to reload messages - already added above
-      }, 300)
+      await new Promise(resolve => setTimeout(resolve, 100))
+      setIsStreaming(false)
     }
   }
 
@@ -398,6 +591,38 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
     return data?.goal || ''
   }
 
+  // Show toast notification
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    // For now, log to console - can be replaced with a proper toast system
+    const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'
+    console.log(`${icon} ${message}`)
+
+    // TODO: Implement visual toast notifications
+  }
+
+  // Parse memory actions from Claude's response
+  const parseMemoryActions = async (text: string): Promise<any[]> => {
+    const actions = []
+    const regex = /<!--MEMORY_ACTION\s*([\s\S]*?)-->/g
+    let match
+
+    while ((match = regex.exec(text)) !== null) {
+      try {
+        const action = JSON.parse(match[1])
+        actions.push(action)
+        console.log('📋 Parsed memory action:', action.operation, action.data?.name)
+      } catch (e) {
+        console.error('Invalid memory action JSON:', e)
+      }
+    }
+
+    if (actions.length > 0) {
+      console.log(`Found ${actions.length} memory action(s) to process`)
+    }
+
+    return actions
+  }
+
   // RAG similarity search
   const searchSimilarContent = async (query: string) => {
     try {
@@ -416,7 +641,7 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
       const { data } = await supabase.rpc('search_similar_nodes', {
         query_embedding: embedding,
         project_id: projectId,
-        limit: 5
+        match_limit: 5
       })
 
       return data || []
@@ -438,6 +663,26 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
     return data || []
   }
 
+  // Check if user explicitly asks for memory modifications
+  const checkExplicitMemoryRequest = (userMessage: string): boolean => {
+    const lowerMessage = userMessage.toLowerCase()
+
+    // Explicit memory commands
+    const explicitCommands = [
+      'ajoute', 'ajouter', 'enregistre', 'enregistrer',
+      'mémorise', 'mémoriser', 'garde', 'garder',
+      'sauvegarde', 'sauvegarder', 'stocke', 'stocker',
+      'modifie', 'modifier', 'met à jour', 'mettre à jour',
+      'supprime', 'supprimer', 'efface', 'effacer',
+      'crée un document', 'crée un dossier',
+      'ajoute dans la mémoire', 'ajoute à la mémoire',
+      'note ça', 'note ceci', 'prend note'
+    ]
+
+    return explicitCommands.some(cmd => lowerMessage.includes(cmd))
+  }
+
+
   // Parse and execute memory commands from Claude's response
   const parseAndExecuteCommands = async (text: string): Promise<string> => {
     // Remove and execute hidden memory actions
@@ -458,16 +703,13 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
         console.log('Processing memory action:', operation, data)
 
         // Execute memory operation
-        switch (operation) {
-          case 'create':
-            await createMemoryNode(data)
-            break
-          case 'update':
-            await updateMemoryNode(data)
-            break
-          case 'delete':
-            await deleteMemoryNode(data)
-            break
+        // Instead of executing directly, add to pending actions
+        const memoryAction = { operation, data }
+        setPendingActions(prev => [...prev, memoryAction])
+
+        // Show the first pending action for confirmation
+        if (!pendingMemoryAction) {
+          setPendingMemoryAction(memoryAction)
         }
 
         // Remove the hidden block from displayed text
@@ -478,12 +720,12 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
     }
 
     // Also handle old bracket format for backward compatibility
-    const bracketRegex = /\[(CREATE_NODE|UPDATE_NODE|DELETE_NODE|CREATE_WIDGET|STORE_PATTERN|MEMORY_ADD|MEMORY_FOLDER):\s*({[^}]+})\]/g
-    let match
+    const bracketRegex = /\[(CREATE_NODE|UPDATE_NODE|DELETE_NODE|APPEND_NODE|MEMORY_ADD|MEMORY_FOLDER):\s*({[^}]+})\]/g
+    let bracketMatch
 
     // Handle bracket commands [COMMAND: {...}]
-    while ((match = bracketRegex.exec(text)) !== null) {
-      const [_, command, jsonStr] = match
+    while ((bracketMatch = bracketRegex.exec(text)) !== null) {
+      const [_, command, jsonStr] = bracketMatch
       try {
         const data = JSON.parse(jsonStr)
 
@@ -498,14 +740,11 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
           case 'UPDATE_NODE':
             await updateMemoryNode(data)
             break
+          case 'APPEND_NODE':
+            await updateMemoryNode({ ...data, append: true })
+            break
           case 'DELETE_NODE':
             await deleteMemoryNode(data)
-            break
-          case 'CREATE_WIDGET':
-            await createWidget(data)
-            break
-          case 'STORE_PATTERN':
-            await storePattern(data)
             break
         }
       } catch (e) {
@@ -514,8 +753,10 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
     }
 
     // Handle slash commands /memory_add ...
-    while ((match = slashRegex.exec(text)) !== null) {
-      const [_, action, params] = match
+    const slashRegex = /\/(memory_add|memory_folder)\s+([^\n]+)/g
+    let slashMatch
+    while ((slashMatch = slashRegex.exec(text)) !== null) {
+      const [_, action, params] = slashMatch
       try {
         // Parse params as path/to/folder "Item name" type=document content="..."
         const pathMatch = params.match(/^([^\s"]+)/)
@@ -553,68 +794,292 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
 
   // Create memory node
   const createMemoryNode = async (data: any) => {
-    const { type, name, content, color = '#6E6E80', parent_id = null } = data
+    const { type, name, content, color = '#6E6E80', parent_id = null, parent_name, path } = data
 
-    const { error } = await supabase
+    if (!name) {
+      console.error('❌ Cannot create node without name')
+      return
+    }
+
+    // Determine type from name if not specified
+    let nodeType = type
+    if (!type && name) {
+      // If name ends with .md or contains document-like patterns, it's a document
+      nodeType = name.endsWith('.md') || name.includes('.') ? 'document' : 'folder'
+    }
+
+    // Find parent by name or path if provided
+    let actualParentId = parent_id
+
+    if (!parent_id && parent_name) {
+      const { data: parentNode } = await supabase
+        .from('memory_nodes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('name', parent_name)
+        .eq('type', 'folder')
+        .single()
+
+      if (parentNode) {
+        actualParentId = parentNode.id
+        console.log('🔍 Found parent folder:', parent_name)
+      }
+    }
+
+    // Handle path-based parent (e.g., "Documents/Projects")
+    if (!actualParentId && path) {
+      const pathParts = path.split('/').filter(p => p)
+      let currentParentId = null
+
+      for (const part of pathParts) {
+        const { data: folder } = await supabase
+          .from('memory_nodes')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('name', part)
+          .eq('type', 'folder')
+          .eq('parent_id', currentParentId)
+          .single()
+
+        if (folder) {
+          currentParentId = folder.id
+        } else {
+          // Create missing folder
+          const { data: newFolder } = await supabase
+            .from('memory_nodes')
+            .insert({
+              project_id: projectId,
+              type: 'folder',
+              name: part,
+              icon: '📁',
+              color: '#6E6E80',
+              parent_id: currentParentId,
+              position: 0
+            })
+            .select()
+            .single()
+
+          if (newFolder) {
+            currentParentId = newFolder.id
+            console.log('📁 Created folder:', part)
+          }
+        }
+      }
+      actualParentId = currentParentId
+    }
+
+    // Auto-assign icon based on type
+    const icon = nodeType === 'folder' ? '📁' : '📄'
+
+    const { data: created, error } = await supabase
       .from('memory_nodes')
       .insert({
         project_id: projectId,
-        type,
+        type: nodeType || 'document',
         name,
-        content: content || {},
+        content: content || (nodeType === 'document' ? `# ${name}\n\nContent here...` : null),
+        icon,
         color,
-        parent_id,
+        parent_id: actualParentId,
         position: 0
       })
+      .select()
 
-    if (!error) {
-      console.log('Created memory node:', name)
+    if (!error && created?.[0]) {
+      console.log('✅ Created memory node:', name, 'type:', nodeType)
+      return created[0]
+    } else if (error) {
+      console.error('❌ Error creating node:', error.message)
     }
   }
 
   // Update memory node
   const updateMemoryNode = async (data: any) => {
-    const { id, content } = data
+    const { id, name, content, append = false, set_content, new_name } = data
 
-    await supabase
-      .from('memory_nodes')
-      .update({ content, updated_at: new Date().toISOString() })
-      .eq('id', id)
+    console.log('📝 Updating memory node:', { id, name, content: content?.substring(0, 50) })
+
+    if (!id && !name) {
+      console.error('❌ Cannot update node without ID or name')
+      showToast('Erreur: nom ou ID manquant pour la mise à jour', 'error')
+      return
+    }
+
+    // If we have a name but no ID, find the node by name
+    let nodeId = id
+    let existingNode: any = null
+
+    if (!id && name) {
+      const { data: nodes, error: findError } = await supabase
+        .from('memory_nodes')
+        .select('id, content')
+        .eq('project_id', projectId)
+        .eq('name', name)
+        .single()
+
+      if (findError) {
+        console.error('❌ Node not found:', name, findError.message)
+        // Create the node if it doesn't exist
+        console.log('📝 Creating node as it doesn\'t exist:', name)
+        await createMemoryNode({ name, content, type: 'document' })
+        showToast(`Document "${name}" créé avec succès`, 'success')
+        return
+      }
+
+      if (nodes) {
+        nodeId = nodes.id
+        existingNode = nodes
+
+        // If append mode, add to existing content
+        if (append && nodes.content) {
+          const existingContent = typeof nodes.content === 'string'
+            ? nodes.content
+            : JSON.stringify(nodes.content)
+          const newContent = existingContent + '\n\n' + content
+
+          await supabase
+            .from('memory_nodes')
+            .update({
+              content: newContent,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', nodeId)
+
+          console.log('Appended to memory node:', name)
+          return
+        }
+      }
+    }
+
+    // Normal update
+    if (nodeId) {
+      let finalContent = set_content || content
+      let updateData: any = {
+        updated_at: new Date().toISOString()
+      }
+
+      // If append mode and we have existing content
+      if (append && existingNode?.content) {
+        const existingContent = typeof existingNode.content === 'string'
+          ? existingNode.content
+          : JSON.stringify(existingNode.content)
+        finalContent = existingContent + '\n\n' + (content || '')
+      }
+
+      if (finalContent !== undefined) {
+        updateData.content = finalContent
+      }
+
+      if (new_name) {
+        updateData.name = new_name
+      }
+
+      const { error } = await supabase
+        .from('memory_nodes')
+        .update(updateData)
+        .eq('id', nodeId)
+
+      if (!error) {
+        console.log('✅ Updated memory node:', name || nodeId, append ? '(appended)' : '')
+        showToast(`Document "${name || 'mémoire'}" mis à jour avec succès`, 'success')
+      } else {
+        console.error('❌ Error updating node:', error.message)
+        showToast(`Erreur lors de la mise à jour: ${error.message}`, 'error')
+      }
+    } else {
+      // If node doesn't exist, create it
+      console.log('⚠️ Node not found, creating new one:', name)
+      await createMemoryNode({ name, content: content || set_content, type: 'document' })
+    }
   }
 
   // Delete memory node
   const deleteMemoryNode = async (data: any) => {
-    await supabase
-      .from('memory_nodes')
-      .delete()
-      .eq('id', data.id)
+    const { id, name } = data
+
+    if (!id && !name) {
+      console.error('❌ Cannot delete node without ID or name')
+      return
+    }
+
+    // Find by name if ID not provided
+    let nodeId = id
+    if (!id && name) {
+      const { data: node } = await supabase
+        .from('memory_nodes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('name', name)
+        .single()
+
+      if (node) {
+        nodeId = node.id
+      }
+    }
+
+    if (nodeId) {
+      const { error } = await supabase
+        .from('memory_nodes')
+        .delete()
+        .eq('id', nodeId)
+
+      if (!error) {
+        console.log('✅ Deleted memory node:', name || nodeId)
+      } else {
+        console.error('❌ Error deleting node:', error.message)
+      }
+    } else {
+      console.warn('⚠️ Node not found for deletion:', name || id)
+    }
   }
 
-  // Create widget
-  const createWidget = async (data: any) => {
-    await createMemoryNode({
-      ...data,
-      type: 'widget'
-    })
-  }
-
-  // Store attack pattern
-  const storePattern = async (data: any) => {
-    const { pattern, type, success_rate } = data
-
-    await supabase
-      .from('attack_patterns')
-      .insert({
-        project_id: projectId,
-        pattern_type: type,
-        pattern: { content: pattern },
-        success_rate,
-        usage_count: 1
-      })
-  }
 
   const handleClaudeAction = async (action: any) => {
-    // Handle different action types from Claude
+    if (!action) return
+
+    console.log('🔄 Processing Claude action:', action.operation || action.type)
+
+    // Handle MEMORY_ACTION format
+    if (action.operation) {
+      try {
+        switch (action.operation) {
+          case 'create':
+            await createMemoryNode(action.data)
+            showToast(`Document "${action.data?.name}" créé avec succès`, 'success')
+            break
+          case 'update':
+            await updateMemoryNode(action.data)
+            // Toast is already shown in updateMemoryNode function
+            break
+          case 'append':
+            await updateMemoryNode({ ...action.data, append: true })
+            showToast(`Contenu ajouté à "${action.data?.name}"`, 'success')
+            break
+          case 'delete':
+            await deleteMemoryNode(action.data)
+            showToast(`Document "${action.data?.name}" supprimé`, 'success')
+            break
+          case 'update-section':
+            // Handle section updates
+            await updateMemoryNode({
+              id: action.data.id,
+              name: action.data.name,
+              content: action.data.content,
+              section_id: action.data.section_id
+            })
+            showToast(`Section mise à jour dans "${action.data?.name}"`, 'success')
+            break
+          default:
+            console.warn('Unknown operation:', action.operation)
+        }
+      } catch (error) {
+        console.error('Action execution error:', error)
+        showToast(`Erreur lors de l'exécution de l'action: ${error.message}`, 'error')
+      }
+      return
+    }
+
+    // Handle old format for backward compatibility
     if (action.type === 'create_memory_node') {
       await supabase
         .from('memory_nodes')
@@ -638,41 +1103,107 @@ export default function ChatStream({ projectId }: ChatStreamProps) {
     )
   }, [messages])
 
+  // Handlers pour la confirmation des actions
+  const handleConfirmAction = async () => {
+    if (!pendingMemoryAction) return
+
+    const { operation, data } = pendingMemoryAction
+
+    try {
+      // Exécuter l'action
+      switch (operation) {
+        case 'create':
+          await createMemoryNode(data)
+          break
+        case 'update':
+          await updateMemoryNode(data)
+          break
+        case 'append':
+          await updateMemoryNode({ ...data, append: true })
+          break
+        case 'delete':
+          await deleteMemoryNode(data)
+          break
+      }
+
+      console.log('✅ Action mémoire exécutée:', operation)
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'exécution:', error)
+    }
+
+    // Passer à l'action suivante
+    setPendingMemoryAction(null)
+    setPendingActions(prev => {
+      const remaining = prev.slice(1)
+      if (remaining.length > 0) {
+        setPendingMemoryAction(remaining[0])
+      }
+      return remaining
+    })
+  }
+
+  const handleCancelAction = () => {
+    // Annuler l'action et passer à la suivante
+    setPendingMemoryAction(null)
+    setPendingActions(prev => {
+      const remaining = prev.slice(1)
+      if (remaining.length > 0) {
+        setPendingMemoryAction(remaining[0])
+      }
+      return remaining
+    })
+  }
+
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 p-6 chat-container overflow-y-auto"
-      style={{ height: 'calc(100vh - 200px)' }}
-    >
-      <div className="max-w-4xl mx-auto space-y-6">
-        {filteredMessages.map((message) => (
-          <MessageComponent key={message.id} message={message} />
-        ))}
+    <>
+      <div
+        ref={containerRef}
+        className="flex-1 p-6 chat-container overflow-y-auto"
+        style={{ height: 'calc(100vh - 200px)' }}
+      >
+        <div className="max-w-4xl mx-auto space-y-6">
+          {filteredMessages.map((message, index) => {
+            const isLastAssistantMessage =
+              index === filteredMessages.length - 1 &&
+              message.role === 'assistant' &&
+              !isStreaming
 
-        {/* Streaming Message with memoized component */}
-        {isStreaming && streamingContent && (
-          <StreamingMessageWrapper
-            content={streamingContent}
-            isComplete={isStreamComplete}
-          />
-        )}
+            return (
+              <MessageComponent
+                key={message.id}
+                message={message}
+                pendingAction={isLastAssistantMessage ? pendingMemoryAction : undefined}
+                onConfirmAction={isLastAssistantMessage ? handleConfirmAction : undefined}
+                onRejectAction={isLastAssistantMessage ? handleCancelAction : undefined}
+              />
+            )
+          })}
 
-        {/* Typing Indicator */}
-        {isStreaming && !streamingContent && (
-          <div className="flex gap-4 justify-start">
-            <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
-              <Bot className="w-4 h-4 text-background" />
-            </div>
-            <div className="px-4 py-3 rounded-xl bg-muted">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          {/* Streaming Message with memoized component */}
+          {isStreaming && streamingContent && (
+            <StreamingMessageWrapper
+              content={streamingContent}
+              isComplete={isStreamComplete}
+            />
+          )}
+
+          {/* Typing Indicator */}
+          {isStreaming && !streamingContent && (
+            <div className="flex gap-4 justify-start">
+              <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
+                <Bot className="w-4 h-4 text-background" />
+              </div>
+              <div className="px-4 py-3 rounded-xl bg-muted">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

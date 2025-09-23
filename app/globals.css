@@ -188,3 +188,46 @@
     opacity: 0.5;
   }
 }
+
+/* Smooth chat transitions */
+.message-streaming,
+.message-enter {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.streaming-text-container {
+  transition: opacity 0.2s ease;
+}
+
+/* Prevent layout shift during streaming */
+[data-streaming="true"] {
+  min-height: 24px;
+  transition: min-height 0.2s ease;
+}
+
+/* Smooth message appearance */
+.chat-message {
+  animation: messageAppear 0.2s ease-out;
+}
+
+@keyframes messageAppear {
+  from {
+    opacity: 0.95;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hide scrollbar during transitions to prevent jump */
+.chat-container:has([data-streaming="true"]) {
+  scrollbar-width: thin;
+  transition: scrollbar-width 0.1s ease;
+}
+
+/* Smooth height transitions for messages */
+.message-content {
+  transition: height 0.15s ease, opacity 0.15s ease;
+}

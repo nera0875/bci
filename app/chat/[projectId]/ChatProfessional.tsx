@@ -14,10 +14,11 @@ import {
   ListChecks
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
-import MemorySidebarEnhanced from '@/components/memory/MemorySidebarEnhanced'
+import MemorySidebar from '@/components/memory/MemorySidebar'
 import ChatStream from '@/components/chat/ChatStream'
 import RulesTable from '@/components/rules/RulesTable'
 import GoalBar from '@/components/goal/GoalBar'
+import ConversationManagerUI from '@/components/chat/ConversationManager'
 import { Database } from '@/lib/supabase/database.types'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -31,6 +32,8 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
   const [message, setMessage] = useState('')
   const [showRules, setShowRules] = useState(false)
   const [showMemory, setShowMemory] = useState(true)
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
+  const [chatKey, setChatKey] = useState(0)
 
   // Load project
   useEffect(() => {
@@ -60,19 +63,42 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
     }
   }
 
+  const handleNewConversation = () => {
+    setCurrentConversationId(null)
+    setChatKey(prev => prev + 1) // Force ChatStream to reset
+  }
+
+  const handleConversationChange = (conversationId: string) => {
+    setCurrentConversationId(conversationId)
+    setChatKey(prev => prev + 1) // Force ChatStream to reload with new conversation
+  }
+
   const handleSendMessage = async () => {
     if (!message.trim() || !project) return
 
     const userMessage = message
     setMessage('')
 
-    // Save the user message - this will trigger Claude via subscription
+    // If no conversation yet, create one first
+    let conversationId = currentConversationId
+    if (!conversationId) {
+      const { ConversationManager } = await import('@/lib/services/conversation')
+      const manager = new ConversationManager(project.id)
+      const conversation = await manager.initConversation()
+      if (conversation) {
+        conversationId = conversation.id
+        setCurrentConversationId(conversation.id)
+      }
+    }
+
+    // Save the user message with conversation ID
     const { error } = await supabase
       .from('chat_messages')
       .insert({
         project_id: project.id,
         role: 'user' as const,
-        content: userMessage
+        content: userMessage,
+        conversation_id: conversationId
       })
 
     if (error) {
@@ -115,6 +141,16 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
 
         {/* Right Side Actions */}
         <div className="flex items-center gap-3">
+          {/* Conversation Manager */}
+          <ConversationManagerUI
+            projectId={project.id}
+            currentConversationId={currentConversationId}
+            onConversationChange={handleConversationChange}
+            onNewConversation={handleNewConversation}
+          />
+
+          <div className="w-px h-8 bg-gray-200" />
+
           {/* Memory Toggle */}
           <button
             onClick={() => setShowMemory(!showMemory)}
@@ -169,7 +205,7 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
                   <p className="text-sm text-gray-500 mt-1">Virtual file system</p>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  <MemorySidebarEnhanced projectId={project.id} />
+                  <MemorySidebar projectId={project.id} />
                 </div>
               </div>
             </motion.div>
@@ -186,7 +222,12 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto bg-white">
             <div className="max-w-5xl mx-auto px-6 py-8">
-              <ChatStream projectId={project.id} />
+              <ChatStream
+                key={chatKey}
+                projectId={project.id}
+                conversationId={currentConversationId}
+                onConversationCreated={(id) => setCurrentConversationId(id)}
+              />
             </div>
           </div>
 

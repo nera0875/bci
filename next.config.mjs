@@ -1,15 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  experimental: {
-    turbo: {
-      resolveAlias: {
-        '@': './src',
-      },
+  turbopack: {
+    resolveAlias: {
+      '@': './src',
     },
   },
-  // Allow external access
-  allowedDevOrigins: ['http://84.247.131.60:3001'],
+  allowedDevOrigins: ['http://84.247.131.60:3001', 'http://localhost:3001'],
   async headers() {
     return [
       {
