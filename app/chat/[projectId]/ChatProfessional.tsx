@@ -16,7 +16,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { isValidUUID } from '@/lib/utils/uuid'
 import MemorySidebar from '@/components/memory/MemorySidebar'
-import Mem0SidebarPanel from '@/components/memory/Mem0SidebarPanel'
+import Mem0AdvancedSidebar from '@/app/components/memory/Mem0AdvancedSidebar'
 import ChatStream from '@/components/chat/ChatStream'
 import RulesTable from '@/components/rules/RulesTable'
 import GoalBar from '@/components/goal/GoalBar'
@@ -44,6 +44,8 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
   const [showMemoryBank, setShowMemoryBank] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
+  const [memories, setMemories] = useState<any[]>([])
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | undefined>()
 
   // Load project
   useEffect(() => {
@@ -89,6 +91,140 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
     setCurrentConversationId(conversationId)
     setChatKey(prev => prev + 1) // Force ChatStream to reload with new conversation
   }
+
+  // Memory handlers for Mem0AdvancedSidebar
+  const loadMemories = async () => {
+    if (!project) return
+
+    try {
+      const response = await fetch('/api/memory/v5/get-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          page: 1,
+          page_size: 100,
+          output_format: 'v1.1'
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const rawMemories = data.results || data.memories || []
+        // Transform memories to match the format expected by Mem0AdvancedSidebar
+        const transformedMemories = rawMemories.map((mem: any) => ({
+          id: mem.id,
+          content: mem.memory || mem.content,
+          compartmentId: mem.categories?.[0] || 'general',
+          created_at: mem.created_at,
+          metadata: mem.metadata,
+          tags: mem.categories,
+          status: 'active' as const
+        }))
+        setMemories(transformedMemories)
+      }
+    } catch (error) {
+      console.error('Failed to load memories:', error)
+    }
+  }
+
+  const handleMemoryAdd = async (compartmentId: string, content: string) => {
+    if (!project) return
+
+    try {
+      const response = await fetch('/api/memory/v5/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'user',
+              content: content
+            }
+          ],
+          user_id: `user_${project.id}`,
+          categories: [compartmentId],
+          metadata: {
+            source: 'manual_entry',
+            created_via: 'advanced_sidebar',
+            project_id: project.id
+          }
+        })
+      })
+
+      if (response.ok) {
+        await loadMemories()
+      } else {
+        const errorData = await response.text()
+        console.error('Server responded with:', response.status, errorData)
+      }
+    } catch (error) {
+      console.error('Failed to add memory:', error)
+    }
+  }
+
+  const handleMemoryEdit = async (id: string, content: string) => {
+    try {
+      const response = await fetch('/api/memory/v5/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memory_id: id,
+          text: content,
+          metadata: {
+            updated_via: 'advanced_sidebar'
+          }
+        })
+      })
+
+      if (response.ok) {
+        await loadMemories()
+      }
+    } catch (error) {
+      console.error('Failed to update memory:', error)
+    }
+  }
+
+  const handleMemoryDelete = async (id: string) => {
+    try {
+      const response = await fetch('/api/memory/v5/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memory_id: id })
+      })
+
+      if (response.ok) {
+        await loadMemories()
+      }
+    } catch (error) {
+      console.error('Failed to delete memory:', error)
+    }
+  }
+
+  const handleMemoryReorder = (compartmentId: string, oldIndex: number, newIndex: number) => {
+    // Update local state for optimistic UI
+    const compartmentMemories = memories.filter(m => m.compartmentId === compartmentId)
+    if (oldIndex !== newIndex && oldIndex < compartmentMemories.length && newIndex < compartmentMemories.length) {
+      const updatedMemories = [...memories]
+      const [movedMemory] = compartmentMemories.splice(oldIndex, 1)
+      compartmentMemories.splice(newIndex, 0, movedMemory)
+
+      // Rebuild the full memories array with reordered items
+      const otherMemories = memories.filter(m => m.compartmentId !== compartmentId)
+      setMemories([...otherMemories, ...compartmentMemories])
+    }
+  }
+
+  const handleMemorySelect = (memory: any) => {
+    setSelectedMemoryId(memory.id)
+  }
+
+  // Load memories when project is loaded
+  useEffect(() => {
+    if (project && showMemory) {
+      loadMemories()
+    }
+  }, [project, showMemory])
 
   const handleSendMessage = async () => {
     if (!message.trim() || !project) return
@@ -231,14 +367,19 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
               transition={{ duration: 0.2, ease: "easeInOut" }}
               className="w-[350px] border-r border-gray-200 bg-white"
             >
-              <Mem0SidebarPanel
-                isOpen={true}
-                onClose={() => setShowMemory(false)}
-                projectId={project.id}
-                userId={`user_${project.id}`}
-                agentId={`agent_${project.id}`}
-                conversationId={currentConversationId}
-                embedded={true}
+              <Mem0AdvancedSidebar
+                memories={memories}
+                onMemoryAdd={handleMemoryAdd}
+                onMemoryEdit={handleMemoryEdit}
+                onMemoryDelete={handleMemoryDelete}
+                onMemoryReorder={handleMemoryReorder}
+                onMemorySelect={handleMemorySelect}
+                selectedMemoryId={selectedMemoryId}
+                searchable={true}
+                filterable={true}
+                editable={true}
+                collapsible={true}
+                className="h-full"
               />
             </motion.div>
           )}

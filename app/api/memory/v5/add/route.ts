@@ -4,7 +4,17 @@ import { SupabaseApiKeyService } from '@/lib/services/apiKeyService'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log('Received body:', body)
     const { messages, user_id, agent_id, metadata, categories, filters } = body
+
+    // Validate messages
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      console.error('Invalid messages:', messages)
+      return NextResponse.json(
+        { error: 'Messages are required and must be a non-empty array' },
+        { status: 400 }
+      )
+    }
 
     // Get Mem0 API key from Supabase
     const apiKeyService = new SupabaseApiKeyService(
@@ -41,9 +51,19 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const error = await response.text()
-      console.error('Mem0 API error:', error)
+      console.error('Mem0 API error:', response.status, error)
+      console.error('Request payload was:', JSON.stringify({
+        messages,
+        user_id,
+        agent_id,
+        metadata: {
+          ...metadata,
+          categories: categories || []
+        },
+        filters
+      }, null, 2))
       return NextResponse.json(
-        { error: 'Failed to add memory' },
+        { error: 'Failed to add memory', details: error },
         { status: response.status }
       )
     }
