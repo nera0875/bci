@@ -1,72 +1,110 @@
 # BCI Tool v2 - Tasks
 
 ## 🎯 Objectif Principal
-Créer un système de mémoire modulaire avec RAG pour l'IA qui peut s'auto-modifier via le chat.
+Migration vers architecture Mem0-first avec compartiments intelligents pour pentesting auto-évolutif.
 
-## ✅ Tâches Complétées
-- [x] Analyser la structure existante du projet
-- [x] Vérifier les tables Supabase existantes (7 tables trouvées)
-- [x] Inventorier les composants Memory existants
-- [x] Créer la table memory_chunks pour le système RAG
-- [x] Implémenter le système de chunking intelligent
-- [x] Créer API pour modifications partielles
-- [x] Simplifier l'interface Memory (gardé seulement folder + document)
+## 🚧 Sprint Actuel - Migration Mem0 Architecture
 
-## 🚧 En Cours
-- [ ] Tester le système complet
+### Phase 4: Implémentation Mem0 [IN PROGRESS]
+- [x] Analyser capacités complètes Mem0
+- [x] Designer système compartiments avec tags
+- [x] Documenter architecture (MEM0_ARCHITECTURE.md)
+- [x] Créer décisions techniques (DECISIONS.md)
+- [x] Mettre à jour PROJECT_HISTORY.md
+- [ ] **MemoryServiceV4.ts** - Service complet Mem0
+  - [ ] Configuration compartiments pentesting
+  - [ ] Custom categories par zone
+  - [ ] Custom instructions avec règles
+  - [ ] Graph memory pour relations
+  - [ ] Criteria retrieval pour priorités
+- [ ] **UI Compartiments**
+  - [ ] CompartmentSidebar modulaire
+  - [ ] ViewModes (cards/list/timeline/kanban)
+  - [ ] RulesPanel éditable temps réel
+  - [ ] GraphViewer pour relations
+- [ ] **Intégration Chat**
+  - [ ] Commandes naturelles pour compartiments
+  - [ ] Auto-détection compartiment cible
+  - [ ] Application règles automatique
+- [ ] **Tests & Validation**
+  - [ ] Tester avec vraies clés Mem0
+  - [ ] Vérifier custom_categories
+  - [ ] Valider graph relations
 
-## 📝 À Faire
+### Compartiments Pentesting à Créer
+```javascript
+- success_exploits    // Payloads validés + auto-variations
+- failed_attempts     // Échecs + analyse + suggestions
+- reconnaissance      // Scans + services + CVEs
+- active_plans       // Plans d'attaque + hypothèses
+- patterns           // Techniques extraites automatiquement
+```
 
-### 1. Tests & Validation
-- [ ] Tester création de dossiers/documents via l'UI
-- [ ] Vérifier que l'IA peut modifier sa mémoire invisiblement
-- [ ] Tester les modifications partielles de documents
-- [ ] Vérifier la recherche par similarité
+## 📝 Backlog Priorisé
 
-### 2. Optimisations
-- [ ] Cache des 10 derniers chunks
-- [ ] Lazy loading des embeddings
-- [ ] Compression des vieux chunks
-- [ ] Background sync avec Supabase
+### P1 - Critical (Cette semaine)
+1. [ ] MemoryServiceV4 avec toutes capacités Mem0
+2. [ ] Configuration compartiments de base
+3. [ ] Intégration ChatStream.tsx
 
-## 🐛 Bugs à Corriger
-- [ ] Erreur 401 sur OpenAI embeddings (clé manquante - besoin de configurer OPENAI_API_KEY)
-- [ ] CORS warnings (partiellement corrigé avec next.config.mjs)
+### P2 - Important (Semaine prochaine)
+1. [ ] UI Sidebar modulaire
+2. [ ] Panel règles éditable
+3. [ ] Graph viewer basique
 
-## 📊 Métriques Cibles
-- Contexte max : 4000 tokens
-- Chunks par recherche : 5-10
-- Latence : <200ms
-- Taille chunk : ~500 tokens
-- Overlap : 50 tokens
+### P3 - Nice to Have
+1. [ ] Import/Export compartiments
+2. [ ] Templates de règles
+3. [ ] Analytics dashboard
 
-## 🎉 Accomplissements
+## ✅ Phases Complétées
 
-### Système RAG Implémenté
-- **ChunkingService** : Découpe intelligente avec sections et overlap
-- **memory_chunks** : Table Supabase avec pgvector pour embeddings
-- **API /api/memory/chunk** : CRUD complet pour chunks
-- **Modifications partielles** : Support des content-id pour update ciblé
+### Phase 1-3: Application de Base
+- [x] Setup Next.js + TypeScript + Tailwind
+- [x] Supabase avec 7 tables configurées
+- [x] Chat interface avec streaming Claude
+- [x] Memory sidebar (ancienne version)
+- [x] Rules table temps réel
+- [x] Design monochrome
 
-### Interface Simplifiée
-- **MemorySidebar** : Seulement folders + documents (retiré widget, pattern, exploit, metric)
-- **Double-clic** : Ouvre l'éditeur complet MemoryEditor
-- **Inline edit** : Édition rapide du contenu
+### Analyse & Design Mem0 (23/09/2024)
+- [x] Documentation complète analysée
+- [x] Features manquantes identifiées
+- [x] Architecture compartiments conçue
+- [x] Plan migration établi
 
-### IA Améliorée
-- **Commandes invisibles** : Via HTML comments <!--MEMORY_ACTION-->
-- **RAG intégré** : searchSimilarChunks dans Claude API
-- **System prompt** : Instructions pour auto-modification mémoire
+## 🐛 Issues Connues
+- [ ] OpenAI API key manquante pour embeddings
+- [ ] Migration données existantes vers Mem0
+- [ ] Sync Supabase/Mem0 pour UI
 
-## 🔧 Stack Technique
-- **Frontend**: Next.js 15.5.3 + TypeScript
-- **Editor**: Monaco Editor + Markdown
-- **Database**: Supabase + pgvector
-- **AI**: Claude API + OpenAI embeddings
-- **UI**: Framer Motion + Radix UI
+## 📊 Métriques Succès
+- **Temps création compartiment** : < 3s
+- **Précision RAG** : > 90%
+- **Auto-consolidation** : -80% doublons
+- **Graph insights** : 70% patterns découverts
+- **Modification via chat** : 100% naturel
 
-## 📝 Notes
-- La table memory_nodes existe déjà avec colonne embedding
-- 7 tables dans Supabase : projects, memory_nodes, chat_messages, rules, requests, vulnerabilities, attack_patterns
-- Composants Memory existants : MemorySidebar, MemoryEditor, AdvancedMemoryEditor, TableEditor, DynamicWidget
-- Nouveau système de chunking avec memory_chunks et memory_chunks_cache
+## 🔧 Stack Technique Actuel
+- **Memory**: Mem0 Cloud API
+- **LLM**: Claude 3.5 Sonnet via Mem0
+- **Embeddings**: OpenAI text-embedding-3-small
+- **Frontend**: Next.js 15.5 + TypeScript
+- **UI**: Tailwind + Framer Motion
+- **Database**: Supabase (UI metadata only)
+
+## 📅 Timeline Estimée
+- **Semaine 1** : MemoryServiceV4 + Compartiments
+- **Semaine 2** : UI Modulaire + Intégration
+- **Semaine 3** : Tests + Optimisations
+- **Semaine 4** : Intelligence avancée (patterns, graph)
+
+## 💡 Notes Importantes
+- Mem0 gère TOUT le contenu intelligent
+- Supabase uniquement pour métadonnées UI
+- Pas de duplication de données
+- Une seule source de vérité : Mem0
+- Tags > Dossiers pour flexibilité
+
+---
+*Dernière mise à jour : 23/09/2024 - Migration Mem0*

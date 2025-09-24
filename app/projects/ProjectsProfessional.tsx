@@ -16,7 +16,7 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 
 export default function ProjectsProfessional() {
   const router = useRouter()
-  const { projects, createProject, selectProject, deleteProject, connectionStatus } = useAppStore()
+  const { projects, createProject, selectProject, deleteProject, connectionStatus, cleanupInvalidProjects } = useAppStore()
   const [isCreating, setIsCreating] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
@@ -30,6 +30,8 @@ export default function ProjectsProfessional() {
 
   useEffect(() => {
     setMounted(true)
+    // Clean up projects with invalid UUIDs on startup
+    cleanupInvalidProjects()
   }, [])
 
   const filteredProjects = projects.filter(p => {
@@ -50,9 +52,8 @@ export default function ProjectsProfessional() {
       setNewProjectDescription('')
       setIsCreating(false)
 
-      setTimeout(() => {
-        router.push(`/chat/${project.id}`)
-      }, 300)
+      // Use direct navigation after project creation
+      window.location.href = `/chat/${project.id}`
     }
     setLoadingProject(null)
   }
@@ -66,9 +67,8 @@ export default function ProjectsProfessional() {
     setLoadingProject(projectId)
     selectProject(projectId)
 
-    setTimeout(() => {
-      router.push(`/chat/${projectId}`)
-    }, 200)
+    // Use window.location for cleaner navigation
+    window.location.href = `/chat/${projectId}`
   }
 
   const handleDeleteProject = async (projectId: string, projectName: string) => {

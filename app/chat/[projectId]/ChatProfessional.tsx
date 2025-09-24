@@ -11,18 +11,27 @@ import {
   Activity, Terminal, Lock, Unlock, AlertCircle,
   CheckCircle2, XCircle, ArrowLeft, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  ListChecks
+  ListChecks, Sparkles
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { isValidUUID } from '@/lib/utils/uuid'
 import MemorySidebar from '@/components/memory/MemorySidebar'
+import Mem0SidebarPanel from '@/components/memory/Mem0SidebarPanel'
 import ChatStream from '@/components/chat/ChatStream'
 import RulesTable from '@/components/rules/RulesTable'
 import GoalBar from '@/components/goal/GoalBar'
 import ConversationManagerUI from '@/components/chat/ConversationManager'
-import { Database } from '@/lib/supabase/database.types'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type Project = Database['public']['Tables']['projects']['Row']
+type Project = {
+  id: string
+  name: string
+  goal: string | null
+  api_keys: any
+  settings: any
+  created_at: string
+  updated_at: string
+}
 
 export default function ChatProfessional({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params)
@@ -31,7 +40,8 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [showRules, setShowRules] = useState(false)
-  const [showMemory, setShowMemory] = useState(true)
+  const [showMemory, setShowMemory] = useState(true) // Mem0 Cloud Panel (left sidebar)
+  const [showMemoryBank, setShowMemoryBank] = useState(false)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
 
@@ -42,6 +52,13 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
 
   const loadProject = async () => {
     try {
+      // Validate UUID format first
+      if (!isValidUUID(projectId)) {
+        console.error('Invalid UUID format:', projectId)
+        router.push('/projects')
+        return
+      }
+
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -151,17 +168,32 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
 
           <div className="w-px h-8 bg-gray-200" />
 
-          {/* Memory Toggle */}
+          {/* Mem0 Cloud Toggle */}
           <button
             onClick={() => setShowMemory(!showMemory)}
             className={`p-2.5 rounded-lg transition-all ${
               showMemory
+                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+                : 'hover:bg-gray-100 text-gray-700'
+            }`}
+            title="Mem0 Cloud Memory"
+          >
+            <Sparkles className="w-6 h-6" />
+          </button>
+
+          {/* Memory Bank Toggle */}
+          <button
+            onClick={() => setShowMemoryBank(!showMemoryBank)}
+            className={`p-2.5 rounded-lg transition-all ${
+              showMemoryBank
                 ? 'bg-gray-900 text-white'
                 : 'hover:bg-gray-100 text-gray-700'
             }`}
+            title="Memory Bank"
           >
-            {showMemory ? <PanelLeftClose className="w-6 h-6" /> : <PanelLeftOpen className="w-6 h-6" />}
+            <Database className="w-6 h-6" />
           </button>
+
 
           {/* Rules Toggle */}
           <button
@@ -189,17 +221,40 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
 
       {/* Main Layout */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Memory Sidebar */}
+        {/* Mem0 Cloud Memory Sidebar */}
         <AnimatePresence>
           {showMemory && (
             <motion.div
-              initial={{ x: -450, opacity: 0 }}
+              initial={{ x: -350, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -450, opacity: 0 }}
+              exit={{ x: -350, opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="w-[450px] border-r border-gray-200 bg-gray-50"
+              className="w-[350px] border-r border-gray-200 bg-white"
             >
-              <div className="w-full h-full flex flex-col">
+              <Mem0SidebarPanel
+                isOpen={true}
+                onClose={() => setShowMemory(false)}
+                projectId={project.id}
+                userId={`user_${project.id}`}
+                agentId={`agent_${project.id}`}
+                conversationId={currentConversationId}
+                embedded={true}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Memory Bank Sidebar */}
+        <AnimatePresence>
+          {showMemoryBank && (
+            <motion.div
+              initial={{ x: -350, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -350, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="w-[350px] border-r border-gray-200 bg-gray-50"
+            >
+              <div className="flex flex-col h-full">
                 <div className="px-5 py-4 border-b border-gray-200 bg-white">
                   <h2 className="text-base font-semibold text-gray-900">Memory Bank</h2>
                   <p className="text-sm text-gray-500 mt-1">Virtual file system</p>
@@ -307,6 +362,7 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
         </div>
         <span className="text-gray-500">Project: {project.id.slice(0, 8)}</span>
       </div>
+
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase/client'
-import { generateUUID } from '@/lib/utils/uuid'
+import { generateUUID, isValidUUID } from '@/lib/utils/uuid'
 import type { Project, HttpRequest, Task, ChatMessage, EmbeddingRule, ApiConfig } from '@/lib/types'
 
 interface AppState {
@@ -45,6 +45,9 @@ interface AppState {
   updateEmbeddingRule: (ruleId: string, update: Partial<EmbeddingRule>) => void
   deleteEmbeddingRule: (ruleId: string) => void
   reorderEmbeddingRules: (rules: EmbeddingRule[]) => void
+
+  // Cleanup invalid projects
+  cleanupInvalidProjects: () => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -302,6 +305,27 @@ export const useAppStore = create<AppState>()(
 
       reorderEmbeddingRules: (rules) => {
         set({ embeddingRules: rules })
+      },
+
+      // Cleanup invalid projects
+      cleanupInvalidProjects: () => {
+        set((state) => {
+          const validProjects = state.projects.filter(project => {
+            if (!isValidUUID(project.id)) {
+              console.warn('Removing project with invalid UUID:', project.id, project.name)
+              return false
+            }
+            return true
+          })
+
+          // If current project has invalid ID, reset it
+          const currentProjectValid = state.currentProject && isValidUUID(state.currentProject.id)
+
+          return {
+            projects: validProjects,
+            currentProject: currentProjectValid ? state.currentProject : null
+          }
+        })
       },
     }),
     {

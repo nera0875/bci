@@ -1,25 +1,32 @@
 # BCI Tool v2 - Plan Vivant
 
 ## 🎯 Vision Actuelle
-Système de pentesting où Claude Opus 4.1 agit comme un cerveau auto-évolutif qui apprend de chaque test. Interface chat-centrique avec mémoire dynamique modulable.
+Système de pentesting où Claude Opus 4.1 agit comme un cerveau auto-évolutif qui apprend de chaque test. Interface chat-centrique avec mémoire dynamique modulable via Mem0.
 
 ## 🏗️ Architecture Technique Choisie
 
 ### Stack Final
 - **Frontend**: Next.js 15.5 + TypeScript + Tailwind CSS
 - **UI Components**: JSON Schema UI (rendu dynamique)
-- **Database**: Supabase (PostgreSQL + pgvector + Realtime)
-- **AI**: Claude Opus 4.1 + OpenAI Embeddings
+- **Memory System**: Mem0 Cloud (mémoire principale avec RAG, auto-consolidation, graph)
+- **Database**: Supabase (UI uniquement - affichage des compartiments)
+- **AI**: Claude Opus 4.1 via Mem0 native LLM + OpenAI Embeddings
 - **Design System**: Monochrome (#FFFFFF, #202123, #F7F7F8, #6E6E80)
 
-### Architecture Sans Fichiers Physiques
+### Architecture Hybride Mem0 + UI
 ```
-Supabase Database
-├── projects (isolation complète)
-├── memory_nodes (système virtuel)
-├── chat_messages (avec streaming)
-├── rules_table (règles modulables)
-└── embeddings (pgvector)
+Mem0 Cloud (Mémoire Intelligente)
+├── custom_categories (compartiments: success, failed, recon, plans)
+├── custom_instructions (règles par compartiment)
+├── graph_memory (relations entre exploits)
+├── RAG vectoriel (recherche sémantique)
+└── auto_consolidation (fusion intelligente)
+
+Supabase (UI Seulement)
+├── projects (métadonnées)
+├── compartments_ui (config visuelle)
+├── chat_messages (historique)
+└── rules_display (affichage règles)
 ```
 
 ## 📋 État Actuel du Projet
@@ -48,16 +55,21 @@ Supabase Database
 - Widgets dynamiques JSON Schema ✓
 - API routes pour Claude streaming ✓
 
-### 🔄 [Ready] Phase 4: Tests & Configuration
-- Configurer les clés API dans .env.local
-- Tester le flow complet avec vraies clés
-- Vérifier streaming Claude fonctionne
+### ✅ [Done] Phase 4: Migration Mem0 Architecture
+- ✅ Analyse complète des capacités Mem0
+- ✅ Design système de compartiments avec tags
+- ✅ Créer MemoryServiceV4 avec toutes capacités
+- ✅ Implémenter custom_categories par compartiment
+- ✅ Configurer custom_instructions avec règles
+- ✅ Setup graph_memory pour relations pentesting
+- ✅ Créer UI modulaire (CompartmentView)
+- ✅ Intégration avec ChatStream via MemoryIntegration
 
 ### 📅 [Next] Phase 5: Intelligence Avancée
 - Algorithmes génétiques pour payloads
-- Pattern mining automatique
-- Kill Switch Score
-- Memory replay buffer
+- Pattern mining via Mem0 graph
+- Kill Switch Score avec criteria retrieval
+- Memory replay buffer natif Mem0
 
 ## 🗂️ Structure de la Base de Données
 
@@ -157,8 +169,11 @@ Claude envoie des structures JSON qui sont rendues dynamiquement:
 1. ✅ [DONE] Installer toutes les dépendances
 2. ✅ [DONE] Créer schéma DB (fichier SQL prêt)
 3. ✅ [DONE] Implémenter interface complète
-4. 📝 [TODO] Configurer .env.local avec vos clés
-5. 📝 [TODO] Lancer et tester l'application
+4. ✅ [DONE] Migration vers Mem0-first architecture
+5. ✅ [DONE] Créer MemoryServiceV4.ts
+6. ✅ [DONE] Implémenter compartiments pentesting
+7. 🔄 [TODO] Tester avec vraies clés Mem0
+8. 📝 [TODO] Déployer et initialiser projet Mem0
 
 ## 📦 Dépendances Installées
 

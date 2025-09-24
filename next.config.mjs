@@ -1,12 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  turbopack: {
-    resolveAlias: {
-      '@': './src',
-    },
+  compress: true,
+  allowedDevOrigins: ['http://84.247.131.60:3001', 'http://localhost:3001', 'http://0.0.0.0:3001'],
+
+  // Optimisations pour éviter les problèmes réseau
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion', '@supabase/supabase-js'],
   },
-  allowedDevOrigins: ['http://84.247.131.60:3001', 'http://localhost:3001'],
+
   async headers() {
     return [
       {
@@ -23,6 +25,12 @@ const nextConfig = {
           {
             key: 'Access-Control-Allow-Headers',
             value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version',
+          },
+          {
+            key: 'Cache-Control',
+            value: process.env.NODE_ENV === 'development'
+              ? 'no-cache, no-store, must-revalidate'
+              : 'public, max-age=31536000, immutable',
           },
         ],
       },
