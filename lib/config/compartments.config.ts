@@ -5,6 +5,13 @@
 
 export const compartmentsConfig = [
   {
+    id: 'general',
+    name: 'General',
+    icon: 'Database',
+    color: 'text-gray-500',
+    description: 'General memories and notes'
+  },
+  {
     id: 'success_exploits',
     name: 'Successful Exploits',
     icon: 'Shield', // Changez l'icône ici

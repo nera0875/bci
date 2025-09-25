@@ -8,7 +8,16 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Shield, Target, AlertCircle, Lightbulb, Zap } from 'lucide-react';
-import type { MemoryResult } from '@/lib/services/memoryServiceV4';
+// import type { MemoryResult } from '@/lib/services/memoryServiceV4'; // REMOVED
+
+// Type de base pour les mémoires
+interface MemoryResult {
+  id: string
+  content: string
+  metadata?: any
+  categories?: string[]
+  created_at: string
+}
 
 interface CompartmentViewProps {
   projectId: string;

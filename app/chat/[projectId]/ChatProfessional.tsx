@@ -3,20 +3,17 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Send, Menu, Sliders, FolderTree, X, Plus,
-  MessageSquare, Code, Database, Brain,
-  ChevronLeft, Settings, Target, Shield,
-  Layers, FileText, History, Zap, BrainCircuit,
-  Search, Filter, Copy, Download, ChevronDown,
-  Activity, Terminal, Lock, Unlock, AlertCircle,
-  CheckCircle2, XCircle, ArrowLeft, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  ListChecks, Sparkles
+  Send, Database, Settings, ArrowLeft, ListChecks
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase/client'
+import { createClient } from '@supabase/supabase-js'
+
+// Simple Supabase client without strict typing for now
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 import { isValidUUID } from '@/lib/utils/uuid'
 import MemorySidebar from '@/components/memory/MemorySidebar'
-import Mem0AdvancedSidebar from '@/app/components/memory/Mem0AdvancedSidebar'
 import ChatStream from '@/components/chat/ChatStream'
 import RulesTable from '@/components/rules/RulesTable'
 import GoalBar from '@/components/goal/GoalBar'
@@ -27,8 +24,8 @@ type Project = {
   id: string
   name: string
   goal: string | null
-  api_keys: any
-  settings: any
+  api_keys: Record<string, string> | null
+  settings: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -40,12 +37,9 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [showRules, setShowRules] = useState(false)
-  const [showMemory, setShowMemory] = useState(true) // Mem0 Cloud Panel (left sidebar)
-  const [showMemoryBank, setShowMemoryBank] = useState(false)
+  const [showMemory, setShowMemory] = useState(true) // Memory Bank (left sidebar)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
-  const [memories, setMemories] = useState<any[]>([])
-  const [selectedMemoryId, setSelectedMemoryId] = useState<string | undefined>()
 
   // Load project
   useEffect(() => {
@@ -92,140 +86,6 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
     setChatKey(prev => prev + 1) // Force ChatStream to reload with new conversation
   }
 
-  // Memory handlers for Mem0AdvancedSidebar
-  const loadMemories = async () => {
-    if (!project) return
-
-    try {
-      const response = await fetch('/api/memory/v5/get-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id,
-          page: 1,
-          page_size: 100,
-          output_format: 'v1.1'
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const rawMemories = data.results || data.memories || []
-        // Transform memories to match the format expected by Mem0AdvancedSidebar
-        const transformedMemories = rawMemories.map((mem: any) => ({
-          id: mem.id,
-          content: mem.memory || mem.content,
-          compartmentId: mem.categories?.[0] || 'general',
-          created_at: mem.created_at,
-          metadata: mem.metadata,
-          tags: mem.categories,
-          status: 'active' as const
-        }))
-        setMemories(transformedMemories)
-      }
-    } catch (error) {
-      console.error('Failed to load memories:', error)
-    }
-  }
-
-  const handleMemoryAdd = async (compartmentId: string, content: string) => {
-    if (!project) return
-
-    try {
-      const response = await fetch('/api/memory/v5/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'user',
-              content: content
-            }
-          ],
-          user_id: `user_${project.id}`,
-          categories: [compartmentId],
-          metadata: {
-            source: 'manual_entry',
-            created_via: 'advanced_sidebar',
-            project_id: project.id
-          }
-        })
-      })
-
-      if (response.ok) {
-        await loadMemories()
-      } else {
-        const errorData = await response.text()
-        console.error('Server responded with:', response.status, errorData)
-      }
-    } catch (error) {
-      console.error('Failed to add memory:', error)
-    }
-  }
-
-  const handleMemoryEdit = async (id: string, content: string) => {
-    try {
-      const response = await fetch('/api/memory/v5/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          memory_id: id,
-          text: content,
-          metadata: {
-            updated_via: 'advanced_sidebar'
-          }
-        })
-      })
-
-      if (response.ok) {
-        await loadMemories()
-      }
-    } catch (error) {
-      console.error('Failed to update memory:', error)
-    }
-  }
-
-  const handleMemoryDelete = async (id: string) => {
-    try {
-      const response = await fetch('/api/memory/v5/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memory_id: id })
-      })
-
-      if (response.ok) {
-        await loadMemories()
-      }
-    } catch (error) {
-      console.error('Failed to delete memory:', error)
-    }
-  }
-
-  const handleMemoryReorder = (compartmentId: string, oldIndex: number, newIndex: number) => {
-    // Update local state for optimistic UI
-    const compartmentMemories = memories.filter(m => m.compartmentId === compartmentId)
-    if (oldIndex !== newIndex && oldIndex < compartmentMemories.length && newIndex < compartmentMemories.length) {
-      const updatedMemories = [...memories]
-      const [movedMemory] = compartmentMemories.splice(oldIndex, 1)
-      compartmentMemories.splice(newIndex, 0, movedMemory)
-
-      // Rebuild the full memories array with reordered items
-      const otherMemories = memories.filter(m => m.compartmentId !== compartmentId)
-      setMemories([...otherMemories, ...compartmentMemories])
-    }
-  }
-
-  const handleMemorySelect = (memory: any) => {
-    setSelectedMemoryId(memory.id)
-  }
-
-  // Load memories when project is loaded
-  useEffect(() => {
-    if (project && showMemory) {
-      loadMemories()
-    }
-  }, [project, showMemory])
-
   const handleSendMessage = async () => {
     if (!message.trim() || !project) return
 
@@ -235,27 +95,43 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
     // If no conversation yet, create one first
     let conversationId = currentConversationId
     if (!conversationId) {
-      const { ConversationManager } = await import('@/lib/services/conversation')
-      const manager = new ConversationManager(project.id)
-      const conversation = await manager.initConversation()
-      if (conversation) {
-        conversationId = conversation.id
-        setCurrentConversationId(conversation.id)
+      try {
+        // Create a simple conversation directly in Supabase
+        const { data, error } = await supabase
+          .from('conversations')
+          .insert({
+            project_id: project.id,
+            title: `Chat - ${new Date().toLocaleDateString()}`,
+            is_active: true
+          })
+          .select()
+          .single()
+        
+        if (!error && data) {
+          conversationId = data.id
+          setCurrentConversationId(data.id)
+        }
+      } catch (error) {
+        console.error('Error creating conversation:', error)
       }
     }
 
     // Save the user message with conversation ID
-    const { error } = await supabase
-      .from('chat_messages')
-      .insert({
-        project_id: project.id,
-        role: 'user' as const,
-        content: userMessage,
-        conversation_id: conversationId
-      })
-
-    if (error) {
-      console.error('Error sending message:', error)
+    try {
+      const { error } = await supabase
+        .from('chat_messages')
+        .insert([{
+          project_id: project.id,
+          role: 'user',
+          content: userMessage,
+          conversation_id: conversationId
+        }])
+      
+      if (error) {
+        console.error('Supabase error:', error)
+      }
+    } catch (error) {
+      console.error('Error saving message:', error)
     }
 
     // The ChatStream component will detect this via subscription
@@ -302,62 +178,49 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
             onNewConversation={handleNewConversation}
           />
 
-          <div className="w-px h-8 bg-gray-200" />
-
-          {/* Mem0 Cloud Toggle */}
-          <button
-            onClick={() => setShowMemory(!showMemory)}
-            className={`p-2.5 rounded-lg transition-all ${
-              showMemory
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                : 'hover:bg-gray-100 text-gray-700'
-            }`}
-            title="Mem0 Cloud Memory"
-          >
-            <Sparkles className="w-6 h-6" />
-          </button>
-
           {/* Memory Bank Toggle */}
-          <button
-            onClick={() => setShowMemoryBank(!showMemoryBank)}
-            className={`p-2.5 rounded-lg transition-all ${
-              showMemoryBank
-                ? 'bg-gray-900 text-white'
-                : 'hover:bg-gray-100 text-gray-700'
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowMemory(!showMemory)}
+            className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+              showMemory
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            title="Memory Bank"
           >
-            <Database className="w-6 h-6" />
-          </button>
-
+            <Database className="w-4 h-4" />
+            Memory Bank
+          </motion.button>
 
           {/* Rules Toggle */}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setShowRules(!showRules)}
-            className={`px-5 py-2.5 rounded-lg transition-all flex items-center gap-2.5 ${
+            className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
               showRules
-                ? 'bg-gray-900 text-white'
-                : 'hover:bg-gray-100 text-gray-700'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <ListChecks className="w-5 h-5" />
-            <span className="text-base font-medium">Rules</span>
-          </button>
+            <ListChecks className="w-4 h-4" />
+            Rules
+          </motion.button>
 
-          <div className="w-px h-8 bg-gray-200" />
-
+          {/* Settings */}
           <button
             onClick={() => router.push('/settings')}
-            className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <Settings className="w-6 h-6 text-gray-700" />
+            <Settings className="w-6 h-6" />
           </button>
         </div>
       </header>
 
-      {/* Main Layout */}
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Mem0 Cloud Memory Sidebar */}
+        {/* Memory Sidebar (Original System) */}
         <AnimatePresence>
           {showMemory && (
             <motion.div
@@ -367,43 +230,9 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
               transition={{ duration: 0.2, ease: "easeInOut" }}
               className="w-[350px] border-r border-gray-200 bg-white"
             >
-              <Mem0AdvancedSidebar
-                memories={memories}
-                onMemoryAdd={handleMemoryAdd}
-                onMemoryEdit={handleMemoryEdit}
-                onMemoryDelete={handleMemoryDelete}
-                onMemoryReorder={handleMemoryReorder}
-                onMemorySelect={handleMemorySelect}
-                selectedMemoryId={selectedMemoryId}
-                searchable={true}
-                filterable={true}
-                editable={true}
-                collapsible={true}
-                className="h-full"
+              <MemorySidebar
+                projectId={project.id}
               />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Memory Bank Sidebar */}
-        <AnimatePresence>
-          {showMemoryBank && (
-            <motion.div
-              initial={{ x: -350, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -350, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="w-[350px] border-r border-gray-200 bg-gray-50"
-            >
-              <div className="flex flex-col h-full">
-                <div className="px-5 py-4 border-b border-gray-200 bg-white">
-                  <h2 className="text-base font-semibold text-gray-900">Memory Bank</h2>
-                  <p className="text-sm text-gray-500 mt-1">Virtual file system</p>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  <MemorySidebar projectId={project.id} />
-                </div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -427,60 +256,49 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
             </div>
           </div>
 
-          {/* Input Area */}
+          {/* Message Input */}
           <div className="border-t border-gray-200 bg-white p-6">
             <div className="max-w-5xl mx-auto">
               <div className="flex gap-4">
                 <div className="flex-1 relative">
-                  <textarea
+                  <input
+                    type="text"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        handleSendMessage()
-                      }
-                    }}
-                    placeholder="Describe your objective or paste HTTP requests..."
-                    className="w-full min-h-[120px] max-h-[300px] px-5 py-4 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none text-gray-900 placeholder:text-gray-400 text-lg"
-                    style={{ paddingRight: '70px' }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Tapez votre message... (L'IA peut gérer sa mémoire automatiquement)"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!message.trim()}
-                    className="absolute bottom-4 right-4 p-3.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-6 h-6" />
-                  </button>
                 </div>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSendMessage}
+                  disabled={!message.trim()}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl font-medium flex items-center gap-2 transition-colors"
+                >
+                  <Send className="w-4 h-4" />
+                  Envoyer
+                </motion.button>
               </div>
-
             </div>
           </div>
         </div>
 
-        {/* Rules Panel */}
+        {/* Rules Sidebar */}
         <AnimatePresence>
           {showRules && (
             <motion.div
-              initial={{ x: 500, opacity: 0 }}
+              initial={{ x: 350, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 500, opacity: 0 }}
+              exit={{ x: 350, opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="w-[500px] border-l border-gray-200 bg-gray-50"
+              className="w-[400px] border-l border-gray-200 bg-white"
             >
-              <div className="w-full h-full flex flex-col">
-                <div className="px-5 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold text-gray-900">Active Rules</h2>
-                    <p className="text-sm text-gray-500 mt-1">Detection patterns</p>
-                  </div>
-                  <button
-                    onClick={() => setShowRules(false)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <X className="w-5 h-5 text-gray-500" />
-                  </button>
+              <div className="h-full flex flex-col">
+                <div className="p-4 border-b bg-gray-50">
+                  <h3 className="font-semibold text-gray-900">Rules & Instructions</h3>
+                  <p className="text-sm text-gray-600">Configure AI behavior</p>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
                   <RulesTable projectId={project.id} />
@@ -490,20 +308,6 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
           )}
         </AnimatePresence>
       </div>
-
-      {/* Status Bar */}
-      <div className="h-10 border-t border-gray-200 bg-gray-50 px-6 flex items-center justify-between text-sm">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-gray-600">Claude 3 Haiku Connected</span>
-          </span>
-          <span className="text-gray-400">|</span>
-          <span className="text-gray-600">Zero-Day Hunter Mode</span>
-        </div>
-        <span className="text-gray-500">Project: {project.id.slice(0, 8)}</span>
-      </div>
-
     </div>
   )
 }

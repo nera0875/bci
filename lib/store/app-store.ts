@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase/client'
 import { generateUUID, isValidUUID } from '@/lib/utils/uuid'
 import type { Project, HttpRequest, Task, ChatMessage, EmbeddingRule, ApiConfig } from '@/lib/types'
@@ -8,6 +7,8 @@ interface AppState {
   // Projects
   projects: Project[]
   currentProject: Project | null
+  projectsLoading: boolean
+  projectsError: string | null
 
   // API Config
   apiConfig: ApiConfig
@@ -24,9 +25,11 @@ interface AppState {
   isAnalyzing: boolean
 
   // Actions
+  loadProjects: () => Promise<void>
   createProject: (name: string, description?: string) => Promise<any>
-  selectProject: (projectId: string) => void
-  deleteProject: (projectId: string) => void
+  selectProject: (projectId: string) => Promise<void>
+  deleteProject: (projectId: string) => Promise<void>
+  updateCurrentProject: (updates: Partial<Project>) => Promise<void>
 
   addRequests: (requests: HttpRequest[]) => void
   updateRequest: (requestId: string, update: Partial<HttpRequest>) => void
@@ -51,11 +54,12 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       // Initial State
       projects: [],
       currentProject: null,
+      projectsLoading: false,
+      projectsError: null,
       apiConfig: {
         openai: {
           apiKey: '',
@@ -85,160 +89,246 @@ export const useAppStore = create<AppState>()(
       isAnalyzing: false,
 
       // Project Actions
-      createProject: async (name, description) => {
-        const project: Project = {
-          id: generateUUID(),
-          name,
-          description,
-          requests: [],
-          tasks: [],
-          vulnerabilities: [],
-          chatHistory: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
-
-        // Try to save to Supabase
+      loadProjects: async () => {
+        set({ projectsLoading: true, projectsError: null })
         try {
-          const { error } = await supabase
+          const { data: projects, error } = await supabase
             .from('projects')
-            .insert({
-              id: project.id,
-              name: project.name,
-              api_keys: {
-                openai: get().apiConfig.openai.apiKey || '',
-                claude: get().apiConfig.claude.apiKey || ''
-              }
-            })
+            .select('*')
+            .order('created_at', { ascending: false })
 
-          if (error) {
-            console.warn('Supabase insert failed, continuing with local storage:', error)
-            // Continue anyway - we'll work locally
-          }
-        } catch (err) {
-          console.warn('Supabase connection failed, continuing with local storage:', err)
-          // Continue anyway - we'll work locally
+          if (error) throw error
+          set({ projects: projects || [], projectsLoading: false })
+        } catch (error) {
+          console.error('Failed to load projects:', error)
+          set({
+            projectsError: 'Failed to load projects',
+            projectsLoading: false
+          })
         }
-
-        // Always update local state
-        set((state) => ({
-          projects: [...state.projects, project],
-          currentProject: project,
-        }))
-
-        return project
       },
 
-      selectProject: (projectId) => {
-        const project = get().projects.find((p) => p.id === projectId)
+      createProject: async (name, description) => {
+        const apiKeys = {
+          openai: get().apiConfig.openai.apiKey || '',
+          claude: get().apiConfig.claude.apiKey || ''
+        }
+
+        try {
+          const { data: project, error } = await supabase
+            .from('projects')
+            .insert({
+              name,
+              goal: description,
+              api_keys: apiKeys,
+              settings: {}
+            })
+            .select()
+            .single()
+
+          if (error) throw error
+
+          if (project) {
+            // Update local state with the new project
+            set((state) => ({
+              projects: [project, ...state.projects],
+              currentProject: project,
+            }))
+            return project
+          }
+        } catch (error) {
+          console.error('Failed to create project:', error)
+          return null
+        }
+      },
+
+      selectProject: async (projectId) => {
+        // First check local state
+        let project = get().projects.find((p) => p.id === projectId)
+
+        if (!project) {
+          // If not in local state, fetch from Supabase
+          try {
+            const { data, error } = await supabase
+              .from('projects')
+              .select('*')
+              .eq('id', projectId)
+              .single()
+            
+            if (!error && data) {
+              project = data
+            }
+          } catch (error) {
+            console.error('Failed to fetch project:', error)
+          }
+        }
+
         if (project) {
           set({ currentProject: project })
         }
       },
 
-      deleteProject: (projectId) => {
-        set((state) => ({
-          projects: state.projects.filter((p) => p.id !== projectId),
-          currentProject: state.currentProject?.id === projectId ? null : state.currentProject,
-        }))
+      deleteProject: async (projectId) => {
+        try {
+          const { error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', projectId)
+
+          if (!error) {
+            set((state) => ({
+              projects: state.projects.filter((p) => p.id !== projectId),
+              currentProject: state.currentProject?.id === projectId ? null : state.currentProject,
+            }))
+            return true
+          }
+        } catch (error) {
+          console.error('Failed to delete project:', error)
+        }
+        return false
+      },
+
+      updateCurrentProject: async (updates) => {
+        const currentProject = get().currentProject
+        if (!currentProject) return
+
+        const updatedProject = {
+          ...currentProject,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        }
+
+        try {
+          // Update in Supabase
+          const { error } = await supabase
+            .from('projects')
+            .update(updatedProject)
+            .eq('id', currentProject.id)
+
+          if (!error) {
+            // Update local state
+            set((state) => ({
+              currentProject: updatedProject,
+              projects: state.projects.map(p =>
+                p.id === currentProject.id ? updatedProject : p
+              ),
+            }))
+          }
+        } catch (error) {
+          console.error('Failed to update project:', error)
+        }
       },
 
       // Request Actions
-      addRequests: (requests) => {
+      addRequests: async (requests) => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set((state) => ({
-          currentProject: {
-            ...currentProject,
-            requests: [...currentProject.requests, ...requests],
-            updatedAt: new Date().toISOString(),
-          },
-        }))
+        const updatedProject = {
+          ...currentProject,
+          requests: [...currentProject.requests, ...requests],
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ requests: updatedProject.requests })
       },
 
-      updateRequest: (requestId, update) => {
+      updateRequest: async (requestId, update) => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set({
-          currentProject: {
-            ...currentProject,
-            requests: currentProject.requests.map((r) =>
-              r.id === requestId ? { ...r, ...update } : r
-            ),
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        const updatedRequests = currentProject.requests.map((r) =>
+          r.id === requestId ? { ...r, ...update } : r
+        )
+
+        const updatedProject = {
+          ...currentProject,
+          requests: updatedRequests,
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ requests: updatedRequests })
       },
 
       // Task Actions
-      addTask: (task) => {
+      addTask: async (task) => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set({
-          currentProject: {
-            ...currentProject,
-            tasks: [...currentProject.tasks, task],
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        const updatedTasks = [...currentProject.tasks, task]
+        const updatedProject = {
+          ...currentProject,
+          tasks: updatedTasks,
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ tasks: updatedTasks })
       },
 
-      updateTask: (taskId, update) => {
+      updateTask: async (taskId, update) => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set({
-          currentProject: {
-            ...currentProject,
-            tasks: currentProject.tasks.map((t) =>
-              t.id === taskId ? { ...t, ...update, updatedAt: new Date().toISOString() } : t
-            ),
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        const updatedTasks = currentProject.tasks.map((t) =>
+          t.id === taskId ? { ...t, ...update, updatedAt: new Date().toISOString() } : t
+        )
+
+        const updatedProject = {
+          ...currentProject,
+          tasks: updatedTasks,
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ tasks: updatedTasks })
       },
 
-      deleteTask: (taskId) => {
+      deleteTask: async (taskId) => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set({
-          currentProject: {
-            ...currentProject,
-            tasks: currentProject.tasks.filter((t) => t.id !== taskId),
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        const updatedTasks = currentProject.tasks.filter((t) => t.id !== taskId)
+        const updatedProject = {
+          ...currentProject,
+          tasks: updatedTasks,
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ tasks: updatedTasks })
       },
 
       // Chat Actions
-      addChatMessage: (message) => {
+      addChatMessage: async (message) => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set({
-          currentProject: {
-            ...currentProject,
-            chatHistory: [...currentProject.chatHistory, message],
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        const updatedChatHistory = [...currentProject.chatHistory, message]
+        const updatedProject = {
+          ...currentProject,
+          chatHistory: updatedChatHistory,
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ chatHistory: updatedChatHistory })
       },
 
-      clearChat: () => {
+      clearChat: async () => {
         const currentProject = get().currentProject
         if (!currentProject) return
 
-        set({
-          currentProject: {
-            ...currentProject,
-            chatHistory: [],
-            updatedAt: new Date().toISOString(),
-          },
-        })
+        const updatedProject = {
+          ...currentProject,
+          chatHistory: [],
+          updatedAt: new Date().toISOString(),
+        }
+
+        set({ currentProject: updatedProject })
+        await get().updateCurrentProject({ chatHistory: [] })
       },
 
       // API Actions
@@ -327,9 +417,5 @@ export const useAppStore = create<AppState>()(
           }
         })
       },
-    }),
-    {
-      name: 'bci-tool-storage',
-    }
-  )
+    })
 )
