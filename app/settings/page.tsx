@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import ApiConfigCenter from '@/components/settings/ApiConfigCenter'
+import SimpleApiSettings from '@/app/components/settings/SimpleApiSettings'
 import { Toaster } from 'react-hot-toast'
 
 export default function SettingsPage() {
@@ -32,7 +32,7 @@ export default function SettingsPage() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-8 py-12">
-        <ApiConfigCenter />
+        <SimpleApiSettings />
       </main>
     </div>
   )

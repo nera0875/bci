@@ -10,10 +10,7 @@ import { MemoryActionButtons } from './MemoryActionButtons'
 // import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
 import { checkFolderRules, loadUserFolderRules } from '@/lib/memory/folderRules'
 import { ConversationManager } from '@/lib/services/conversation'
-import { getMemoryBridge } from '@/lib/services/memoryBridge'
-import { getMemoryServiceV2 } from '@/lib/services/memoryServiceV2'
-// import { getMemoryServiceV3 } from '@/lib/services/memoryServiceV3' // Disabled - CORS issues
-import { useMem0Integration } from '@/lib/hooks/useMem0Integration'
+// Memory services removed - Using Supabase native system only
 import '@/app/chat.css'
 
 type ChatMessage = Database['public']['Tables']['chat_messages']['Row']
@@ -121,8 +118,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const conversationManagerRef = useRef<ConversationManager | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(propConversationId || null)
 
-  // Mem0 Integration
-  const { processChatMessage } = useMem0Integration(projectId)
+  // Supabase Memory Integration (original system) - Pure Supabase
 
   // Update conversation when prop changes OR when internal conversationId changes
   useEffect(() => {
@@ -410,22 +406,30 @@ export default function ChatStream({ projectId, conversationId: propConversation
       // Combine recent messages from ConversationManager with similar messages
       const conversationHistory = [...convContext.recentMessages, ...convContext.similarMessages]
 
-      const response = await fetch('/api/claude/stream', {
+      // Prepare messages in the format expected by our new endpoint
+      const messages = [
+        ...conversationHistory.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
+        {
+          role: 'user',
+          content: userMessage
+        }
+      ]
+
+      // Use the new chat/stream endpoint with Mem0 integration
+      const response = await fetch('/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: userMessage,
-          projectId,
-          conversationId: currentConvId,
-          conversationHistory,
-          context: {
-            memory: memoryContext,
-            similar: similarContent,
-            rules: rulesContext,
-            goal: projectGoal
-          }
+          messages,                    // Full conversation history
+          projectId,                   // Project ID for Mem0
+          conversationId: currentConvId, // Conversation ID for tracking
+          useMemoryContext: true,      // Enable Mem0 memory injection
+          saveMemory: true             // Auto-save responses to Mem0
         })
       })
 

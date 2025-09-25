@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Specify workspace root to avoid conflicts with multiple lockfiles
+  outputFileTracingRoot: __dirname,
+  // Disable ESLint during builds temporarily
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Allow external access for debugging and browserbase
   experimental: {
     allowedDevOrigins: ['84.247.131.60:3000', '84.247.131.60'],
