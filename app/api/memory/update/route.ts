@@ -9,11 +9,11 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, operation, data } = body
+    const { action, projectId, nodeId, data } = body
 
-    switch (operation) {
+    switch (action) {
       case 'create':
-        const { error: createError } = await supabase
+        const { data: newNode, error: createError } = await supabase
           .from('memory_nodes')
           .insert({
             project_id: projectId,
@@ -23,33 +23,41 @@ export async function POST(request: NextRequest) {
             content: data.content || null,
             icon: data.icon || '📄',
             color: data.color || '#6E6E80',
-            metadata: data.metadata || {}
+            metadata: data.metadata || {},
+            position: 0
           })
+          .select()
+          .single()
 
         if (createError) throw createError
-        break
+        return NextResponse.json({ success: true, node: newNode })
 
       case 'update':
+        const updateData: any = {
+          updated_at: new Date().toISOString()
+        }
+        
+        // Merger les données à mettre à jour
+        Object.keys(data).forEach(key => {
+          updateData[key] = data[key]
+        })
+
         const { error: updateError } = await supabase
           .from('memory_nodes')
-          .update({
-            content: data.content,
-            metadata: data.metadata,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', data.id)
+          .update(updateData)
+          .eq('id', nodeId)
 
         if (updateError) throw updateError
-        break
+        return NextResponse.json({ success: true })
 
       case 'delete':
         const { error: deleteError } = await supabase
           .from('memory_nodes')
           .delete()
-          .eq('id', data.id)
+          .eq('id', nodeId)
 
         if (deleteError) throw deleteError
-        break
+        return NextResponse.json({ success: true })
 
       case 'search':
         const { data: nodes, error: searchError } = await supabase
@@ -59,15 +67,15 @@ export async function POST(request: NextRequest) {
           .ilike('name', `%${data.query}%`)
 
         if (searchError) throw searchError
-        return NextResponse.json({ nodes })
+        return NextResponse.json({ success: true, nodes })
 
       default:
-        throw new Error('Invalid operation')
+        throw new Error('Invalid action')
     }
-
-    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Memory update error:', error)
-    return NextResponse.json({ error: 'Failed to update memory' }, { status: 500 })
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'Failed to update memory' 
+    }, { status: 500 })
   }
 }

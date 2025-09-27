@@ -44,12 +44,12 @@ export interface Database {
           project_id: string
           type: 'folder' | 'document'
           name: string
-          content: Json
+          content: Json | null
           embedding: number[] | null
-          color: string
-          icon: string
+          color: string | null
+          icon: string | null
           parent_id: string | null
-          metadata: Json
+          metadata: Json | null
           position: number
           created_at: string
           updated_at: string
@@ -59,12 +59,12 @@ export interface Database {
           project_id: string
           type: 'folder' | 'document'
           name: string
-          content?: Json
+          content?: Json | null
           embedding?: number[] | null
-          color?: string
-          icon?: string
+          color?: string | null
+          icon?: string | null
           parent_id?: string | null
-          metadata?: Json
+          metadata?: Json | null
           position?: number
           created_at?: string
           updated_at?: string
@@ -74,12 +74,12 @@ export interface Database {
           project_id?: string
           type?: 'folder' | 'document'
           name?: string
-          content?: Json
+          content?: Json | null
           embedding?: number[] | null
-          color?: string
-          icon?: string
+          color?: string | null
+          icon?: string | null
           parent_id?: string | null
-          metadata?: Json
+          metadata?: Json | null
           position?: number
           created_at?: string
           updated_at?: string
@@ -89,28 +89,86 @@ export interface Database {
         Row: {
           id: string
           project_id: string
+          conversation_id: string | null
           role: 'user' | 'assistant' | 'system'
           content: string
-          streaming: boolean
-          metadata: Json
+          streaming: boolean | null
+          metadata: Json | null
           created_at: string
         }
         Insert: {
           id?: string
           project_id: string
+          conversation_id?: string | null
           role: 'user' | 'assistant' | 'system'
           content: string
-          streaming?: boolean
-          metadata?: Json
+          streaming?: boolean | null
+          metadata?: Json | null
           created_at?: string
         }
         Update: {
           id?: string
           project_id?: string
+          conversation_id?: string | null
           role?: 'user' | 'assistant' | 'system'
           content?: string
-          streaming?: boolean
-          metadata?: Json
+          streaming?: boolean | null
+          metadata?: Json | null
+          created_at?: string
+        }
+      }
+      conversations: {
+        Row: {
+          id: string
+          project_id: string
+          title: string
+          is_active: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          title: string
+          is_active?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          title?: string
+          is_active?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      message_cache: {
+        Row: {
+          id: string
+          content_hash: string
+          response: string
+          usage_count: number
+          last_used: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          content_hash: string
+          response: string
+          usage_count?: number
+          last_used?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          content_hash?: string
+          response?: string
+          usage_count?: number
+          last_used?: string
           created_at?: string
         }
       }
@@ -122,7 +180,7 @@ export interface Database {
           description: string | null
           trigger: string
           action: string
-          config: Json
+          config: Json | null
           enabled: boolean
           priority: number
           created_at: string
@@ -135,7 +193,7 @@ export interface Database {
           description?: string | null
           trigger: string
           action: string
-          config?: Json
+          config?: Json | null
           enabled?: boolean
           priority?: number
           created_at?: string
@@ -148,7 +206,7 @@ export interface Database {
           description?: string | null
           trigger?: string
           action?: string
-          config?: Json
+          config?: Json | null
           enabled?: boolean
           priority?: number
           created_at?: string
@@ -243,7 +301,7 @@ export interface Database {
           success_rate: number
           usage_count: number
           last_success: string | null
-          mutations: Json
+          mutations: Json | null
           created_at: string
           updated_at: string
         }
@@ -255,7 +313,7 @@ export interface Database {
           success_rate?: number
           usage_count?: number
           last_success?: string | null
-          mutations?: Json
+          mutations?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -267,7 +325,51 @@ export interface Database {
           success_rate?: number
           usage_count?: number
           last_success?: string | null
-          mutations?: Json
+          mutations?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      folder_rules: {
+        Row: {
+          id: string
+          project_id: string
+          folder_id: string
+          rule_name: string
+          rule_description: string | null
+          rule_type: 'behavior' | 'validation' | 'formatting' | 'security'
+          rule_content: string
+          is_active: boolean
+          priority: number
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          folder_id: string
+          rule_name: string
+          rule_description?: string | null
+          rule_type?: 'behavior' | 'validation' | 'formatting' | 'security'
+          rule_content: string
+          is_active?: boolean
+          priority?: number
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          folder_id?: string
+          rule_name?: string
+          rule_description?: string | null
+          rule_type?: 'behavior' | 'validation' | 'formatting' | 'security'
+          rule_content?: string
+          is_active?: boolean
+          priority?: number
+          metadata?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -279,6 +381,19 @@ export interface Database {
           project_uuid: string
           query_embedding: number[]
           match_count?: number
+        }
+        Returns: {
+          id: string
+          name: string
+          content: Json
+          similarity: number
+        }[]
+      }
+      search_similar_nodes: {
+        Args: {
+          query_embedding: number[]
+          project_id: string
+          match_limit?: number
         }
         Returns: {
           id: string

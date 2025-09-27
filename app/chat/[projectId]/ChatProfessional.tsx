@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Send, Database, Settings, ArrowLeft, ListChecks
+  Send, Database, Settings, ArrowLeft, ListChecks, DollarSign, Zap
 } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 
@@ -13,12 +13,15 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 import { isValidUUID } from '@/lib/utils/uuid'
-import MemorySidebar from '@/components/memory/MemorySidebar'
+import MemorySidebarOptimized from '@/components/memory/MemorySidebarOptimized'
 import ChatStream from '@/components/chat/ChatStream'
-import RulesTable from '@/components/rules/RulesTable'
+import RulesTableProfessional from '@/components/rules/RulesTableProfessional'
 import GoalBar from '@/components/goal/GoalBar'
 import ConversationManagerUI from '@/components/chat/ConversationManager'
+import ResizablePanel from '@/components/ui/ResizablePanel'
 import { motion, AnimatePresence } from 'framer-motion'
+import { UnifiedBoard } from '@/components/unified/UnifiedBoard'
+import { CostsDashboard } from '@/components/costs/CostsDashboard'
 
 type Project = {
   id: string
@@ -40,6 +43,11 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
   const [showMemory, setShowMemory] = useState(true) // Memory Bank (left sidebar)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
+  
+  // Nouveaux états pour les dashboards
+  const [showUnifiedBoard, setShowUnifiedBoard] = useState(false)
+  const [showCostsDashboard, setShowCostsDashboard] = useState(false)
+  const [unifiedBoardTab, setUnifiedBoardTab] = useState<'memory' | 'rules' | 'optimization'>('memory')
 
   // Load project
   useEffect(() => {
@@ -149,27 +157,52 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
   if (!project) return null
 
   return (
-    <div className="h-screen bg-white flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#FFFFFF] flex flex-col overflow-hidden">
       {/* Header - Clean & Minimal */}
-      <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-6">
+      <header className="h-16 border-b border-[#E5E5E7] bg-[#FFFFFF] flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
           {/* Back to Projects */}
           <button
             onClick={() => router.push('/projects')}
-            className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2.5 hover:bg-[#F7F7F8] rounded-lg transition-colors"
           >
             <ArrowLeft className="w-6 h-6 text-gray-700" />
           </button>
 
           {/* Project Info */}
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">{project.name}</h1>
-            <p className="text-sm text-gray-500">AI Pentesting Session</p>
+            <h1 className="text-lg font-semibold text-[#202123]">{project.name}</h1>
+            <p className="text-sm text-[#6E6E80]">AI Pentesting Session</p>
           </div>
         </div>
 
         {/* Right Side Actions */}
         <div className="flex items-center gap-3">
+          {/* Coûts Dashboard */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowCostsDashboard(true)}
+            className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors bg-[#F7F7F8] text-[#202123] hover:bg-[#E5E5E7]"
+          >
+            <DollarSign className="w-4 h-4" />
+            Coûts
+          </motion.button>
+
+          {/* Board Unifié - Optimisation */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              setUnifiedBoardTab('optimization')
+              setShowUnifiedBoard(true)
+            }}
+            className="px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors bg-[#F7F7F8] text-[#202123] hover:bg-[#E5E5E7]"
+          >
+            <Zap className="w-4 h-4" />
+            Optimisation
+          </motion.button>
+
           {/* Conversation Manager */}
           <ConversationManagerUI
             projectId={project.id}
@@ -182,11 +215,18 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setShowMemory(!showMemory)}
+            onClick={() => {
+              if (showMemory) {
+                setShowMemory(false)
+              } else {
+                setUnifiedBoardTab('memory')
+                setShowUnifiedBoard(true)
+              }
+            }}
             className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
               showMemory
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-[#202123] text-[#FFFFFF]'
+                : 'bg-[#F7F7F8] text-[#202123] hover:bg-[#E5E5E7]'
             }`}
           >
             <Database className="w-4 h-4" />
@@ -197,11 +237,18 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setShowRules(!showRules)}
+            onClick={() => {
+              if (showRules) {
+                setShowRules(false)
+              } else {
+                setUnifiedBoardTab('rules')
+                setShowUnifiedBoard(true)
+              }
+            }}
             className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
               showRules
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-[#202123] text-[#FFFFFF]'
+                : 'bg-[#F7F7F8] text-[#202123] hover:bg-[#E5E5E7]'
             }`}
           >
             <ListChecks className="w-4 h-4" />
@@ -220,33 +267,40 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Memory Sidebar (Original System) */}
+        {/* Memory Sidebar - Resizable */}
         <AnimatePresence>
           {showMemory && (
             <motion.div
-              initial={{ x: -350, opacity: 0 }}
+              initial={{ x: -450, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -350, opacity: 0 }}
+              exit={{ x: -450, opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="w-[350px] border-r border-gray-200 bg-white"
             >
-              <MemorySidebar
-                projectId={project.id}
-              />
+              <ResizablePanel
+                defaultWidth={450}
+                minWidth={300}
+                maxWidth={800}
+                side="left"
+                className="border-r border-[#E5E5E7] bg-white"
+              >
+                <MemorySidebarOptimized
+                  projectId={project.id}
+                />
+              </ResizablePanel>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col bg-white">
+        <div className="flex-1 flex flex-col bg-[#FFFFFF]">
           {/* Goal Bar */}
-          <div className="border-b border-gray-200 bg-gray-50">
+          <div className="border-b border-[#E5E5E7] bg-[#F7F7F8]">
             <GoalBar projectId={project.id} initialGoal={project.goal || ''} />
           </div>
 
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto bg-white">
-            <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="flex-1 overflow-y-auto bg-[#FFFFFF]">
+            <div className="max-w-4xl mx-auto px-4 py-6">
               <ChatStream
                 key={chatKey}
                 projectId={project.id}
@@ -257,8 +311,8 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
           </div>
 
           {/* Message Input */}
-          <div className="border-t border-gray-200 bg-white p-6">
-            <div className="max-w-5xl mx-auto">
+          <div className="border-t border-[#E5E5E7] bg-[#FFFFFF] p-4">
+            <div className="max-w-4xl mx-auto">
               <div className="flex gap-4">
                 <div className="flex-1 relative">
                   <input
@@ -267,7 +321,7 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                     placeholder="Tapez votre message... (L'IA peut gérer sa mémoire automatiquement)"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-4 py-3 border border-[#E5E5E7] rounded-xl focus:outline-none focus:border-[#202123] focus:ring-1 focus:ring-[#202123]/20 bg-[#FFFFFF] text-[#202123] placeholder-[#6E6E80]"
                   />
                 </div>
                 <motion.button
@@ -275,7 +329,7 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
                   whileTap={{ scale: 0.95 }}
                   onClick={handleSendMessage}
                   disabled={!message.trim()}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl font-medium flex items-center gap-2 transition-colors"
+                  className="px-6 py-3 bg-[#202123] hover:bg-[#202123]/90 disabled:bg-[#E5E5E7] disabled:text-[#6E6E80] text-[#FFFFFF] rounded-xl font-medium flex items-center gap-2 transition-colors"
                 >
                   <Send className="w-4 h-4" />
                   Envoyer
@@ -285,29 +339,46 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
           </div>
         </div>
 
-        {/* Rules Sidebar */}
+        {/* Rules Sidebar - Resizable */}
         <AnimatePresence>
           {showRules && (
             <motion.div
-              initial={{ x: 350, opacity: 0 }}
+              initial={{ x: 400, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 350, opacity: 0 }}
+              exit={{ x: 400, opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="w-[400px] border-l border-gray-200 bg-white"
             >
-              <div className="h-full flex flex-col">
-                <div className="p-4 border-b bg-gray-50">
-                  <h3 className="font-semibold text-gray-900">Rules & Instructions</h3>
-                  <p className="text-sm text-gray-600">Configure AI behavior</p>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                  <RulesTable projectId={project.id} />
-                </div>
-              </div>
+              <ResizablePanel
+                defaultWidth={400}
+                minWidth={300}
+                maxWidth={800}
+                side="right"
+                className="border-l border-[#E5E5E7] bg-white"
+              >
+                <RulesTableProfessional projectId={project.id} />
+              </ResizablePanel>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Dashboards Modaux */}
+      
+      {/* Board Unifié */}
+      <UnifiedBoard
+        projectId={project.id}
+        isOpen={showUnifiedBoard}
+        onClose={() => setShowUnifiedBoard(false)}
+        initialTab={unifiedBoardTab}
+      />
+
+      {/* Dashboard Coûts */}
+      <CostsDashboard
+        projectId={project.id}
+        conversationId={currentConversationId || undefined}
+        isOpen={showCostsDashboard}
+        onClose={() => setShowCostsDashboard(false)}
+      />
     </div>
   )
 }

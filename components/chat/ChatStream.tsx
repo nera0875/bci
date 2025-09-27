@@ -7,9 +7,10 @@ import { Database } from '@/lib/supabase/database.types'
 import ReactMarkdown from 'react-markdown'
 import StreamingText from './StreamingText'
 import { MemoryActionButtons } from './MemoryActionButtons'
+import MemoryActionDisplay from './MemoryActionDisplay'
 // import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
-import { checkFolderRules, loadUserFolderRules } from '@/lib/memory/folderRules'
 import { ConversationManager } from '@/lib/services/conversation'
+import { formatRulesForAI } from '@/lib/rules/simpleRules'
 // Memory services removed - Using Supabase native system only
 import '@/app/chat.css'
 
@@ -70,7 +71,38 @@ const MessageComponent = React.memo(({
     >
       {message.role === 'assistant' ? (
         <div className="prose prose-sm max-w-none">
-          <ReactMarkdown>
+          <ReactMarkdown
+            components={{
+              // Custom renderer for MEMORY_ACTION blocks
+              code: ({ node, inline, className, children, ...props }) => {
+                const match = /language-(\w+)/.exec(className || '')
+                const content = String(children).replace(/\n$/, '')
+                
+                // Check if this is a MEMORY_ACTION block
+                if (content.includes('MEMORY_ACTION')) {
+                  try {
+                    const actionMatch = content.match(/<!--MEMORY_ACTION\s*([\s\S]*?)-->/)
+                    if (actionMatch) {
+                      const action = JSON.parse(actionMatch[1])
+                      return <MemoryActionDisplay action={action} />
+                    }
+                  } catch (e) {
+                    // Fallback to regular code block
+                  }
+                }
+                
+                return inline ? (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                ) : (
+                  <pre className={className} {...props}>
+                    <code>{children}</code>
+                  </pre>
+                )
+              }
+            }}
+          >
             {message.content}
           </ReactMarkdown>
         </div>
@@ -395,10 +427,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
         return
       }
 
-      // Get additional context
+      // Get additional context - RÈGLES EN PRIORITÉ
+      const rulesContext = await getRulesContext(userMessage)
       const memoryContext = await getMemoryContext(userMessage)
       const similarContent = await searchSimilarContent(userMessage)
-      const rulesContext = await getRulesContext()
       const projectGoal = await getProjectGoal()
 
       console.log('Context prepared, calling Claude API...')
@@ -407,6 +439,13 @@ export default function ChatStream({ projectId, conversationId: propConversation
       const conversationHistory = [...convContext.recentMessages, ...convContext.similarMessages]
 
       // Prepare messages in the format expected by our new endpoint
+      let finalUserMessage = userMessage
+      
+      // Add rules context to the user message if rules exist
+      if (rulesContext) {
+        finalUserMessage = userMessage + '\n\n' + rulesContext
+      }
+
       const messages = [
         ...conversationHistory.map(msg => ({
           role: msg.role,
@@ -414,7 +453,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
         })),
         {
           role: 'user',
-          content: userMessage
+          content: finalUserMessage
         }
       ]
 
@@ -524,15 +563,17 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
         // Add the new message directly without reloading all
         if (newMessage) {
-          // 🚀 NOUVEAU: Envoyer automatiquement à Mem0 V4 avec compartments
+          // Process MEMORY_ACTION commands from Claude's response
           try {
-            // Process through Mem0 compartments
-            await processChatMessage(userMessage, 'user')
-            await processChatMessage(fullContent, 'assistant')
-
-            console.log('✅ Messages processed through Mem0 compartments')
+            const actions = await parseMemoryActions(fullContent)
+            if (actions.length > 0) {
+              console.log('✅ Processing', actions.length, 'memory actions')
+              for (const action of actions) {
+                await handleClaudeAction(action)
+              }
+            }
           } catch (error) {
-            console.log('⚠️ Mem0 V4 processing skipped:', error)
+            console.log('⚠️ Memory action processing skipped:', error)
           }
 
           // V3 disabled - causes CORS errors
@@ -596,42 +637,19 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }
 
   const getMemoryContext = async (userMessage?: string) => {
-    // V3 disabled - use V4 with server-side routes instead
-    // V3 causes CORS errors when calling Mem0 API directly from browser
     try {
-      // Fallback to bridge if V3 fails
-      const bridge = getMemoryBridge(projectId)
-      await bridge.initialize()
+      // Use direct Supabase query for memory context
+      const { data } = await supabase
+        .from('memory_nodes')
+        .select('name, type, content')
+        .eq('project_id', projectId)
+        .limit(10)
 
-      if (userMessage) {
-        const hybridResults = await bridge.hybridSearch(userMessage, {
-          useVectorSearch: true,
-          limit: 10,
-          includeHierarchy: true
-        })
-
-        if (hybridResults.merged && hybridResults.merged.length > 0) {
-          return hybridResults.merged.map((item: any) => ({
-            name: item.name || item.memory || 'Unknown',
-            type: item.type || item.source || 'memory',
-            content: item.content || item.data || '',
-            relevance: item.relevance || 0.5
-          }))
-        }
-      }
+      return data || []
     } catch (error) {
-      console.warn('Memory bridge error:', error)
-      // Continue to fallback
+      console.warn('Memory context error:', error)
+      return []
     }
-
-    // Fallback to simple Supabase query
-    const { data } = await supabase
-      .from('memory_nodes')
-      .select('name, type, content')
-      .eq('project_id', projectId)
-      .limit(10)
-
-    return data || []
   }
 
   const getProjectGoal = async () => {
@@ -704,16 +722,77 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
-  // Get active rules
-  const getRulesContext = async () => {
-    const { data } = await supabase
-      .from('rules')
-      .select('name, trigger, action, enabled')
-      .eq('project_id', projectId)
-      .eq('enabled', true)
-      .order('priority', { ascending: false })
+  // Détecter le dossier cible dans le message utilisateur
+  const detectTargetFolder = (message: string): string => {
+    const lowerMessage = message.toLowerCase()
+    
+    // Détection par mots-clés
+    if (lowerMessage.includes('requête') || lowerMessage.includes('post') || lowerMessage.includes('get')) {
+      return 'requetes'
+    }
+    if (lowerMessage.includes('faille') || lowerMessage.includes('vulnérabilité') || lowerMessage.includes('exploit')) {
+      return 'failles'
+    }
+    if (lowerMessage.includes('test') || lowerMessage.includes('payload')) {
+      return 'tests'
+    }
+    if (lowerMessage.includes('analyse') || lowerMessage.includes('rapport')) {
+      return 'analysis'
+    }
+    if (lowerMessage.includes('plan') || lowerMessage.includes('stratégie')) {
+      return 'plan'
+    }
+    
+    return '*' // Global par défaut
+  }
 
-    return data || []
+  // Get active rules and format them for AI with folder detection
+  const getRulesContext = async (userMessage: string) => {
+    try {
+      // Détecter le dossier cible
+      const targetFolder = detectTargetFolder(userMessage)
+      console.log('🎯 Dossier cible détecté:', targetFolder)
+
+      // Récupérer les règles depuis la table 'rules'
+      const { data } = await supabase
+        .from('rules')
+        .select('*')
+        .eq('project_id', projectId)
+        .eq('enabled', true)
+        .order('priority', { ascending: true })
+
+      if (!data || data.length === 0) {
+        return ''
+      }
+
+      // Filtrer les règles pertinentes (dossier spécifique + globales)
+      const relevantRules = data.filter(rule => 
+        rule.trigger === '*' || 
+        rule.trigger === targetFolder
+      )
+
+      if (relevantRules.length === 0) {
+        return ''
+      }
+
+      // Convertir vers format SimpleRule pour formatRulesForAI
+      const simpleRules = relevantRules.map(rule => ({
+        id: rule.id,
+        project_id: rule.project_id,
+        name: rule.name,
+        description: rule.description,
+        trigger: rule.trigger,
+        action: rule.action,
+        enabled: rule.enabled,
+        priority: rule.priority,
+        config: rule.config
+      }))
+
+      return formatRulesForAI(targetFolder, simpleRules)
+    } catch (error) {
+      console.error('Erreur chargement règles:', error)
+      return ''
+    }
   }
 
   // Check if user explicitly asks for memory modifications
@@ -845,9 +924,9 @@ export default function ChatStream({ projectId, conversationId: propConversation
     return cleanedText.trim() || text
   }
 
-  // Create memory node (Using Mem0 as primary)
+  // Create memory node (Using Supabase only)
   const createMemoryNode = async (data: any) => {
-    const { type, name, content, color = '#6E6E80', parent_id = null, parent_name, path } = data
+    const { type, name, content, color = '#6E6E80', parent_id = null, parent_name } = data
 
     if (!name) {
       console.error('❌ Cannot create node without name')
@@ -855,46 +934,29 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
 
     try {
-      // Determine type from name if not specified
-      let nodeType = type
-      if (!type && name) {
-        nodeType = name.endsWith('.md') || name.includes('.') ? 'document' : 'folder'
-      }
-
-      // Build parent path for Mem0
-      let parentPath = '/'
-
-      if (parent_name) {
-        // If parent_name is provided, use it as path
-        parentPath = parent_name.startsWith('/') ? parent_name : `/${parent_name}`
-      } else if (path) {
-        // Use provided path
-        parentPath = path.startsWith('/') ? path : `/${path}`
-      }
-
-      // Use MemoryServiceV3 with full Mem0 capabilities
-      const memoryService = await getMemoryServiceV3(projectId)
-
-      const result = await memoryService.createNode({
-        name,
-        type: nodeType || 'document',
-        content: nodeType === 'document' ? content : undefined,
-        parent: parentPath,
-        metadata: {
-          created_by: 'assistant',
-          created_at: new Date().toISOString(),
-          color,
-          icon: nodeType === 'folder' ? '📁' : '📄'
-        }
-      })
-
-      console.log('✅ Created in Mem0:', nodeType || 'document', name)
-
-      // Also create in Supabase for UI only (minimal sync)
+      // Handle path-based names (like "salade/document")
+      let actualName = name
       let actualParentId = parent_id
+      
+      if (name.includes('/')) {
+        const parts = name.split('/')
+        const parentFolderName = parts[0]
+        actualName = parts[parts.length - 1]
+        
+        // Find parent folder by name
+        const { data: parentNode } = await supabase
+          .from('memory_nodes')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('name', parentFolderName)
+          .eq('type', 'folder')
+          .single()
 
-      // Find parent in Supabase if needed
-      if (!parent_id && parent_name) {
+        if (parentNode) {
+          actualParentId = parentNode.id
+        }
+      } else if (!parent_id && parent_name) {
+        // Find parent by name
         const { data: parentNode } = await supabase
           .from('memory_nodes')
           .select('id')
@@ -908,28 +970,37 @@ export default function ChatStream({ projectId, conversationId: propConversation
         }
       }
 
-      // Create in Supabase for UI
+      // Determine type from name if not specified
+      let nodeType = type
+      if (!type && actualName) {
+        nodeType = actualName.endsWith('.md') || actualName.includes('.') ? 'document' : 'folder'
+      }
+
+      // Create in Supabase
       const icon = nodeType === 'folder' ? '📁' : '📄'
-      const { data: created } = await supabase
+      const { data: created, error } = await supabase
         .from('memory_nodes')
         .insert({
           project_id: projectId,
           type: nodeType || 'document',
-          name,
-        content: content || (nodeType === 'document' ? `# ${name}\n\nContent here...` : null),
-        icon,
-        color,
-        parent_id: actualParentId,
-        position: 0
-      })
+          name: actualName,
+          content: content || (nodeType === 'document' ? `# ${actualName}\n\nContenu ici...` : null),
+          icon,
+          color,
+          parent_id: actualParentId,
+          position: 0
+        })
         .select()
 
-      if (created && created[0]) {
-        console.log('✅ Also created in Supabase for UI:', name)
+      if (!error && created && created[0]) {
+        console.log('✅ Created in Supabase:', nodeType || 'document', actualName, 'parent:', actualParentId)
+        showToast(`${nodeType === 'folder' ? 'Dossier' : 'Document'} "${actualName}" créé avec succès`, 'success')
+        return created[0]
+      } else {
+        console.error('❌ Error creating in Supabase:', error)
+        showToast(`Erreur lors de la création: ${error?.message}`, 'error')
+        return null
       }
-
-      showToast(`${nodeType === 'folder' ? 'Dossier' : 'Document'} "${name}" créé avec succès`, 'success')
-      return result
 
     } catch (error: any) {
       console.error('❌ Error creating node:', error)
@@ -938,9 +1009,9 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
-  // Update memory node (Using Mem0 as primary)
+  // Update memory node (Using Supabase only)
   const updateMemoryNode = async (data: any) => {
-    const { id, name, content, append = false, set_content, new_name, path } = data
+    const { id, name, content, append = false, new_name } = data
 
     console.log('📝 Updating memory node:', { id, name, content: content?.substring(0, 50) })
 
@@ -950,90 +1021,60 @@ export default function ChatStream({ projectId, conversationId: propConversation
       return
     }
 
-    // If we have a name but no ID, find the node by name
-    let nodeId = id
-    let existingNode: any = null
+    try {
+      // Find the node by name if no ID provided
+      let nodeId = id
+      if (!id && name) {
+        const { data: nodes, error: findError } = await supabase
+          .from('memory_nodes')
+          .select('id, content')
+          .eq('project_id', projectId)
+          .eq('name', name)
+          .single()
 
-    if (!id && name) {
-      const { data: nodes, error: findError } = await supabase
-        .from('memory_nodes')
-        .select('id, content')
-        .eq('project_id', projectId)
-        .eq('name', name)
-        .single()
-
-      if (findError) {
-        console.error('❌ Node not found:', name, findError.message)
-        // Create the node if it doesn't exist
-        console.log('📝 Creating node as it doesn\'t exist:', name)
-        await createMemoryNode({ name, content, type: 'document' })
-        showToast(`Document "${name}" créé avec succès`, 'success')
-        return
-      }
-
-      if (nodes) {
-        nodeId = nodes.id
-        existingNode = nodes
-
-        // If append mode, add to existing content
-        if (append && nodes.content) {
-          const existingContent = typeof nodes.content === 'string'
-            ? nodes.content
-            : JSON.stringify(nodes.content)
-          const newContent = existingContent + '\n\n' + content
-
-          await supabase
-            .from('memory_nodes')
-            .update({
-              content: newContent,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', nodeId)
-
-          console.log('Appended to memory node:', name)
+        if (findError) {
+          console.error('❌ Node not found:', name)
+          showToast(`Document "${name}" non trouvé`, 'error')
           return
         }
-      }
-    }
 
-    // Update using Mem0 as primary
-    try {
-      const memoryService = await getMemoryServiceV2(projectId)
-
-      // Build the path for Mem0
-      const nodePath = path || (name ? `/${name}` : null)
-
-      if (!nodePath) {
-        // If we have nodeId but no path, try to find it in Supabase for backward compatibility
-        if (nodeId) {
-          const { data: node } = await supabase
-            .from('memory_nodes')
-            .select('name')
-            .eq('id', nodeId)
-            .single()
-
-          if (node) {
-            const finalPath = `/${node.name}`
-            await updateNodeInMem0(memoryService, finalPath, content, set_content, append, new_name, existingNode)
-            return
+        if (nodes) {
+          nodeId = nodes.id
+          
+          // If append mode, add to existing content
+          if (append && nodes.content) {
+            const existingContent = typeof nodes.content === 'string'
+              ? nodes.content
+              : JSON.stringify(nodes.content)
+            content = existingContent + '\n\n' + content
           }
         }
-        console.error('❌ Cannot update without path or name')
-        showToast('Erreur: chemin ou nom requis', 'error')
-        return
       }
 
-      await updateNodeInMem0(memoryService, nodePath, content, set_content, append, new_name, existingNode)
+      // Update in Supabase
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      }
+      
+      if (content !== undefined) updateData.content = content
+      if (new_name) updateData.name = new_name
+
+      const { error } = await supabase
+        .from('memory_nodes')
+        .update(updateData)
+        .eq('id', nodeId)
+
+      if (!error) {
+        console.log('✅ Updated in Supabase:', name || nodeId)
+        showToast(`Document "${new_name || name}" mis à jour avec succès`, 'success')
+      } else {
+        console.error('❌ Error updating in Supabase:', error)
+        showToast(`Erreur lors de la mise à jour: ${error.message}`, 'error')
+      }
 
     } catch (error: any) {
-      console.error('❌ Error updating in Mem0:', error)
+      console.error('❌ Error updating node:', error)
       showToast(`Erreur lors de la mise à jour: ${error.message}`, 'error')
-
-      // Fallback to creating if doesn't exist
-      if (error.message?.includes('not found')) {
-        console.log('⚠️ Node not found, creating new one:', name)
-        await createMemoryNode({ name, content: content || set_content, type: 'document', path })
-      }
     }
   }
 
@@ -1093,68 +1134,51 @@ export default function ChatStream({ projectId, conversationId: propConversation
     showToast(`Document "${new_name || nodePath.split('/').pop() || 'mémoire'}" mis à jour avec succès`, 'success')
   }
 
-  // Delete memory node (Using Mem0 as primary)
+  // Delete memory node (Using Supabase only)
   const deleteMemoryNode = async (data: any) => {
-    const { id, name, path } = data
+    const { id, name } = data
 
-    if (!name && !path && !id) {
-      console.error('❌ Cannot delete node without name, path or id')
+    if (!name && !id) {
+      console.error('❌ Cannot delete node without name or id')
       return
     }
 
     try {
-      const memoryService = await getMemoryServiceV2(projectId)
-
-      // Build the path for Mem0
-      let nodePath = path || (name ? `/${name}` : null)
-
-      // If we only have id, get the name from Supabase
-      if (!nodePath && id) {
-        const { data: node } = await supabase
-          .from('memory_nodes')
-          .select('name')
-          .eq('id', id)
-          .single()
-
-        if (node) {
-          nodePath = `/${node.name}`
-        }
-      }
-
-      if (!nodePath) {
-        console.error('❌ Cannot determine path for deletion')
-        return
-      }
-
-      // Mark as deleted in Mem0
-      await memoryService.deleteNode(nodePath)
-      console.log('✅ Marked as deleted in Mem0:', nodePath)
-
-      // Also delete from Supabase for UI
-      if (id) {
-        await supabase
-          .from('memory_nodes')
-          .delete()
-          .eq('id', id)
-      } else if (name) {
-        // Try to find and delete by name
-        const { data: node } = await supabase
+      // Find the node by name if no ID provided
+      let nodeId = id
+      if (!id && name) {
+        const { data: nodes, error: findError } = await supabase
           .from('memory_nodes')
           .select('id')
           .eq('project_id', projectId)
           .eq('name', name)
           .single()
 
-        if (node) {
-          await supabase
-            .from('memory_nodes')
-            .delete()
-            .eq('id', node.id)
+        if (findError) {
+          console.error('❌ Node not found:', name)
+          showToast(`Élément "${name}" non trouvé`, 'error')
+          return
+        }
+
+        if (nodes) {
+          nodeId = nodes.id
         }
       }
 
-      console.log('✅ Deleted from both Mem0 and Supabase')
-      showToast(`Document "${name || nodePath.split('/').pop() || 'nœud'}" supprimé`, 'success')
+      // Delete from Supabase
+      const { error } = await supabase
+        .from('memory_nodes')
+        .delete()
+        .eq('id', nodeId)
+
+      if (!error) {
+        console.log('✅ Deleted from Supabase:', name || nodeId)
+        showToast(`Élément "${name}" supprimé avec succès`, 'success')
+      } else {
+        console.error('❌ Error deleting from Supabase:', error)
+        showToast(`Erreur lors de la suppression: ${error.message}`, 'error')
+      }
+
     } catch (error: any) {
       console.error('❌ Error deleting node:', error)
       showToast(`Erreur lors de la suppression: ${error.message}`, 'error')

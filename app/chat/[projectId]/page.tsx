@@ -1,5 +1,5 @@
-import ChatProfessional from './ChatProfessional'
+import ChatProfessionalNew from './ChatProfessionalNew'
 
 export default function ChatInterface({ params }: { params: Promise<{ projectId: string }> }) {
-  return <ChatProfessional params={params} />
+  return <ChatProfessionalNew params={params} />
 }

@@ -433,22 +433,30 @@ export default function RulesTable({ projectId }: RulesTableProps) {
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-[#202123]" />
-            <h3 className="font-semibold text-[#202123]">Active Rules</h3>
+      <div className="p-4 border-b border-[#E5E5E7]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#202123] rounded-lg flex items-center justify-center">
+              <Shield className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-[#202123] text-sm">Règles par Dossier</h3>
+              <p className="text-xs text-[#6E6E80]">{rules.filter(r => r.enabled).length}/{rules.length} actives</p>
+            </div>
           </div>
           <button
             onClick={() => {
               setIsCreating(true)
               setEditForm({ name: '', trigger: '', action: '', description: '', folder: '*' })
             }}
-            className="p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            title="Add new rule"
+            className="p-2 bg-[#202123] hover:bg-[#202123]/90 text-white rounded-md transition-colors"
+            title="Nouvelle règle"
           >
-            <Plus className="w-4 h-4 text-white" />
+            <Plus className="w-4 h-4" />
           </button>
+        </div>
+        <div className="text-xs text-[#6E6E80] bg-[#F7F7F8] p-3 rounded-lg">
+          💡 <strong>Chaque règle est liée à un dossier spécifique.</strong> L'IA respectera automatiquement ces règles lors de la modification du contenu de chaque dossier.
         </div>
       </div>
 

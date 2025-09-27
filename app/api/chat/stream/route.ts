@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-// import { createMem0Integration } from '@/lib/services/mem0Integration' // REMOVED - Using Supabase only
 import { createClient } from '@supabase/supabase-js'
 
 // Initialize Supabase client
@@ -11,14 +10,12 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('API called')
+    
     const body = await request.json()
-    const {
-      messages,
-      projectId,
-      conversationId,
-      saveMemory = true,
-      useMemoryContext = true
-    } = body
+    console.log('Body parsed:', body)
+    
+    const { messages, projectId } = body
 
     if (!messages || !projectId) {
       return NextResponse.json(
@@ -27,35 +24,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get the latest user message
-    const userMessage = messages[messages.length - 1]?.content || ''
-
-    // Get API key from project or environment
-    let anthropicApiKey = process.env.ANTHROPIC_API_KEY
-
-    // Try to get from project API keys if available
-    const { data: projectData } = await supabase
-      .from('projects')
-      .select('api_keys')
-      .eq('id', projectId)
-      .single()
-
-    if (projectData?.api_keys?.claude) {
-      anthropicApiKey = projectData.api_keys.claude
-    }
-
-    if (!anthropicApiKey) {
-      // Try to get from secure key manager
-      const { data: keyData } = await supabase
-        .from('api_keys')
-        .select('claude_key')
-        .eq('user_id', 'anonymous')
-        .single()
-
-      if (keyData?.claude_key) {
-        anthropicApiKey = keyData.claude_key
-      }
-    }
+    // Get API key from environment
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY
+    console.log('API key exists:', !!anthropicApiKey)
 
     if (!anthropicApiKey) {
       return NextResponse.json(
@@ -64,36 +35,76 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Initialize Anthropic with the key
+    // Initialize Anthropic
     const anthropic = new Anthropic({
       apiKey: anthropicApiKey,
     })
 
-    // Basic system prompt (memory context handled by original ChatStream)
-    const systemPrompt = `You are an AI pentesting assistant. Be precise, technical, and actionable in your responses.
+    console.log('Anthropic initialized')
+
+    // Get memory context for Claude
+    const { data: memoryNodes } = await supabase
+      .from('memory_nodes')
+      .select('name, type, content, parent_id')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+
+    const memoryContext = memoryNodes ? 
+      `MÉMOIRE ACTUELLE:\n${memoryNodes.map(node => 
+        `- ${node.type === 'folder' ? '📁' : '📄'} ${node.name}${node.content ? ` (contenu: ${typeof node.content === 'string' ? node.content.substring(0, 100) : JSON.stringify(node.content).substring(0, 100)})` : ''}`
+      ).join('\n')}\n\n` : ''
+
+    // Enhanced system prompt with memory context
+    const systemPrompt = `Tu es un assistant IA en français. Réponds de manière concise et utile.
+
+${memoryContext}
 
 MEMORY SYSTEM:
-You have access to a hierarchical memory system with folders and documents.
-When users explicitly ask you to save, update, or delete something in memory, respond with a MEMORY_ACTION:
+Tu peux gérer la mémoire avec ces opérations:
 
+CRÉER:
 <!--MEMORY_ACTION
 {
-  "operation": "create|update|delete",
+  "operation": "create",
   "data": {
     "type": "folder|document",
-    "name": "Name",
-    "content": "...",
-    "parent_id": "uuid (optional)"
+    "name": "Nom ou chemin/Nom pour imbriquer",
+    "content": "contenu (optionnel)",
+    "parent_name": "nom_du_dossier_parent (optionnel)"
   }
 }
 -->
 
-Only use MEMORY_ACTION when explicitly requested by the user.`
+MODIFIER:
+<!--MEMORY_ACTION
+{
+  "operation": "update",
+  "data": {
+    "name": "nom_du_document",
+    "content": "nouveau contenu"
+  }
+}
+-->
+
+SUPPRIMER:
+<!--MEMORY_ACTION
+{
+  "operation": "delete",
+  "data": {
+    "name": "nom_à_supprimer"
+  }
+}
+-->
+
+Utilise MEMORY_ACTION quand explicitement demandé pour créer, modifier ou supprimer.
+IMPORTANT: Tu as accès à ta mémoire ci-dessus, utilise-la pour répondre aux questions sur ce que tu sais.`
+
+    console.log('Creating stream...')
 
     // Create the stream
     const stream = await anthropic.messages.create({
-      model: 'claude-3-opus-20240229',
-      max_tokens: 4000,
+      model: 'claude-opus-4-1-20250805',
+      max_tokens: 1000,
       temperature: 0.1,
       system: systemPrompt,
       messages: messages.map((msg: any) => ({
@@ -103,74 +114,51 @@ Only use MEMORY_ACTION when explicitly requested by the user.`
       stream: true,
     })
 
-    // Create a TransformStream to handle the streaming response
+    console.log('Stream created')
+
+    // Create a readable stream for the response
     const encoder = new TextEncoder()
-    const decoder = new TextDecoder()
 
-    let fullResponse = ''
-    let detectedCompartment = ''
-
-    const transformStream = new TransformStream({
-      async transform(chunk, controller) {
-        const text = decoder.decode(chunk)
-
-        // Parse Anthropic's SSE format
-        const lines = text.split('\n')
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-
-              if (data.type === 'content_block_delta') {
-                const content = data.delta?.text || ''
-                fullResponse += content
-
-                // Forward the content to the client
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`))
-              } else if (data.type === 'message_stop') {
-                // Memory creation now handled by original ChatStream system via MEMORY_ACTION commands
-                console.log(`[Chat] Response complete, memory handled by MEMORY_ACTION system`)
-
-                // Send completion signal
-                controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-              }
-            } catch (error) {
-              console.error('Error parsing SSE data:', error)
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          console.log('Starting stream processing...')
+          
+          for await (const chunk of stream) {
+            if (chunk.type === 'content_block_delta') {
+              const content = (chunk.delta as any).text || ''
+              
+              // Send content to client
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+                type: 'content', 
+                text: content 
+              })}\n\n`))
+            } else if (chunk.type === 'message_stop') {
+              // Send completion signal
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+                type: 'done' 
+              })}\n\n`))
+              controller.close()
+              console.log('Stream completed')
             }
           }
+        } catch (error) {
+          console.error('Streaming error:', error)
+          controller.error(error)
         }
       }
     })
 
-    // Save messages to database if conversation exists
-    if (conversationId) {
-      // Save user message
-      await supabase
-        .from('chat_messages')
-        .insert({
-          project_id: projectId,
-          conversation_id: conversationId,
-          role: 'user',
-          content: userMessage
-        })
+    console.log('Returning response...')
 
-      // We'll save the assistant message after streaming completes
-      // This is handled by the client
-    }
-
-    // Create the streaming response
-    const responseStream = new Response(
-      stream.toReadableStream().pipeThrough(transformStream),
-      {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      }
-    )
-
-    return responseStream
+    // Return the streaming response
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    })
   } catch (error: any) {
     console.error('Chat API error:', error)
     return NextResponse.json(
