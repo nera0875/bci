@@ -1,0 +1,25 @@
+# Règles Bug Bounty - Template
+
+Scope et autorisation dans Memory/Scope
+Format: Domaine, Sous-domaines, Autorisé, Restrictions, Contact
+
+Reconnaissance dans Memory/Recon
+Structure: Technique, Résultats, Outils utilisés, Informations collectées
+
+Vulnérabilités confirmées dans Memory/Confirmed
+Inclus: Type, Sévérité, Impact, Proof of concept, Remediation
+
+Tests en cours dans Memory/Testing
+Format: Cible, Méthode, Status, Résultat partiel, Prochaines étapes
+
+False positives dans Memory/False Positives
+Structure: Test initial, Résultat, Vérification, Conclusion, Apprentissage
+
+Rapports et communications dans Memory/Reports
+Inclus: Vulnérabilité, Rapport envoyé, Réponse, Status, Timeline
+
+Escalation et contournements dans Memory/Escalation
+Format: Vulnérabilité, Méthode escalation, Résultat, Impact
+
+Technologies identifiées dans Memory/Tech Stack
+Structure: Service, Version, Vulnérabilités connues, Tests applicables

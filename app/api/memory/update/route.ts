@@ -13,6 +13,22 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'create':
+        // Check for duplicate name in same parent
+        const { data: existingNode } = await supabase
+          .from('memory_nodes')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('name', data.name)
+          .eq('parent_id', data.parent_id || null)
+          .maybeSingle()
+
+        if (existingNode) {
+          return NextResponse.json({
+            error: 'Node with this name already exists in the parent folder',
+            status: 409
+          }, { status: 409 })
+        }
+
         const { data: newNode, error: createError } = await supabase
           .from('memory_nodes')
           .insert({
@@ -30,6 +46,7 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (createError) throw createError
+        console.log('Memory node created successfully:', newNode?.id)
         return NextResponse.json({ success: true, node: newNode })
 
       case 'update':
@@ -42,12 +59,32 @@ export async function POST(request: NextRequest) {
           updateData[key] = data[key]
         })
 
+        // If updating name, check for duplicates
+        if (updateData.name) {
+          const { data: existing } = await supabase
+            .from('memory_nodes')
+            .select('id')
+            .eq('project_id', projectId)
+            .eq('name', updateData.name)
+            .neq('id', nodeId)
+            .eq('parent_id', updateData.parent_id || null)
+            .maybeSingle()
+
+          if (existing) {
+            return NextResponse.json({
+              error: 'Another node with this name already exists',
+              status: 409
+            }, { status: 409 })
+          }
+        }
+
         const { error: updateError } = await supabase
           .from('memory_nodes')
           .update(updateData)
           .eq('id', nodeId)
 
         if (updateError) throw updateError
+        console.log('Memory node updated successfully:', nodeId)
         return NextResponse.json({ success: true })
 
       case 'delete':

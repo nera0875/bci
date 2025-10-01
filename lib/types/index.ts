@@ -72,3 +72,28 @@ export interface ApiConfig {
     maxTokens: number
   }
 }
+
+export type NodeType = 'folder' | 'table' | 'row' | 'document'
+
+export type Section = 'rules' | 'memory' | 'optimization'
+
+export interface MemoryNode {
+  id: string
+  type: NodeType
+  section: Section
+  name: string
+  content?: string
+  parent_id?: string | null
+  project_id: string
+  icon?: string
+  color?: string
+  position?: number
+  metadata?: Record<string, unknown>
+  children?: MemoryNode[]
+  data?: any[]
+  level?: number
+  path?: string[]
+  isExpanded?: boolean
+  created_at?: string
+  updated_at?: string
+}

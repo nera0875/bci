@@ -8,13 +8,21 @@ import ReactMarkdown from 'react-markdown'
 import StreamingText from './StreamingText'
 import { MemoryActionButtons } from './MemoryActionButtons'
 import MemoryActionDisplay from './MemoryActionDisplay'
+import { useAppStore } from '@/lib/store/app-store'
+import toast from 'react-hot-toast'
 // import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
 import { ConversationManager } from '@/lib/services/conversation'
 import { formatRulesForAI } from '@/lib/rules/simpleRules'
+// Prompts intégrés directement (pentestingPrompts supprimé)
+const buildContextualPrompt = (context: string) => `Contexte pentesting: ${context}`
+const shouldAutoOrganize = () => false
+const generateTestSuggestions = () => []
+import { IntelligentTargeting } from '@/lib/services/intelligentTargeting'
+import { generateUUID } from '@/lib/utils/uuid'
 // Memory services removed - Using Supabase native system only
 import '@/app/chat.css'
 
-type ChatMessage = Database['public']['Tables']['chat_messages']['Row']
+type ChatMessage = Database['public']['Tables']['chat_messages']['Row'] & { role: 'user' | 'assistant' | 'system' }
 
 // Memoized streaming wrapper for performance
 const StreamingMessageWrapper = React.memo(({
@@ -38,6 +46,13 @@ const StreamingMessageWrapper = React.memo(({
     </div>
   </div>
 ))
+StreamingMessageWrapper.displayName = 'StreamingMessageWrapper'
+
+const SystemIcon = () => (
+  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+    <div className="w-4 h-4 bg-blue-600 rounded-full" />
+  </div>
+)
 
 // Memoized message component for performance
 const MessageComponent = React.memo(({
@@ -47,68 +62,87 @@ const MessageComponent = React.memo(({
   onRejectAction
 }: {
   message: ChatMessage
-  pendingAction?: any
+  pendingAction?: { operation: string; data: any; confidence?: number }
   onConfirmAction?: () => void
   onRejectAction?: () => void
-}) => (
-  <div
-    className={`flex gap-4 message-enter chat-message ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-  >
-    {message.role === 'assistant' && (
-      <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
-        <Bot className="w-4 h-4 text-background" />
-      </div>
-    )}
-
+}) => {
+  const isSystem = message.role === 'system'
+  
+  return (
     <div
-      className={`
-        max-w-[80%] px-4 py-3 rounded-xl
-        ${message.role === 'user'
-          ? 'bg-foreground text-background'
-          : 'bg-muted text-foreground'
-        }
-      `}
+      className={`flex gap-4 message-enter chat-message ${
+        isSystem ? 'justify-start' : message.role === 'user' ? 'justify-end' : 'justify-start'
+      }`}
     >
-      {message.role === 'assistant' ? (
-        <div className="prose prose-sm max-w-none">
-          <ReactMarkdown
-            components={{
-              // Custom renderer for MEMORY_ACTION blocks
-              code: ({ node, inline, className, children, ...props }) => {
-                const match = /language-(\w+)/.exec(className || '')
-                const content = String(children).replace(/\n$/, '')
-                
-                // Check if this is a MEMORY_ACTION block
-                if (content.includes('MEMORY_ACTION')) {
-                  try {
-                    const actionMatch = content.match(/<!--MEMORY_ACTION\s*([\s\S]*?)-->/)
-                    if (actionMatch) {
-                      const action = JSON.parse(actionMatch[1])
-                      return <MemoryActionDisplay action={action} />
-                    }
-                  } catch (e) {
-                    // Fallback to regular code block
-                  }
-                }
-                
-                return inline ? (
-                  <code className={className} {...props}>
-                    {children}
-                  </code>
-                ) : (
-                  <pre className={className} {...props}>
-                    <code>{children}</code>
-                  </pre>
-                )
-              }
-            }}
-          >
-            {message.content}
-          </ReactMarkdown>
+      {!isSystem && message.role === 'assistant' && (
+        <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
+          <Bot className="w-4 h-4 text-background" />
         </div>
-      ) : (
-        <div className="whitespace-pre-wrap">{message.content}</div>
       )}
+      
+      {isSystem && <SystemIcon />}
+
+      <div
+        className={`
+          max-w-[80%] px-4 py-3 rounded-xl
+          ${isSystem
+            ? 'bg-blue-50 text-blue-800 border border-blue-200'
+            : message.role === 'user'
+            ? 'bg-foreground text-background'
+            : 'bg-muted text-foreground'
+          }
+        `}
+      >
+        {!isSystem && message.role === 'assistant' ? (
+          <div className="prose prose-sm max-w-none">
+            <ReactMarkdown
+              components={{
+                // Custom renderer for MEMORY_ACTION blocks
+                code: ({ className, children, ...props }) => {
+                  const match = /language-(\w+)/.exec(className || '')
+                  const content = String(children).replace(/\n$/, '')
+                  
+                  // Check if this is a MEMORY_ACTION block
+                  if (content.includes('MEMORY_ACTION')) {
+                    try {
+                      const actionMatch = content.match(/<!--MEMORY_ACTION\s*([\s\S]*?)-->/)
+                      if (actionMatch) {
+                        const action = JSON.parse(actionMatch[1])
+                        return <MemoryActionDisplay key={Math.random()} action={action} />
+                      }
+                    } catch (e) {
+                      // Fallback to regular code block
+                    }
+                  }
+                  
+                  if (match) {
+                    return (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    )
+                  }
+                  return (
+                    <pre className={className} {...props}>
+                      <code>{children}</code>
+                    </pre>
+                  )
+                }
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <div className="whitespace-pre-wrap">
+            {message.content}
+            {message.role === 'user' ? null : (
+              <div className="text-xs opacity-70 mt-2">
+                {new Date(message.created_at || Date.now()).toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        )}
 
       {/* Afficher les boutons d'action si c'est le dernier message assistant avec une action */}
       {message.role === 'assistant' && pendingAction && (
@@ -119,15 +153,17 @@ const MessageComponent = React.memo(({
           confidence={pendingAction.confidence}
         />
       )}
-    </div>
-
-    {message.role === 'user' && (
-      <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
-        <User className="w-4 h-4 text-foreground" />
       </div>
-    )}
-  </div>
-))
+
+      {!isSystem && message.role === 'user' && (
+        <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
+          <User className="w-4 h-4 text-foreground" />
+        </div>
+      )}
+    </div>
+  )
+})
+MessageComponent.displayName = 'MessageComponent'
 
 interface ChatStreamProps {
   projectId: string
@@ -135,13 +171,23 @@ interface ChatStreamProps {
   onConversationCreated?: (conversationId: string) => void
 }
 
+interface BoardAction {
+  type: 'create_row' | 'open_modal' | 'organize_content'
+  section?: 'rules' | 'memory' | 'optimization'
+  folder?: string
+  data?: any
+  tab?: 'rules' | 'memory' | 'optimization'
+  content?: string
+  userMessage?: string
+}
+
 export default function ChatStream({ projectId, conversationId: propConversationId, onConversationCreated }: ChatStreamProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreamComplete, setIsStreamComplete] = useState(false)
-  const [pendingMemoryAction, setPendingMemoryAction] = useState<any>(null)
-  const [pendingActions, setPendingActions] = useState<any[]>([])
+  const [pendingMemoryAction, setPendingMemoryAction] = useState<{ operation: string; data: any; confidence?: number } | null>(null)
+  const [pendingActions, setPendingActions] = useState<{ operation: string; data: any; confidence?: number }[]>([])
   const [lastUserMessage, setLastUserMessage] = useState<string>('')
   const lastProcessedMessageId = useRef<string | null>(null)
   const bufferRef = useRef<string>('')
@@ -149,6 +195,43 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const lastMessageCountRef = useRef<number>(0)
   const conversationManagerRef = useRef<ConversationManager | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(propConversationId || null)
+
+  const { currentProject } = useAppStore()
+
+  const addSystemMessage = async (content: string) => {
+    const systemMessage: ChatMessage = {
+      id: generateUUID(),
+      role: 'system' as const,
+      content,
+      created_at: new Date().toISOString(),
+      project_id: projectId,
+      conversation_id: conversationId || null,
+      streaming: null,
+      metadata: {}
+    } as ChatMessage
+
+    // Add to local state
+    setMessages(prev => [...prev, systemMessage])
+
+    // Save to database
+    if (conversationId) {
+      const { error } = await supabase
+        .from('chat_messages')
+        .insert(systemMessage)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Failed to save system message:', error)
+      }
+    }
+
+    // Optional toast notification
+    toast.success(content, {
+      duration: 3000,
+      position: 'top-right'
+    })
+  }
 
   // Supabase Memory Integration (original system) - Pure Supabase
 
@@ -231,7 +314,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }, [projectId, isStreaming, conversationId])
 
   // Smart scroll management without jumps using RAF
-  const rafRef = useRef<number>()
+  const rafRef = useRef<number | undefined>()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = useCallback(() => {
@@ -267,7 +350,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }, [isStreaming])
 
   // Debounced scroll to prevent multiple triggers
-  const debouncedScrollRef = useRef<NodeJS.Timeout>()
+  const debouncedScrollRef = useRef<NodeJS.Timeout | undefined>()
   const debouncedScroll = useCallback(() => {
     if (debouncedScrollRef.current) {
       clearTimeout(debouncedScrollRef.current)
@@ -375,12 +458,143 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
+  // Handler pour commandes slash dans le chat
+  const handleSlashCommand = useCallback((command: string) => {
+    console.log('🔧 Processing slash command:', command)
+    
+    // Ouvrir le board modulaire avec le bon onglet
+    const appStore = useAppStore.getState()
+    if (appStore.setShowUnifiedBoard && appStore.setUnifiedBoardTab) {
+      const { setShowUnifiedBoard, setUnifiedBoardTab } = appStore
+      
+      switch (command.trim()) {
+        case '/add rule':
+        case '/add-rule':
+          setUnifiedBoardTab('rules')
+          setShowUnifiedBoard(true)
+          toast.success('📋 Ouverture du board Règles pour ajout')
+          break
+        
+        case '/add memory':
+        case '/add-memory':
+          setUnifiedBoardTab('memory')
+          setShowUnifiedBoard(true)
+          toast.success('🧠 Ouverture du board Mémoire pour ajout')
+          break
+        
+        case '/add optimization':
+        case '/add-optimization':
+          setUnifiedBoardTab('optimization')
+          setShowUnifiedBoard(true)
+          toast.success('⚡ Ouverture du board Optimisation pour ajout')
+          break
+        
+        case '/board':
+        case '/open-board':
+          setShowUnifiedBoard(true)
+          toast.success('📊 Board modulaire ouvert')
+          break
+        
+        default:
+          toast('❓ Commande non reconnue. Essayez /add rule, /add memory, /board')
+      }
+    } else {
+      toast('⚠️ Board non disponible')
+    }
+  }, [])
+
+  // Fonction pour rangement automatique du contenu
+  const autoOrganizeContent = useCallback(async (content: string, userMessage: string) => {
+    try {
+      console.log('🤖 Détection automatique de rangement pour:', content.substring(0, 100) + '...')
+      
+      // Utiliser IntelligentTargeting pour analyser
+      const targeting = new IntelligentTargeting(projectId)
+      const analysis = await targeting.analyzeTarget(content)
+      
+      console.log('🎯 Analyse targeting:', analysis.path)
+      
+      // Si confiance élevée et dossier cible identifié
+      if (analysis.confidence > 0.7 && analysis.path.folder) {
+        const targetFolder = analysis.path.folder
+        const targetSection = analysis.path.section || 'memory'
+        
+        // Créer un row pour le board
+        const newRow = {
+          name: `Contenu auto-organisé: ${targetFolder}`,
+          type: targetSection,
+          content: content.substring(0, 1000) + (content.length > 1000 ? '...' : ''), // Tronquer si trop long
+          instructions: `Généré automatiquement du chat le ${new Date().toISOString()}. Contexte: ${userMessage.substring(0, 200)}`,
+          targetFolder,
+          created_at: new Date().toISOString(),
+          metadata: {
+            auto_generated: true,
+            source: 'chat_auto_org',
+            confidence: analysis.confidence,
+            targeting: analysis.path
+          }
+        }
+        
+        // Trouver ou créer le document cible dans le board
+        const boardResponse = await fetch('/api/unified/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            section: targetSection,
+            folder: targetFolder,
+            row: newRow
+          })
+        })
+        
+        if (boardResponse.ok) {
+          const { success, nodeId } = await boardResponse.json()
+          if (success) {
+            console.log('✅ Contenu rangé automatiquement dans:', targetFolder, 'node:', nodeId)
+            toast.success(`📁 Contenu rangé automatiquement dans "${targetFolder}"`, { duration: 4000 })
+            
+            // Sync le board si ouvert - Utiliser custom event au lieu de hook dans callback
+            window.dispatchEvent(new CustomEvent('board-reload', { detail: { projectId, section: targetSection } }))
+            return true
+          }
+        } else {
+          console.error('❌ Échec rangement automatique:', await boardResponse.text())
+        }
+      } else {
+        console.log('ℹ️ Confiance trop faible pour rangement auto:', analysis.confidence)
+      }
+    } catch (error) {
+      console.error('❌ Erreur rangement automatique:', error)
+    }
+    
+    return false
+  }, [projectId])
+
   const streamClaudeResponse = async (userMessage: string) => {
     console.log('Starting Claude response for:', userMessage)
     setIsStreaming(true)
     setStreamingContent('')
     setIsStreamComplete(false)
     bufferRef.current = ''
+
+    // Vérifier si c'est une commande slash avant de streamer
+    if (userMessage.startsWith('/')) {
+      handleSlashCommand(userMessage)
+      // Ne pas streamer Claude pour les commandes, mais ajouter un message système
+      const commandMessage: ChatMessage = {
+        id: generateUUID(),
+        role: 'system' as const,
+        content: `Commande exécutée: ${userMessage}`,
+        created_at: new Date().toISOString(),
+        project_id: projectId,
+        conversation_id: conversationId || null,
+        streaming: null,
+        metadata: {}
+      } as ChatMessage
+      setMessages(prev => [...prev, commandMessage])
+      setIsStreaming(false)
+      return
+    }
 
     try {
       // Initialize ConversationManager if not done
@@ -420,42 +634,73 @@ export default function ChatStream({ projectId, conversationId: propConversation
             project_id: projectId,
             role: 'assistant' as const,
             content: convContext.cachedResponse,
-            conversation_id: currentConvId
+            conversation_id: currentConvId,
+            streaming: null,
+            metadata: {}
           })
+
+        // Auto-organize si applicable
+        await autoOrganizeContent(convContext.cachedResponse, userMessage)
 
         setIsStreaming(false)
         return
       }
 
-      // Get additional context - RÈGLES EN PRIORITÉ
+      // Get additional context - RÈGLES EN PRIORITÉ avec templates dynamiques
+      const targetFolder = detectTargetFolder(userMessage)
       const rulesContext = await getRulesContext(userMessage)
       const memoryContext = await getMemoryContext(userMessage)
       const similarContent = await searchSimilarContent(userMessage)
       const projectGoal = await getProjectGoal()
 
-      console.log('Context prepared, calling Claude API...')
+      console.log('🎯 Context detected:', targetFolder)
+      console.log('📋 Rules loaded:', rulesContext ? 'YES' : 'NO')
+      console.log('🧠 Memory context:', memoryContext.length, 'items')
+
+      // Construire le prompt contextuel avec template dynamique
+      const contextualPrompt = buildContextualPrompt(
+        userMessage,
+        targetFolder,
+        rulesContext,
+        memoryContext,
+        projectGoal
+      )
+
+      console.log('🚀 Using contextual prompt for:', targetFolder)
 
       // Combine recent messages from ConversationManager with similar messages
       const conversationHistory = [...convContext.recentMessages, ...convContext.similarMessages]
 
-      // Prepare messages in the format expected by our new endpoint
-      let finalUserMessage = userMessage
-      
-      // Add rules context to the user message if rules exist
-      if (rulesContext) {
-        finalUserMessage = userMessage + '\n\n' + rulesContext
-      }
-
+      // Ajouter un message système avec le template si contexte spécifique
       const messages = [
         ...conversationHistory.map(msg => ({
           role: msg.role,
           content: msg.content
-        })),
-        {
-          role: 'user',
-          content: finalUserMessage
-        }
+        }))
       ]
+
+      // Si contexte spécifique détecté, ajouter le prompt système
+      if (targetFolder !== '*') {
+        const template = getPromptTemplate(targetFolder)
+        messages.push({
+          role: 'system' as const,
+          content: template.systemPrompt + (rulesContext ? `\n\nRÈGLES SPÉCIFIQUES:\n${rulesContext}` : '')
+        })
+      }
+
+      // Ajouter targeting context si disponible
+      if (convContext.targetingContext) {
+        const targetingInfo = new IntelligentTargeting(projectId).formatTargetingForAI(convContext.targetingContext)
+        messages.push({
+          role: 'system' as const,
+          content: `CONTEXTE CIBLAGE INTELLIGENT:\n${targetingInfo}\n\nUtilisez ce ciblage pour organiser le contenu dans le board unifié approprié.`
+        })
+      }
+
+      messages.push({
+        role: 'user',
+        content: contextualPrompt
+      })
 
       // Use the new chat/stream endpoint with Mem0 integration
       const response = await fetch('/api/chat/stream', {
@@ -468,7 +713,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
           projectId,                   // Project ID for Mem0
           conversationId: currentConvId, // Conversation ID for tracking
           useMemoryContext: true,      // Enable Mem0 memory injection
-          saveMemory: true             // Auto-save responses to Mem0
+          saveMemory: true,            // Auto-save responses to Mem0
+          enableAutoOrganization: true // Flag pour activer auto-org côté serveur si implémenté
         })
       })
 
@@ -519,6 +765,11 @@ export default function ChatStream({ projectId, conversationId: propConversation
                 } else if (data.type === 'action') {
                   // Handle Claude actions (memory CRUD, etc.)
                   await handleClaudeAction(data.action)
+                } else if (data.type === 'board_action') {
+                  // Nouvelle action pour board depuis le stream
+                  console.log('🛡️ Board action from stream:', data.action)
+                  // Ex: data.action = { type: 'create_row', section: 'rules', data: {...} }
+                  await handleBoardAction(data.action)
                 }
               } catch (e) {
                 // Skip invalid JSON
@@ -574,6 +825,12 @@ export default function ChatStream({ projectId, conversationId: propConversation
             }
           } catch (error) {
             console.log('⚠️ Memory action processing skipped:', error)
+          }
+
+          // Auto-organize le contenu de la réponse
+          const organized = await autoOrganizeContent(fullContent, userMessage)
+          if (organized) {
+            console.log('✅ Auto-organization completed')
           }
 
           // V3 disabled - causes CORS errors
@@ -722,25 +979,57 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
-  // Détecter le dossier cible dans le message utilisateur
+  // Détecter le dossier cible dans le message utilisateur - VERSION PENTESTING OPTIMISÉE
   const detectTargetFolder = (message: string): string => {
     const lowerMessage = message.toLowerCase()
     
-    // Détection par mots-clés
-    if (lowerMessage.includes('requête') || lowerMessage.includes('post') || lowerMessage.includes('get')) {
-      return 'requetes'
+    // Détection Business Logic (priorité haute)
+    if (lowerMessage.includes('business logic') || lowerMessage.includes('logique métier') || 
+        lowerMessage.includes('prix') || lowerMessage.includes('payment') || lowerMessage.includes('paiement')) {
+      return 'business-logic'
     }
-    if (lowerMessage.includes('faille') || lowerMessage.includes('vulnérabilité') || lowerMessage.includes('exploit')) {
-      return 'failles'
+    
+    // Détection Authentication/Authorization
+    if (lowerMessage.includes('auth') || lowerMessage.includes('login') || lowerMessage.includes('connexion') ||
+        lowerMessage.includes('session') || lowerMessage.includes('token') || lowerMessage.includes('privilege')) {
+      return 'authentication'
     }
-    if (lowerMessage.includes('test') || lowerMessage.includes('payload')) {
+    
+    // Détection API/Requests
+    if (lowerMessage.includes('api') || lowerMessage.includes('requête') || lowerMessage.includes('post') || 
+        lowerMessage.includes('get') || lowerMessage.includes('endpoint') || lowerMessage.includes('curl')) {
+      return 'api-requests'
+    }
+    
+    // Détection Injection/XSS (techniques classiques)
+    if (lowerMessage.includes('xss') || lowerMessage.includes('injection') || lowerMessage.includes('sqli') ||
+        lowerMessage.includes('payload') || lowerMessage.includes('script')) {
+      return 'injection-attacks'
+    }
+    
+    // Détection Failles trouvées
+    if (lowerMessage.includes('faille trouvée') || lowerMessage.includes('exploit') || lowerMessage.includes('vulnérabilité')) {
+      return 'success'
+    }
+    
+    // Détection Échecs
+    if (lowerMessage.includes('échec') || lowerMessage.includes('pas marché') || lowerMessage.includes('failed')) {
+      return 'failed'
+    }
+    
+    // Détection Tests/Fuzzing
+    if (lowerMessage.includes('test') || lowerMessage.includes('fuzz') || lowerMessage.includes('scan')) {
       return 'tests'
     }
-    if (lowerMessage.includes('analyse') || lowerMessage.includes('rapport')) {
+    
+    // Détection Analyse/Rapport
+    if (lowerMessage.includes('analyse') || lowerMessage.includes('rapport') || lowerMessage.includes('résultat')) {
       return 'analysis'
     }
-    if (lowerMessage.includes('plan') || lowerMessage.includes('stratégie')) {
-      return 'plan'
+    
+    // Détection Planning/Stratégie
+    if (lowerMessage.includes('plan') || lowerMessage.includes('stratégie') || lowerMessage.includes('méthodologie')) {
+      return 'planning'
     }
     
     return '*' // Global par défaut

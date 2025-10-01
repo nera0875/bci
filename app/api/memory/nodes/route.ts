@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
     const type = searchParams.get('type')
+    const section = searchParams.get('section')
 
     if (!projectId) {
       return NextResponse.json({ error: 'projectId requis' }, { status: 400 })
@@ -20,10 +21,38 @@ export async function GET(request: NextRequest) {
       query = query.eq('type', type)
     }
 
-    const { data, error } = await query.order('created_at', { ascending: true })
+    // Filtrer par section si fournie (explicitement actif)
+    let data;
+    let error;
+    if (section) {
+      const { data: sectionData, error: sectionError } = await query
+        .eq('section', section)
+        .order('created_at', { ascending: true })
+      
+      if (sectionError) {
+        console.log('Section filter failed, falling back without section:', sectionError.message);
+        // Fallback sans section
+        const { data: fallbackData, error: fallbackError } = await query
+          .order('created_at', { ascending: true })
+        
+        if (fallbackError) {
+          return NextResponse.json({ error: fallbackError.message }, { status: 400 })
+        }
+        data = fallbackData
+      } else {
+        data = sectionData
+      }
+    } else {
+      const { data: noSectionData, error: noSectionError } = await query
+        .order('created_at', { ascending: true })
+      if (noSectionError) {
+        return NextResponse.json({ error: noSectionError.message }, { status: 400 })
+      }
+      data = noSectionData
+    }
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (!data || data.length === 0) {
+      return NextResponse.json({ success: true, nodes: [], total: 0 })
     }
 
     // Construire l'arbre hiérarchique
@@ -50,12 +79,12 @@ export async function GET(request: NextRequest) {
       return rootNodes
     }
 
-    const tree = buildTree(data || [])
+    const tree = buildTree(data)
 
     return NextResponse.json({ 
       success: true, 
       nodes: tree,
-      total: data?.length || 0
+      total: data.length
     })
   } catch (error) {
     console.error('Erreur GET memory nodes:', error)
@@ -65,28 +94,30 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, parentId, name, type, content, view_mode } = await request.json()
+    const { projectId, parentId, name, type, content, view_mode, section } = await request.json()
 
     if (!projectId || !name || !type) {
-      return NextResponse.json({ 
-        error: 'projectId, name et type requis' 
+      return NextResponse.json({
+        error: 'projectId, name et type requis'
       }, { status: 400 })
+    }
+
+    const insertData: any = {
+      project_id: projectId,
+      parent_id: parentId,
+      name,
+      type,
+      content: content || (type === 'document' ? `# ${name}\n\nContenu...` : null),
+      icon: type === 'folder' ? '📁' : '📄',
+      color: '#6E6E80',
+      position: 0,
+      section: section || 'memory'
     }
 
     // Créer le node
     const { data, error } = await supabase
       .from('memory_nodes')
-      .insert({
-        project_id: projectId,
-        parent_id: parentId,
-        name,
-        type,
-        content: content || (type === 'document' ? `# ${name}\n\nContenu...` : null),
-        view_mode: view_mode || 'tree',
-        icon: type === 'folder' ? '📁' : '📄',
-        color: '#6E6E80',
-        position: 0
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -99,13 +130,70 @@ export async function POST(request: NextRequest) {
       await initializeDefaultColumns(data.id, name)
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       node: data,
       message: `${type === 'folder' ? 'Dossier' : 'Document'} "${name}" créé`
     })
   } catch (error) {
     console.error('Erreur POST memory nodes:', error)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const { nodeId, updates } = await request.json()
+
+    if (!nodeId || !updates) {
+      return NextResponse.json({ error: 'nodeId et updates requis' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('memory_nodes')
+      .update(updates)
+      .eq('id', nodeId)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      node: data,
+      message: 'Node mis à jour'
+    })
+  } catch (error) {
+    console.error('Erreur PUT memory nodes:', error)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { nodeId } = await request.json()
+
+    if (!nodeId) {
+      return NextResponse.json({ error: 'nodeId requis' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('memory_nodes')
+      .delete()
+      .eq('id', nodeId)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Node supprimé'
+    })
+  } catch (error) {
+    console.error('Erreur DELETE memory nodes:', error)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

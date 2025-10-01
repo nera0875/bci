@@ -3,7 +3,7 @@ export async function createEmbedding(text: string): Promise<number[]> {
     // When running on server, we need absolute URL
     // Always use localhost for server-side calls, NOT external IP
     const baseUrl = typeof window === 'undefined'
-      ? 'http://localhost:3001'
+      ? 'http://localhost:3000'
       : window.location.origin
 
     // Call our API route to generate embeddings

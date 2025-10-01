@@ -88,8 +88,8 @@ export default function ProjectsProfessional() {
       // Refresh projects list to show the new project
       await loadProjects()
 
-      // Use direct navigation after project creation
-      window.location.href = `/chat/${project.id}`
+      // Use router.push instead of window.location.href
+      router.push(`/chat/${project.id}`)
     }
     setLoadingProject(null)
   }
@@ -100,12 +100,12 @@ export default function ProjectsProfessional() {
 
     // Si les clés API ne sont pas configurées, rediriger vers la page setup
     if (!isConnected) {
-      window.location.href = `/projects/${projectId}/setup`
+      router.push(`/projects/${projectId}/setup`)
       return
     }
 
     // Sinon, aller directement au chat
-    window.location.href = `/chat/${projectId}`
+    router.push(`/chat/${projectId}`)
   }
 
   const handleDeleteProject = async (projectId: string, projectName: string) => {

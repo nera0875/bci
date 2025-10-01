@@ -11,7 +11,8 @@ export interface SimpleRule {
   action: string       // Instruction simple en français
   enabled: boolean     // Activé ou non
   priority: number     // Ordre d'application (1 = plus important)
-  config?: any         // Configuration additionnelle
+  config?: Record<string, unknown>         // Configuration additionnelle
+  metadata?: Record<string, unknown>       // Métadonnées incluant success_history
 }
 
 // Interface pour compatibilité avec l'ancien système
@@ -144,3 +145,26 @@ export function checkActionAgainstRules(
     warnings
   }
 }
+
+export const globalRules = [
+  {
+    id: 'type-required',
+    check: (node: any) => node.type !== undefined && node.type !== '',
+    message: 'Type requis pour tous les nœuds'
+  },
+  {
+    id: 'markdown-required',
+    check: (node: any) => node.section === 'rules' ? (node.content || '').includes('#') : true,
+    message: 'Les règles doivent commencer par un titre # en Markdown'
+  },
+  {
+    id: 'title-required',
+    check: (node: any) => node.name && node.name.trim() !== '',
+    message: 'Titre requis pour tous les nœuds'
+  },
+  {
+    id: 'section-valid',
+    check: (node: any) => ['rules', 'memory', 'optimization'].includes(node.section || ''),
+    message: 'Section doit être rules, memory ou optimization'
+  }
+]

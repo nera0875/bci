@@ -20,8 +20,9 @@ import GoalBar from '@/components/goal/GoalBar'
 import ConversationManagerUI from '@/components/chat/ConversationManager'
 import ResizablePanel from '@/components/ui/ResizablePanel'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UnifiedBoard } from '@/components/unified/UnifiedBoard'
+import { UnifiedBoardModular } from '@/components/unified/UnifiedBoardModular'
 import { CostsDashboard } from '@/components/costs/CostsDashboard'
+import { toast } from 'react-toastify'
 
 type Project = {
   id: string
@@ -124,23 +125,119 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
       }
     }
 
-    // Save the user message with conversation ID
-    try {
-      const { error } = await supabase
-        .from('chat_messages')
-        .insert([{
-          project_id: project.id,
-          role: 'user',
-          content: userMessage,
-          conversation_id: conversationId
-        }])
-      
-      if (error) {
-        console.error('Supabase error:', error)
+    // Parser for board commands
+    let assistantResponse = null
+    if (userMessage.toLowerCase().startsWith('crée dossier ')) {
+      const name = userMessage.substring(12).trim()
+      if (name) {
+        try {
+          const res = await fetch('/api/board/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'folder',
+              title: name,
+              section: 'rules',
+              projectId,
+              parent_id: null
+            })
+          })
+          if (res.ok) {
+            const result = await res.json()
+            assistantResponse = `Dossier créé avec succès: ${name}`
+            toast.success('Dossier créé')
+          } else {
+            assistantResponse = 'Erreur création dossier'
+            toast.error('Erreur création dossier')
+          }
+        } catch (err) {
+          assistantResponse = 'Erreur réseau création dossier'
+          toast.error('Erreur réseau')
+        }
+      } else {
+        assistantResponse = 'Nom de dossier manquant après "crée dossier "'
       }
-    } catch (error) {
-      console.error('Error saving message:', error)
+    } else if (userMessage.toLowerCase().startsWith('crée tableau ')) {
+      const name = userMessage.substring(12).trim()
+      if (name) {
+        try {
+          const res = await fetch('/api/board/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'table',
+              title: name,
+              section: 'rules',
+              projectId,
+              parent_id: null,
+              view_mode: 'table'
+            })
+          })
+          if (res.ok) {
+            const result = await res.json()
+            assistantResponse = `Tableau créé: ${name}`
+            toast.success('Tableau créé')
+          } else {
+            assistantResponse = 'Erreur création tableau'
+            toast.error('Erreur création tableau')
+          }
+        } catch (err) {
+          assistantResponse = 'Erreur réseau création tableau'
+          toast.error('Erreur réseau')
+        }
+      } else {
+        assistantResponse = 'Nom de tableau manquant après "crée tableau "'
+      }
+    } else if (userMessage.toLowerCase().startsWith('ajoute row ')) {
+      const name = userMessage.substring(10).trim()
+      if (name) {
+        try {
+          const res = await fetch('/api/board/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'row',
+              title: name,
+              section: 'rules',
+              projectId,
+              parent_id: null  // Assume root, or get from context if possible
+            })
+          })
+          if (res.ok) {
+            const result = await res.json()
+            assistantResponse = `Row ajoutée: ${name}`
+            toast.success('Row ajoutée')
+          } else {
+            assistantResponse = 'Erreur ajout row'
+            toast.error('Erreur ajout row')
+          }
+        } catch (err) {
+          assistantResponse = 'Erreur réseau ajout row'
+          toast.error('Erreur réseau')
+        }
+      } else {
+        assistantResponse = 'Titre de row manquant après "ajoute row "'
+      }
     }
+
+    // If assistantResponse, insert assistant message first, then user
+    if (assistantResponse) {
+      // Insert assistant message
+      await supabase.from('chat_messages').insert([{
+        project_id: project.id,
+        role: 'assistant',
+        content: assistantResponse,
+        conversation_id: conversationId
+      }])
+    }
+
+    // Then insert user message
+    await supabase.from('chat_messages').insert([{
+      project_id: project.id,
+      role: 'user',
+      content: userMessage,
+      conversation_id: conversationId
+    }])
 
     // The ChatStream component will detect this via subscription
     // and automatically trigger Claude's response
@@ -365,7 +462,7 @@ export default function ChatProfessional({ params }: { params: Promise<{ project
       {/* Dashboards Modaux */}
       
       {/* Board Unifié */}
-      <UnifiedBoard
+      <UnifiedBoardModular
         projectId={project.id}
         isOpen={showUnifiedBoard}
         onClose={() => setShowUnifiedBoard(false)}

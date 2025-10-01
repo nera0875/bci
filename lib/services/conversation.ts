@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { supabase } from '@/lib/supabase/client'
 import { createEmbedding } from '@/lib/services/embeddings'
+import { IntelligentTargeting } from '@/lib/services/intelligentTargeting'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -14,6 +15,7 @@ interface ConversationContext {
   summary?: string            // Résumé si conversation longue
   memoryContext: any[]        // Mémoire permanente
   cachedResponse?: string     // Si message identique trouvé
+  targetingContext?: import('@/lib/services/intelligentTargeting').TargetingContext
 }
 
 export class ConversationManager {
@@ -72,7 +74,11 @@ export class ConversationManager {
   }
 
   // Vérifier si on a déjà une réponse en cache
-  async checkCache(content: string): Promise<string | null> {
+  async checkCache(content: string, forceRefresh: boolean = false): Promise<string | null> {
+    if (forceRefresh) {
+      return null // Skip cache si forceRefresh
+    }
+
     const hash = this.hashContent(content)
 
     const { data, error } = await supabase
@@ -103,6 +109,19 @@ export class ConversationManager {
     if (!this.conversationId) return
 
     const hash = this.hashContent(message.content)
+
+    // Vérifier si le message existe déjà (fix 409 Conflict)
+    const { data: existing } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('content_hash', hash)
+      .eq('conversation_id', this.conversationId)
+      .maybeSingle()
+
+    if (existing) {
+      console.log('Message duplicate skipped (hash exists):', hash)
+      return // Skip insert si duplicate
+    }
 
     // Créer embedding si pas fourni
     if (!embedding && message.content.length > 10) {
@@ -140,19 +159,23 @@ export class ConversationManager {
           updated_at: new Date().toISOString()
         })
         .eq('id', this.conversationId)
+      console.log('Message saved successfully')
+    } else {
+      console.error('Failed to save message:', error)
     }
   }
 
   // Obtenir le contexte optimisé pour Claude
-  async getOptimizedContext(currentMessage: string): Promise<ConversationContext> {
+  async getOptimizedContext(currentMessage: string, forceRefresh: boolean = true): Promise<ConversationContext> {
     const context: ConversationContext = {
       recentMessages: [],
       similarMessages: [],
-      memoryContext: []
+      memoryContext: [],
+      targetingContext: null
     }
 
     // 1. Vérifier le cache d'abord
-    const cachedResponse = await this.checkCache(currentMessage)
+    const cachedResponse = await this.checkCache(currentMessage, forceRefresh)
     if (cachedResponse) {
       context.cachedResponse = cachedResponse
       return context // Pas besoin du reste si on a la réponse!
@@ -192,6 +215,16 @@ export class ConversationManager {
     } catch (e) {
       console.log('Similarity search skipped (embedding error):', e)
       // Continue sans recherche de similarité - pas critique
+    }
+
+    // 3.5 Intégration ciblage intelligent pour chat-board
+    try {
+      const targeting = new IntelligentTargeting(this.projectId)
+      const targetingResult = await targeting.analyzeTarget(currentMessage)
+      context.targetingContext = targetingResult
+      console.log('🎯 Targeting context ajouté au chat:', targetingResult.path)
+    } catch (e) {
+      console.log('Targeting analysis skipped:', e)
     }
 
     // 4. Si conversation longue, récupérer/générer un résumé

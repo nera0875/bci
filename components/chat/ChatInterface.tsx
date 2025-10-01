@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Trash2, Settings, MessageSquare } from 'lucide-react'
+import { Send, Loader2, Trash2, Settings, MessageSquare, FolderOpen } from 'lucide-react'
 import { useAppStore } from '@/lib/store/app-store'
 import type { ChatMessage } from '@/lib/types'
 

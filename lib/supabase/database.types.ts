@@ -85,6 +85,64 @@ export interface Database {
           updated_at?: string
         }
       }
+      table_data: {
+        Row: {
+          id: string
+          node_id: string
+          row_index: number
+          row_data: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          node_id: string
+          row_index?: number
+          row_data?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          node_id?: string
+          row_index?: number
+          row_data?: Json
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      table_columns: {
+        Row: {
+          id: string
+          node_id: string
+          column_name: string
+          column_type: 'text' | 'select' | 'number' | 'boolean' | 'date' | 'tags'
+          column_options: Json
+          visible: boolean
+          order_index: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          node_id: string
+          column_name: string
+          column_type: 'text' | 'select' | 'number' | 'boolean' | 'date' | 'tags'
+          column_options?: Json
+          visible?: boolean
+          order_index?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          node_id?: string
+          column_name?: string
+          column_type?: 'text' | 'select' | 'number' | 'boolean' | 'date' | 'tags'
+          column_options?: Json
+          visible?: boolean
+          order_index?: number
+          created_at?: string
+        }
+      }
       chat_messages: {
         Row: {
           id: string

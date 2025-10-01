@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, Save, X, Settings } from 'lucide-react'
+import { Plus, Edit2, Trash2, Save, X, Settings, AlertCircle } from 'lucide-react'
 
 interface TableColumn {
   id: string
@@ -20,41 +20,26 @@ interface TableViewProps {
   nodeId: string
   mode: 'memory' | 'rules'
   onDataChange: () => void
+  data: any[]
+  node: any
+  suggestions?: any[]
+  onUpdateRow: (nodeId: string, rowId: string, updates: any) => void
+  onDeleteRow: (rowId: string) => void
 }
 
-export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewProps) {
+export function TableView({ projectId, nodeId, mode, onDataChange, data, node, suggestions = [], onUpdateRow, onDeleteRow }: TableViewProps) {
   const [columns, setColumns] = useState<TableColumn[]>([])
-  const [rows, setRows] = useState<TableRow[]>([])
+  const [rows, setRows] = useState<any[]>(data || [])
   const [loading, setLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [editingCell, setEditingCell] = useState<{rowId: string, columnId: string} | null>(null)
   const [editValue, setEditValue] = useState('')
 
   useEffect(() => {
-    loadTableData()
-  }, [nodeId])
+    setRows(data || [])
+  }, [data])
 
-  const loadTableData = async () => {
-    setLoading(true)
-    try {
-      // Charger les colonnes
-      const columnsResponse = await fetch(`/api/unified/columns?nodeId=${nodeId}`)
-      if (columnsResponse.ok) {
-        const columnsData = await columnsResponse.json()
-        setColumns(columnsData.columns || [])
-      }
-
-      // Charger les données
-      const dataResponse = await fetch(`/api/unified/data?nodeId=${nodeId}`)
-      if (dataResponse.ok) {
-        const rowsData = await dataResponse.json()
-        setRows(rowsData.rows || [])
-      }
-    } catch (error) {
-      console.error('Erreur chargement tableau:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // No loadTableData needed, use props
 
   const startEdit = (rowId: string, columnId: string, currentValue: any) => {
     setEditingCell({ rowId, columnId })
@@ -62,26 +47,53 @@ export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewPr
   }
 
   const saveEdit = async () => {
-    if (!editingCell) return
+    if (!editingCell || !projectId) return
+
+    setIsSaving(true)
+    const body = {
+      rowId: editingCell.rowId,
+      columnId: editingCell.columnId,
+      value: editValue
+    }
+    console.log('API called for saveEdit:', { mode, ...body });
 
     try {
-      const response = await fetch('/api/unified/data', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rowId: editingCell.rowId,
-          columnId: editingCell.columnId,
-          value: editValue
+      let response
+      if (mode === 'memory') {
+        // Use memory/update for memory mode
+        response = await fetch('/api/memory/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update',
+            projectId,
+            nodeId,
+            data: { [editingCell.columnId]: editValue }
+          })
         })
-      })
+      } else {
+        // Use unified/data for general/rules row updates
+        response = await fetch('/api/unified/data', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        })
+      }
 
+      console.log('API response for saveEdit:', response.status, await response.text());
       if (response.ok) {
-        await loadTableData()
+        onUpdateRow(nodeId, editingCell.rowId, { [editingCell.columnId]: editValue })
         setEditingCell(null)
         setEditValue('')
+        if (onDataChange) onDataChange()
+        console.log('Save successful');
+      } else {
+        console.error('Save failed:', response.status);
       }
     } catch (error) {
       console.error('Erreur sauvegarde:', error)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -91,18 +103,38 @@ export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewPr
   }
 
   const addRow = async () => {
+    if (!projectId || !node) return
+
     try {
-      const response = await fetch('/api/unified/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nodeId,
-          data: {}
+      let response
+      const body = {
+        nodeId: node.id,
+        data: {}
+      }
+
+      if (mode === 'memory') {
+        response = await fetch('/api/memory/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create',
+            projectId,
+            nodeId: node.id,
+            data: body.data
+          })
         })
-      })
+      } else {
+        response = await fetch('/api/unified/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        })
+      }
 
       if (response.ok) {
-        await loadTableData()
+        const newRow = await response.json()
+        onUpdateRow(node.id, newRow.id, newRow) // Trigger parent update
+        if (onDataChange) onDataChange()
       }
     } catch (error) {
       console.error('Erreur ajout ligne:', error)
@@ -120,7 +152,8 @@ export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewPr
       })
 
       if (response.ok) {
-        await loadTableData()
+        onDeleteRow(rowId)
+        if (onDataChange) onDataChange()
       }
     } catch (error) {
       console.error('Erreur suppression:', error)
@@ -132,9 +165,55 @@ export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewPr
     const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === column.id
 
     if (isEditing) {
+      const inputClass = "w-full p-1 border border-blue-500 rounded text-sm disabled:opacity-50";
       if (column.type === 'select') {
         return (
-          <select
+          <div className="flex items-center gap-2">
+            <select
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={saveEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveEdit()
+                if (e.key === 'Escape') cancelEdit()
+              }}
+              className={inputClass}
+              disabled={isSaving}
+              autoFocus
+            >
+              <option value="">Sélectionner...</option>
+              {column.options?.options?.map((option: string) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            {isSaving && <span className="text-blue-500">Sauvegarde...</span>}
+          </div>
+        )
+      }
+
+      if (column.type === 'boolean') {
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={editValue === 'true' || editValue === true}
+              onChange={(e) => {
+                setEditValue(e.target.checked.toString())
+                setTimeout(saveEdit, 100)
+              }}
+              className="rounded"
+              disabled={isSaving}
+              autoFocus
+            />
+            {isSaving && <span className="text-blue-500 text-sm">Sauvegarde...</span>}
+          </div>
+        )
+      }
+
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            type={column.type === 'number' ? 'number' : 'text'}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={saveEdit}
@@ -142,45 +221,12 @@ export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewPr
               if (e.key === 'Enter') saveEdit()
               if (e.key === 'Escape') cancelEdit()
             }}
-            className="w-full p-1 border border-blue-500 rounded text-sm"
-            autoFocus
-          >
-            <option value="">Sélectionner...</option>
-            {column.options?.options?.map((option: string) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        )
-      }
-
-      if (column.type === 'boolean') {
-        return (
-          <input
-            type="checkbox"
-            checked={editValue === 'true' || editValue === true}
-            onChange={(e) => {
-              setEditValue(e.target.checked.toString())
-              setTimeout(saveEdit, 100)
-            }}
-            className="rounded"
+            className={inputClass}
+            disabled={isSaving}
             autoFocus
           />
-        )
-      }
-
-      return (
-        <input
-          type={column.type === 'number' ? 'number' : 'text'}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={saveEdit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') saveEdit()
-            if (e.key === 'Escape') cancelEdit()
-          }}
-          className="w-full p-1 border border-blue-500 rounded text-sm"
-          autoFocus
-        />
+          {isSaving && <span className="text-blue-500">Sauvegarde...</span>}
+        </div>
       )
     }
 
@@ -212,9 +258,30 @@ export function TableView({ projectId, nodeId, mode, onDataChange }: TableViewPr
     )
   }
 
-  if (loading) {
-    return <div className="flex-1 flex items-center justify-center">Chargement...</div>
+  // Render suggestions if available
+  if (suggestions && suggestions.length > 0) {
+    return (
+      <div className="flex-1 flex flex-col">
+        {/* Existing table code... but add suggestions below or beside rows */}
+        <div className="p-4">
+          <h4 className="font-semibold mb-2">Suggestions pour cette table:</h4>
+          <div className="space-y-1">
+            {suggestions.map((sug, idx) => (
+              <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
+                <span>{sug.technique}</span>
+                <AlertCircle className={`w-4 h-4 ${sug.confidence > 0.7 ? 'text-green-600' : 'text-yellow-600'}`} />
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Then the table */}
+        {/* ... existing table JSX ... */}
+      </div>
+    )
   }
+
+  // Fallback to existing table rendering
+  // ... rest of component
 
   return (
     <div className="flex-1 flex flex-col">

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import {
   Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus
 } from 'lucide-react'
-import { createClient } from '@supabase/supabase-js'
 import { isValidUUID } from '@/lib/utils/uuid'
 import ChatStream from '@/components/chat/ChatStream'
 import GoalBar from '@/components/goal/GoalBar'
@@ -13,11 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { UnifiedBoardModular } from '@/components/unified/UnifiedBoardModular'
 import { CostsDashboard } from '@/components/costs/CostsDashboard'
 
-// Simple Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase } from '@/lib/supabase/client'
 
 type Project = {
   id: string
@@ -39,6 +34,7 @@ type Conversation = {
 
 export default function ChatProfessionalNew({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params)
+  console.log('ChatProfessionalNew loaded successfully, projectId:', projectId);
   const router = useRouter()
   const [project, setProject] = useState<Project | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])

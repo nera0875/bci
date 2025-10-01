@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
 import { createServerClient } from '@/lib/supabase/client'
-import { searchSimilarChunks } from '@/lib/services/chunking'
 import { ConversationManager, formatContextForClaude } from '@/lib/services/conversation'
 
 export async function POST(request: NextRequest) {
@@ -10,11 +9,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { message, projectId, context, conversationHistory = [], conversationId } = body
 
-    // Get API key from project
+    // Get API key and rules from project
     const supabase = createServerClient()
     const { data: project } = await supabase
       .from('projects')
-      .select('api_keys')
+      .select('api_keys, rules_text')
       .eq('id', projectId)
       .single()
 
@@ -67,8 +66,8 @@ export async function POST(request: NextRequest) {
       console.log('Chunk search failed, continuing without:', e)
     }
 
-    // Create system prompt with context
-    const systemPrompt = createSystemPrompt(context, relevantChunks, optimizedContext)
+    // Create system prompt with context and project rules
+    const systemPrompt = createSystemPrompt(context, relevantChunks, optimizedContext, project?.rules_text)
 
     // Build conversation messages
     const messages = []
@@ -107,10 +106,71 @@ export async function POST(request: NextRequest) {
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-opus-4-1-20250805',
+              model: 'claude-3-5-sonnet-20241022',
               max_tokens: 4096,
               messages: messages,
               system: systemPrompt,
+              tools: [
+                {
+                  name: "analyze_content",
+                  description: "Analyse le contenu utilisateur selon les règles du projet pour déterminer où ranger",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      content: { type: "string", description: "Contenu à analyser" },
+                      intent: { type: "string", description: "Intention détectée (SQLi, XSS, Request, etc.)" },
+                      confidence: { type: "number", description: "Confiance dans la détection (0-1)" }
+                    },
+                    required: ["content", "intent"]
+                  }
+                },
+                {
+                  name: "create_memory_structure",
+                  description: "Crée dossier et/ou tableau dans Memory selon besoin détecté",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      folder_name: { type: "string", description: "Nom du dossier à créer" },
+                      table_name: { type: "string", description: "Nom du tableau à créer dans le dossier" },
+                      columns: { 
+                        type: "array", 
+                        items: { type: "string" },
+                        description: "Colonnes du tableau (ex: ['payload', 'url', 'result'])"
+                      }
+                    },
+                    required: ["folder_name", "table_name", "columns"]
+                  }
+                },
+                {
+                  name: "store_in_memory",
+                  description: "Range les données dans la structure mémoire appropriée",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      path: { type: "string", description: "Chemin cible (ex: 'Memory/Auth/SQLi Tests')" },
+                      data: { 
+                        type: "object",
+                        description: "Données à stocker (payload, url, result, etc.)"
+                      },
+                      reasoning: { type: "string", description: "Explication du choix de rangement" }
+                    },
+                    required: ["path", "data"]
+                  }
+                },
+                {
+                  name: "suggest_rule",
+                  description: "Propose une nouvelle règle basée sur un pattern détecté",
+                  input_schema: {
+                    type: "object",
+                    properties: {
+                      pattern: { type: "string", description: "Pattern détecté dans les messages" },
+                      suggested_rule: { type: "string", description: "Règle proposée en français" },
+                      confidence: { type: "number", description: "Confiance dans cette suggestion (0-1)" }
+                    },
+                    required: ["pattern", "suggested_rule"]
+                  }
+                }
+              ],
               stream: true
             })
           })
@@ -149,13 +209,54 @@ export async function POST(request: NextRequest) {
                     controller.enqueue(chunk)
                   }
 
+                  // Handle tool use (function calling)
+                  if (parsed.type === 'content_block_start' && parsed.content_block?.type === 'tool_use') {
+                    const toolUse = parsed.content_block
+                    try {
+                      const toolResult = await executeToolCall(toolUse, projectId)
+                      
+                      // Send tool execution result
+                      const toolChunk = encoder.encode(
+                        `data: ${JSON.stringify({ 
+                          type: 'tool_result', 
+                          tool_name: toolUse.name,
+                          result: toolResult 
+                        })}\n\n`
+                      )
+                      controller.enqueue(toolChunk)
+                    } catch (toolError) {
+                      console.error('Tool execution error:', toolError)
+                      const errorChunk = encoder.encode(
+                        `data: ${JSON.stringify({ 
+                          type: 'tool_error', 
+                          tool_name: toolUse.name,
+                          error: toolError.message 
+                        })}\n\n`
+                      )
+                      controller.enqueue(errorChunk)
+                    }
+                  }
+
                   // Check for Claude actions in the content
-                  const actions = extractActions(parsed.delta?.text || '')
+                  const actions = await extractActions(parsed.delta?.text || '', projectId)
                   for (const action of actions) {
-                    const chunk = encoder.encode(
-                      `data: ${JSON.stringify({ type: 'action', action })}\n\n`
-                    )
-                    controller.enqueue(chunk)
+                    if (action.type === 'memory_action') {
+                      const chunk = encoder.encode(
+                        `data: ${JSON.stringify({ type: 'action', action: action.action })}\n\n`
+                      )
+                      controller.enqueue(chunk)
+                    } else if (action.type === 'board_action') {
+                      const chunk = encoder.encode(
+                        `data: ${JSON.stringify({
+                          type: 'board_action',
+                          action: action.action,
+                          status: action.status,
+                          result: action.result,
+                          error: action.error
+                        })}\n\n`
+                      )
+                      controller.enqueue(chunk)
+                    }
                   }
                 } catch (e) {
                   console.error('Parse error:', e)
@@ -188,7 +289,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function createSystemPrompt(context: any, relevantChunks: any[], optimizedContext?: any): string {
+function createSystemPrompt(context: any, relevantChunks: any[], optimizedContext?: any, projectRules?: string): string {
   // Format memory nodes for context
   const memoryContext = context?.memory?.map((node: any) =>
     `[${node.type}] ${node.name}: ${JSON.stringify(node.content)}`
@@ -218,34 +319,35 @@ function createSystemPrompt(context: any, relevantChunks: any[], optimizedContex
       ).join('\n')}\n`
     : '';
 
-  return `You are Claude, an advanced AI assistant integrated into the BCI Tool v2.
+  return `Tu es Claude, assistant IA spécialisé en pentesting intégré dans BCI Tool v2.
 
-CORE CAPABILITIES:
-1. Analyze security vulnerabilities
-2. Access a persistent memory system with folders and documents
-3. Learn and adapt from conversations
-4. Use RAG to retrieve relevant information
+MISSION PRINCIPALE:
+Organiser automatiquement les informations de pentesting selon les règles du projet.
 
-PROJECT CONTEXT:
-- Goal: ${context?.goal || 'Security testing and analysis'}
-- Project ID: ${context?.projectId || ''}
+RÈGLES DU PROJET (applique-les systématiquement):
+${projectRules || 'Aucune règle définie. Demande à l\'utilisateur où ranger les informations.'}
 
-MEMORY SYSTEM CONTEXT:
-You have access to a hierarchical memory system with folders and documents:
-📁 Memory (root)
-  ├── 📁 Knowledge (what you've learned)
-  ├── 📁 Projects (per project/site)
-  ├── 📁 Tools (commands, scripts)
-  └── 📄 README.md
+TOOLS DISPONIBLES:
+1. analyze_content - Analyse le contenu selon les règles
+2. create_memory_structure - Crée dossiers/tableaux si nécessaire  
+3. store_in_memory - Range les données extraites
+4. suggest_rule - Propose de nouvelles règles
 
-${chunkContext ? 'RELEVANT KNOWLEDGE (from RAG):\n' + chunkContext + '\n' : ''}
-${summaryContext}
-${similarContext}
-CURRENT MEMORY STATE:
+WORKFLOW AUTOMATIQUE:
+1. Quand l'utilisateur partage des infos de test/pentest
+2. Utilise analyze_content pour déterminer l'intention
+3. Créer structure si besoin (create_memory_structure)
+4. Range les données (store_in_memory)
+5. Confirme l'action à l'utilisateur
+
+STRUCTURE MEMORY EXISTANTE:
 ${memoryContext}
 
-ACTIVE RULES:
-${rulesContext}
+CONNAISSANCES PERTINENTES (RAG):
+${chunkContext || 'Aucune connaissance similaire trouvée'}
+
+${summaryContext}
+${similarContext}
 
 MEMORY INTERACTIONS:
 - You have full context of the memory system
@@ -258,30 +360,59 @@ When the user explicitly asks to modify memory (using words like "ajoute", "enre
 
 <!--MEMORY_ACTION
 {
-  "operation": "create|update|delete|update-section",
-  "data": {
-    "type": "folder|document",
-    "name": "Name",
-    "content": "...",
-    "parent_id": "uuid (optional)",
-    "id": "uuid (for update/delete)",
-    "section_id": "section-name (for partial updates)"
-  }
+"operation": "create|update|delete|update-section",
+"data": {
+  "type": "folder|document",
+  "name": "Name",
+  "content": "...",
+  "parent_id": "uuid (optional)",
+  "id": "uuid (for update/delete)",
+  "section_id": "section-name (for partial updates)"
+}
 }
 -->
 
+BOARD INTERACTIONS:
+- You have accès au board unifié avec sections 'memory' et 'rules'
+- Référence et utilise les rows du board naturellement dans les conversations
+- Quand l'utilisateur EXPLICITEMENT demande d'ajouter, modifier ou supprimer une row sur le board (mots comme "ajoute une row", "modifie la row", "supprime la row" pour memory ou rules), réponds avec un BOARD_ACTION
+- DO NOT génère automatiquement des board actions sauf si explicitement demandé
+- Target: "memory" pour les rows mémoire, "rules" pour les règles
+- Utilise les données du board pour contextualiser tes réponses
+
+EXPLICIT BOARD COMMANDS (Only use when user explicitly requests):
+When the user explicitly asks to modify the board (using words like "ajoute une row", "modifie", "supprime" followed by "dans memory" or "dans rules"), respond with:
+
+<!--BOARD_ACTION
+{
+"operation": "add_row|update_row|delete_row",
+"target": "memory|rules",
+"data": {
+  "name": "Nom de la row",
+  "content": "Contenu...",
+  "id": "uuid (for update/delete)",
+  "instructions": "Instructions optionnelles",
+  "trigger": "Trigger pour rules (optionnel)"
+}
+}
+-->
+
+BOARD MANIPULATION:
+Tu peux créer et modifier la structure du board. Utilise les commandes explicites dans tes réponses pour créer dossiers, tableaux, rows. Par exemple, si l'utilisateur demande une structure pour pentesting, suggère 'Crée dossier Reconnaissance', 'Ajoute row Port Scanning dans Reconnaissance'. Propose des arborescences adaptées au pentesting: Reconnaissance (URLs, Subdomains), Auth (Login, Sessions), Business Logic, etc.
+
 RESPONSE GUIDELINES:
 1. Analyze requests naturally
-2. Use memory context to provide informed responses
-3. Only perform memory actions when explicitly requested by the user
-4. Your memory persists between conversations
+2. Use memory and board context to provide informed responses
+3. Only perform memory or board actions when explicitly requested by the user
+4. Your memory and board persist between conversations
 5. Use Markdown format for documents when creating them
+6. For board actions, provide minimal natural response after the action comment, e.g., "J'ai ajouté la row au board."
 
 IMPORTANT:
-- Never automatically save information unless explicitly asked
-- Use existing memory to enhance your responses
+- Never automatically save information or modify board unless explicitly asked
+- Use existing memory and board to enhance your responses
 - The RAG system helps you recall relevant information
-- Wait for explicit user instructions before modifying memory
+- Wait for explicit user instructions before modifying memory or board
 
 When analyzing security:
 - Look for injection points
@@ -290,22 +421,307 @@ When analyzing security:
 - Test input validation
 - Detect logic flaws
 
-Remember: You are helping with authorized security testing only. Use your memory context intelligently but only modify it when explicitly instructed.`
+Remember: You are helping with authorized security testing only. Use your memory and board context intelligently but only modify them when explicitly instructed.`
 }
 
-function extractActions(text: string): any[] {
+async function extractActions(text: string, projectId: string): Promise<any[]> {
   const actions = []
-  const actionRegex = /<!--MEMORY_ACTION\s*([\s\S]*?)\s*-->/g
+  const memoryRegex = /<!--MEMORY_ACTION\s*([\s\S]*?)\s*-->/g
+  const boardRegex = /<!--BOARD_ACTION\s*([\s\S]*?)\s*-->/g
   let match
 
-  while ((match = actionRegex.exec(text)) !== null) {
+  // Parse MEMORY_ACTION (unchanged)
+  while ((match = memoryRegex.exec(text)) !== null) {
     try {
       const actionData = JSON.parse(match[1])
-      actions.push(actionData)
+      actions.push({ type: 'memory_action', action: actionData })
     } catch (e) {
-      console.error('Invalid action JSON:', e)
+      console.error('Invalid MEMORY_ACTION JSON:', e)
+    }
+  }
+
+  // Parse BOARD_ACTION
+  while ((match = boardRegex.exec(text)) !== null) {
+    try {
+      const actionData = JSON.parse(match[1])
+      const { operation, target, data } = actionData
+
+      if (!['memory', 'rules'].includes(target)) {
+        console.error('Invalid target for BOARD_ACTION:', target)
+        actions.push({ type: 'board_action', action: actionData, status: 'error', error: 'Invalid target' })
+        continue
+      }
+
+      if (!['add_row', 'update_row', 'delete_row'].includes(operation)) {
+        console.error('Invalid operation for BOARD_ACTION:', operation)
+        actions.push({ type: 'board_action', action: actionData, status: 'error', error: 'Invalid operation' })
+        continue
+      }
+
+      let result = null
+      let status = 'error'
+      let errorMsg = ''
+
+      try {
+        if (operation === 'add_row') {
+          // Use /api/board/create
+          const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/board/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              section: target,
+              ...data  // name, content, etc.
+            })
+          })
+          result = await response.json()
+          status = response.ok ? 'success' : 'error'
+          if (!response.ok) errorMsg = result.error || 'Failed to add row'
+        } else if (operation === 'update_row') {
+          // Use /api/board/update (assume it handles updates)
+          const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/board/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              section: target,
+              id: data.id,
+              ...data  // other fields to update
+            })
+          })
+          result = await response.json()
+          status = response.ok ? 'success' : 'error'
+          if (!response.ok) errorMsg = result.error || 'Failed to update row'
+        } else if (operation === 'delete_row') {
+          // Use /api/board/update with delete flag (assume supported)
+          const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/board/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              section: target,
+              id: data.id,
+              delete: true
+            })
+          })
+          result = await response.json()
+          status = response.ok ? 'success' : 'error'
+          if (!response.ok) errorMsg = result.error || 'Failed to delete row'
+        }
+
+        actions.push({
+          type: 'board_action',
+          action: actionData,
+          status,
+          result,
+          error: errorMsg
+        })
+      } catch (e) {
+        console.error('BOARD_ACTION execution error:', e)
+        actions.push({
+          type: 'board_action',
+          action: actionData,
+          status: 'error',
+          error: e.message
+        })
+      }
+    } catch (e) {
+      console.error('Invalid BOARD_ACTION JSON:', e)
+      actions.push({ type: 'board_action', action: { raw: match[1] }, status: 'error', error: 'Invalid JSON' })
     }
   }
 
   return actions
+}
+
+// Fonction pour exécuter les tool calls de Claude
+async function executeToolCall(toolUse: any, projectId: string) {
+  console.log('🔧 Executing tool:', toolUse.name, 'with input:', toolUse.input)
+  
+  switch (toolUse.name) {
+    case 'analyze_content':
+      return {
+        success: true,
+        analysis: {
+          content: toolUse.input.content,
+          intent: toolUse.input.intent,
+          confidence: toolUse.input.confidence || 0.8
+        }
+      }
+
+    case 'create_memory_structure':
+      try {
+        const { folder_name, table_name, columns } = toolUse.input
+        
+        // 1. Créer le dossier
+        const folderResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/memory/nodes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            type: 'folder',
+            name: folder_name,
+            section: 'memory',
+            parent_id: null
+          })
+        })
+        
+        if (!folderResponse.ok) {
+          throw new Error('Failed to create folder')
+        }
+        
+        const { node: folder } = await folderResponse.json()
+        
+        // 2. Créer le tableau dans le dossier
+        const tableResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/memory/nodes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            type: 'document',
+            name: table_name,
+            section: 'memory',
+            parent_id: folder.id,
+            metadata: {
+              columns: columns.map((col: string, index: number) => ({
+                name: col,
+                type: 'text',
+                order: index
+              }))
+            }
+          })
+        })
+        
+        if (!tableResponse.ok) {
+          throw new Error('Failed to create table')
+        }
+        
+        const { node: table } = await tableResponse.json()
+        
+        return {
+          success: true,
+          folder_id: folder.id,
+          table_id: table.id,
+          message: `Structure créée : ${folder_name}/${table_name}`
+        }
+      } catch (error) {
+        console.error('Error creating structure:', error)
+        return {
+          success: false,
+          error: error.message
+        }
+      }
+
+    case 'store_in_memory':
+      try {
+        const { path, data, reasoning } = toolUse.input
+        
+        // Parser le path pour trouver le tableau cible
+        const pathParts = path.split('/')
+        if (pathParts.length < 3) {
+          throw new Error('Path invalide. Format attendu: Memory/Dossier/Tableau')
+        }
+        
+        const folderName = pathParts[1]
+        const tableName = pathParts[2]
+        
+        // Trouver le tableau par nom (simplification)
+        const nodesResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/memory/nodes?projectId=${projectId}&section=memory`)
+        if (!nodesResponse.ok) {
+          throw new Error('Failed to load memory nodes')
+        }
+        
+        const { nodes } = await nodesResponse.json()
+        
+        // Chercher le tableau cible
+        let targetTable = null
+        for (const node of nodes) {
+          if (node.type === 'folder' && node.name === folderName && node.children) {
+            targetTable = node.children.find((child: any) => 
+              child.type === 'document' && child.name === tableName
+            )
+            if (targetTable) break
+          }
+        }
+        
+        if (!targetTable) {
+          throw new Error(`Tableau non trouvé : ${path}`)
+        }
+        
+        // Ajouter la row
+        const rowResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/unified/data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodeId: targetTable.id,
+            data: {
+              ...data,
+              created_at: new Date().toISOString(),
+              reasoning: reasoning || ''
+            }
+          })
+        })
+        
+        if (!rowResponse.ok) {
+          throw new Error('Failed to store data')
+        }
+        
+        const result = await rowResponse.json()
+        
+        return {
+          success: true,
+          row_id: result.row?.id,
+          message: `Données rangées dans ${path}`,
+          reasoning
+        }
+      } catch (error) {
+        console.error('Error storing in memory:', error)
+        return {
+          success: false,
+          error: error.message
+        }
+      }
+
+    case 'suggest_rule':
+      try {
+        const { pattern, suggested_rule, confidence } = toolUse.input
+        
+        // Enregistrer la suggestion
+        const supabase = createServerClient()
+        const { data, error } = await supabase
+          .from('learned_patterns')
+          .insert({
+            project_id: projectId,
+            pattern_text: pattern,
+            target_location: 'suggested',
+            confidence: confidence || 0.5
+          })
+          .select()
+          .single()
+        
+        if (error) {
+          throw new Error('Failed to save pattern suggestion')
+        }
+        
+        return {
+          success: true,
+          suggestion: suggested_rule,
+          pattern,
+          confidence,
+          message: 'Suggestion de règle enregistrée'
+        }
+      } catch (error) {
+        console.error('Error suggesting rule:', error)
+        return {
+          success: false,
+          error: error.message
+        }
+      }
+
+    default:
+      return {
+        success: false,
+        error: `Tool inconnu : ${toolUse.name}`
+      }
+  }
 }
