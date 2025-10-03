@@ -577,29 +577,56 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }, [])
 
-  // Fonction pour rangement automatique du contenu (simplifiée)
+  // Calculer score de confiance pour auto-rangement
+  const calculateConfidence = useCallback((content: string, userMessage: string): number => {
+    let score = 0
+    const combinedText = (content + ' ' + userMessage).toLowerCase()
+
+    // Indicateurs forts : structure markdown pentest
+    if (content.includes('## Payload') && content.includes('## Impact')) score += 0.5
+    if (content.includes('## Exploitation')) score += 0.3
+    if (content.match(/Efficacité.*?:\s*\d+%/i)) score += 0.2
+    if (content.includes('```http') || content.includes('```bash')) score += 0.15
+
+    // Indicateurs contextuels
+    const keywords = ['idor', 'sql injection', 'xss', 'payload', 'exploitation', 'vulnérabilité', 'business logic', 'race condition']
+    const keywordCount = keywords.filter(k => combinedText.includes(k)).length
+    score += Math.min(0.3, keywordCount * 0.05)
+
+    // Longueur appropriée
+    if (content.length > 200 && content.length < 5000) score += 0.1
+
+    // Structure de test (endpoint, résultat, etc.)
+    if (content.match(/endpoint.*?:/i) && content.match(/résultat.*?:/i)) score += 0.15
+
+    return Math.min(1.0, score)
+  }, [])
+
+  // Fonction intelligente pour rangement automatique
   const autoOrganizeContent = useCallback(async (content: string, userMessage: string) => {
     try {
-      console.log('🤖 Rangement automatique:', content.substring(0, 100) + '...')
+      // Calculer confiance
+      const confidence = calculateConfidence(content, userMessage)
+      console.log('🤖 Score de confiance:', (confidence * 100).toFixed(0) + '%')
 
-      // Détection simple basée sur mots-clés
-      const targetFolder = detectTargetFolder(userMessage)
+      // Détection dossier cible (améliorée)
+      const targetFolder = detectTargetFolder(content + ' ' + userMessage)
 
-      // Si dossier cible identifié
-      if (targetFolder !== '*') {
-        const targetSection = 'memory'
+      // Décision basée sur confiance
+      if (confidence > 0.85 && targetFolder !== '*') {
+        // HAUTE CONFIANCE → Auto-rangement direct
+        console.log('✅ Haute confiance → Auto-rangement')
 
-        // Créer un document dans memory_nodes
         const memoryResponse = await fetch('/api/memory/nodes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             projectId,
-            parentId: null, // Root level
+            parentId: null,
             name: `Auto: ${targetFolder} (${new Date().toLocaleDateString('fr-FR')})`,
             type: 'document',
             content: content,
-            section: targetSection,
+            section: 'memory',
             category: targetFolder
           })
         })
@@ -607,14 +634,14 @@ export default function ChatStream({ projectId, conversationId: propConversation
         if (memoryResponse.ok) {
           const { success, node } = await memoryResponse.json()
           if (success && node) {
-            console.log('✅ Document créé dans memory:', node.name, 'id:', node.id)
+            console.log('✅ Document créé:', node.name)
 
-            // Toast personnalisé avec bouton pour ouvrir BCI
             const toastContent = (
               <div className="flex items-center gap-3">
                 <div className="flex-1">
                   <div className="font-medium text-sm">📁 Contenu rangé en mémoire</div>
                   <div className="text-xs text-gray-600 mt-1">{node.name}</div>
+                  <div className="text-xs text-green-600 mt-0.5">Confiance: {(confidence * 100).toFixed(0)}%</div>
                 </div>
                 <button
                   onClick={() => {
@@ -627,24 +654,23 @@ export default function ChatStream({ projectId, conversationId: propConversation
               </div>
             )
             toast.success(toastContent, { duration: 6000 })
-
-            // Sync le board si ouvert
-            window.dispatchEvent(new CustomEvent('board-reload', { detail: { projectId, section: targetSection } }))
+            window.dispatchEvent(new CustomEvent('board-reload', { detail: { projectId, section: 'memory' } }))
             return true
           }
-        } else {
-          const errorText = await memoryResponse.text()
-          console.error('❌ Échec création document:', errorText)
         }
+      } else if (confidence > 0.5 && targetFolder !== '*') {
+        // CONFIANCE MOYENNE → Log pour future modal validation
+        console.log('⚠️ Confiance moyenne (' + (confidence * 100).toFixed(0) + '%) → Validation future')
+        // TODO: Implémenter modal validation
       } else {
-        console.log('ℹ️ Pas de rangement automatique pour ce contenu')
+        console.log('ℹ️ Confiance faible ou pas de dossier cible → Pas de rangement')
       }
     } catch (error) {
       console.error('❌ Erreur rangement automatique:', error)
     }
 
     return false
-  }, [projectId])
+  }, [projectId, calculateConfidence])
 
   const streamClaudeResponse = async (userMessage: string) => {
     console.log('Starting Claude response for:', userMessage)
@@ -1160,54 +1186,57 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
-  // Détecter le dossier cible dans le message utilisateur - VERSION PENTESTING OPTIMISÉE
+  // Détecter le dossier cible - VERSION AMÉLIORÉE avec parsing markdown
   const detectTargetFolder = (message: string): string => {
     const lowerMessage = message.toLowerCase()
-    
-    // Détection Business Logic (priorité haute)
-    if (lowerMessage.includes('business logic') || lowerMessage.includes('logique métier') || 
-        lowerMessage.includes('prix') || lowerMessage.includes('payment') || lowerMessage.includes('paiement')) {
-      return 'business-logic'
+
+    // Détecter depuis structure markdown (priorité maximale)
+    const titleMatch = message.match(/# (.+?) -/)
+    if (titleMatch) {
+      const title = titleMatch[1].trim()
+      return title.replace(/\s+/g, '_')
     }
-    
-    // Détection Authentication/Authorization
-    if (lowerMessage.includes('auth') || lowerMessage.includes('login') || lowerMessage.includes('connexion') ||
-        lowerMessage.includes('session') || lowerMessage.includes('token') || lowerMessage.includes('privilege')) {
-      return 'authentication'
+
+    // IDOR (patterns larges)
+    if (lowerMessage.match(/idor|insecure direct object|unauthorized access|object reference/)) {
+      return 'IDOR'
     }
-    
-    // Détection API/Requests
-    if (lowerMessage.includes('api') || lowerMessage.includes('requête') || lowerMessage.includes('post') || 
-        lowerMessage.includes('get') || lowerMessage.includes('endpoint') || lowerMessage.includes('curl')) {
-      return 'api-requests'
+
+    // SQL Injection
+    if (lowerMessage.match(/sql injection|sqli|union select|or 1=1/)) {
+      return 'SQL_Injection'
     }
-    
-    // Détection Injection/XSS (techniques classiques)
-    if (lowerMessage.includes('xss') || lowerMessage.includes('injection') || lowerMessage.includes('sqli') ||
-        lowerMessage.includes('payload') || lowerMessage.includes('script')) {
-      return 'injection-attacks'
+
+    // XSS
+    if (lowerMessage.match(/xss|cross.site.script|alert\(|<script>/)) {
+      return 'XSS'
     }
-    
-    // Détection Failles trouvées
-    if (lowerMessage.includes('faille trouvée') || lowerMessage.includes('exploit') || lowerMessage.includes('vulnérabilité')) {
-      return 'success'
+
+    // Business Logic
+    if (lowerMessage.match(/business logic|negative price|race condition|prix négatif/)) {
+      return 'Business_Logic'
     }
-    
-    // Détection Échecs
-    if (lowerMessage.includes('échec') || lowerMessage.includes('pas marché') || lowerMessage.includes('failed')) {
-      return 'failed'
+
+    // Authentication
+    if (lowerMessage.match(/authentication|auth bypass|jwt|session|token/)) {
+      return 'Authentication'
     }
-    
-    // Détection Tests/Fuzzing
-    if (lowerMessage.includes('test') || lowerMessage.includes('fuzz') || lowerMessage.includes('scan')) {
-      return 'tests'
+
+    // API Security
+    if (lowerMessage.match(/api security|api key|rate limit|cors/)) {
+      return 'API_Security'
     }
-    
-    // Détection Analyse/Rapport
-    if (lowerMessage.includes('analyse') || lowerMessage.includes('rapport') || lowerMessage.includes('résultat')) {
-      return 'analysis'
+
+    // Détection générique si structure pentest présente
+    if (message.includes('## Payload') && message.includes('## Impact')) {
+      // Parser depuis type si disponible
+      const typeMatch = message.match(/Type.*?:\s*(.+)/i)
+      if (typeMatch) {
+        return typeMatch[1].trim().replace(/\s+/g, '_')
+      }
+      return 'Pentest_Result'
     }
-    
+
     // Détection Planning/Stratégie
     if (lowerMessage.includes('plan') || lowerMessage.includes('stratégie') || lowerMessage.includes('méthodologie')) {
       return 'planning'
