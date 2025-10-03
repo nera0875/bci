@@ -8,17 +8,26 @@ import ReactMarkdown from 'react-markdown'
 import StreamingText from './StreamingText'
 import { MemoryActionButtons } from './MemoryActionButtons'
 import MemoryActionDisplay from './MemoryActionDisplay'
+import StorageNotification from './StorageNotification'
 import { useAppStore } from '@/lib/store/app-store'
 import toast from 'react-hot-toast'
 // import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
 import { ConversationManager } from '@/lib/services/conversation'
-import { formatRulesForAI } from '@/lib/rules/simpleRules'
-// Prompts intégrés directement (pentestingPrompts supprimé)
-const buildContextualPrompt = (context: string) => `Contexte pentesting: ${context}`
-const shouldAutoOrganize = () => false
-const generateTestSuggestions = () => []
-import { IntelligentTargeting } from '@/lib/services/intelligentTargeting'
 import { generateUUID } from '@/lib/utils/uuid'
+import { OptimizationEngine } from '@/lib/services/optimizationEngine'
+
+// Helpers simplifiés
+const buildContextualPrompt = (message: string, targetFolder: string, rulesContext: string, memoryContext: any[], projectGoal: string) => {
+  let prompt = message
+  if (projectGoal) prompt += `\n\nObjectif du projet: ${projectGoal}`
+  if (memoryContext.length > 0) prompt += `\n\nContexte mémoire: ${memoryContext.map(m => m.name).join(', ')}`
+  if (rulesContext) prompt += `\n\n${rulesContext}`
+  return prompt
+}
+
+const getPromptTemplate = (folder: string) => ({
+  systemPrompt: `Vous êtes un assistant pentesting expert. Focus sur: ${folder}`
+})
 // Memory services removed - Using Supabase native system only
 import '@/app/chat.css'
 
@@ -32,12 +41,12 @@ const StreamingMessageWrapper = React.memo(({
   content: string
   isComplete: boolean
 }) => (
-  <div className="flex gap-4 justify-start message-streaming chat-message" data-streaming="true">
-    <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
-      <Bot className="w-4 h-4 text-background" />
-    </div>
-    <div className="max-w-[80%] px-4 py-3 rounded-xl bg-muted text-foreground streaming-text-container">
-      <div className="message-content">
+  <div className="w-full bg-[#F7F7F8]" data-streaming="true">
+    <div className="max-w-4xl mx-auto px-4 py-6 flex gap-4">
+      <div className="w-8 h-8 bg-[#202123] rounded-full flex items-center justify-center flex-shrink-0">
+        <Bot className="w-5 h-5 text-white" />
+      </div>
+      <div className="flex-1 min-w-0 text-[#202123] prose prose-sm max-w-none [&>*]:text-[#202123] [&_p]:leading-7">
         <StreamingText
           content={content}
           isComplete={isComplete}
@@ -67,99 +76,101 @@ const MessageComponent = React.memo(({
   onRejectAction?: () => void
 }) => {
   const isSystem = message.role === 'system'
-  
+
   return (
     <div
-      className={`flex gap-4 message-enter chat-message ${
-        isSystem ? 'justify-start' : message.role === 'user' ? 'justify-end' : 'justify-start'
-      }`}
+      className={`group w-full ${
+        message.role === 'assistant' ? 'bg-[#F7F7F8]' : ''
+      } ${message.role === 'user' ? 'bg-white' : ''}`}
     >
-      {!isSystem && message.role === 'assistant' && (
-        <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center flex-shrink-0">
-          <Bot className="w-4 h-4 text-background" />
-        </div>
-      )}
-      
-      {isSystem && <SystemIcon />}
+      <div className="max-w-4xl mx-auto px-4 py-6 flex gap-4">
+        {/* Avatar */}
+        {message.role === 'assistant' && (
+          <div className="w-8 h-8 bg-[#202123] rounded-full flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5 text-white" />
+          </div>
+        )}
 
-      <div
-        className={`
-          max-w-[80%] px-4 py-3 rounded-xl
-          ${isSystem
-            ? 'bg-blue-50 text-blue-800 border border-blue-200'
-            : message.role === 'user'
-            ? 'bg-foreground text-background'
-            : 'bg-muted text-foreground'
-          }
-        `}
-      >
-        {!isSystem && message.role === 'assistant' ? (
-          <div className="prose prose-sm max-w-none">
-            <ReactMarkdown
-              components={{
-                // Custom renderer for MEMORY_ACTION blocks
-                code: ({ className, children, ...props }) => {
-                  const match = /language-(\w+)/.exec(className || '')
-                  const content = String(children).replace(/\n$/, '')
-                  
-                  // Check if this is a MEMORY_ACTION block
-                  if (content.includes('MEMORY_ACTION')) {
-                    try {
-                      const actionMatch = content.match(/<!--MEMORY_ACTION\s*([\s\S]*?)-->/)
-                      if (actionMatch) {
-                        const action = JSON.parse(actionMatch[1])
-                        return <MemoryActionDisplay key={Math.random()} action={action} />
+        {message.role === 'user' && (
+          <div className="w-8 h-8 bg-[#5436DA] rounded-full flex items-center justify-center flex-shrink-0">
+            <User className="w-5 h-5 text-white" />
+          </div>
+        )}
+
+        {isSystem && <SystemIcon />}
+
+        <div className="flex-1 min-w-0">
+          {!isSystem && message.role === 'assistant' ? (
+            <div className="prose prose-sm max-w-none text-[#202123] [&>*]:text-[#202123] [&_p]:leading-7 [&_p]:mb-4 [&_pre]:bg-[#000000] [&_pre]:text-[#FFFFFF] [&_pre]:p-4 [&_pre]:rounded-lg [&_code]:text-sm [&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg">
+              <ReactMarkdown
+                components={{
+                  // Custom renderer for paragraphs - prevent nesting issues
+                  p: ({ children }) => (
+                    <div className="mb-4 leading-7">{children}</div>
+                  ),
+                  // Custom renderer for MEMORY_ACTION blocks
+                  code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || '')
+                    const content = String(children).replace(/\n$/, '')
+
+                    // Check if this is a MEMORY_ACTION block
+                    if (content.includes('MEMORY_ACTION')) {
+                      try {
+                        const actionMatch = content.match(/<!--MEMORY_ACTION\s*([\s\S]*?)-->/)
+                        if (actionMatch) {
+                          const action = JSON.parse(actionMatch[1])
+                          return <MemoryActionDisplay key={Math.random()} action={action} />
+                        }
+                      } catch (e) {
+                        // Fallback to regular code block
                       }
-                    } catch (e) {
-                      // Fallback to regular code block
                     }
-                  }
-                  
-                  if (match) {
+
+                    // Inline code
+                    if (!match) {
+                      return (
+                        <code className="bg-[#000000] text-[#FFFFFF] px-1 py-0.5 rounded text-sm" {...props}>
+                          {children}
+                        </code>
+                      )
+                    }
+
+                    // Code block
                     return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
+                      <pre className="bg-[#000000] text-[#FFFFFF] p-4 rounded-lg overflow-x-auto my-4">
+                        <code className={className}>{children}</code>
+                      </pre>
                     )
                   }
-                  return (
-                    <pre className={className} {...props}>
-                      <code>{children}</code>
-                    </pre>
-                  )
-                }
-              }}
-            >
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <div className="text-[#202123] leading-7">
               {message.content}
-            </ReactMarkdown>
-          </div>
-        ) : (
-          <div className="whitespace-pre-wrap">
-            {message.content}
-            {message.role === 'user' ? null : (
-              <div className="text-xs opacity-70 mt-2">
-                {new Date(message.created_at || Date.now()).toLocaleTimeString()}
+              {message.role === 'user' ? null : (
+                <div className="text-xs text-[#6E6E80] mt-2">
+                  {new Date(message.created_at || Date.now()).toLocaleTimeString()}
               </div>
             )}
           </div>
         )}
 
-      {/* Afficher les boutons d'action si c'est le dernier message assistant avec une action */}
-      {message.role === 'assistant' && pendingAction && (
-        <MemoryActionButtons
-          action={pendingAction}
-          onConfirm={onConfirmAction!}
-          onReject={onRejectAction!}
-          confidence={pendingAction.confidence}
-        />
-      )}
-      </div>
-
-      {!isSystem && message.role === 'user' && (
-        <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
-          <User className="w-4 h-4 text-foreground" />
+          {/* Afficher les boutons d'action si c'est le dernier message assistant avec une action */}
+          {message.role === 'assistant' && pendingAction && (
+            <div className="mt-4">
+              <MemoryActionButtons
+                action={pendingAction}
+                onConfirm={onConfirmAction!}
+                onReject={onRejectAction!}
+                confidence={pendingAction.confidence}
+              />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 })
@@ -169,6 +180,7 @@ interface ChatStreamProps {
   projectId: string
   conversationId?: string | null
   onConversationCreated?: (conversationId: string) => void
+  onStreamingChange?: (isStreaming: boolean, stopFn?: () => void) => void
 }
 
 interface BoardAction {
@@ -181,7 +193,7 @@ interface BoardAction {
   userMessage?: string
 }
 
-export default function ChatStream({ projectId, conversationId: propConversationId, onConversationCreated }: ChatStreamProps) {
+export default function ChatStream({ projectId, conversationId: propConversationId, onConversationCreated, onStreamingChange }: ChatStreamProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
@@ -189,14 +201,44 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const [pendingMemoryAction, setPendingMemoryAction] = useState<{ operation: string; data: any; confidence?: number } | null>(null)
   const [pendingActions, setPendingActions] = useState<{ operation: string; data: any; confidence?: number }[]>([])
   const [lastUserMessage, setLastUserMessage] = useState<string>('')
+  const [storageNotifications, setStorageNotifications] = useState<Array<{
+    icon: string
+    message: string
+    path: string
+    documentId?: string
+    metadata?: any
+  }>>([])
   const lastProcessedMessageId = useRef<string | null>(null)
   const bufferRef = useRef<string>('')
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastMessageCountRef = useRef<number>(0)
   const conversationManagerRef = useRef<ConversationManager | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(propConversationId || null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const onStreamingChangeRef = useRef(onStreamingChange)
+
+  // Mettre à jour la ref quand la callback change
+  useEffect(() => {
+    onStreamingChangeRef.current = onStreamingChange
+  }, [onStreamingChange])
 
   const { currentProject } = useAppStore()
+
+  // Fonction pour stopper le streaming
+  const stopStreaming = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setIsStreaming(false)
+    setStreamingContent('')
+    setIsStreamComplete(true)
+  }, [])
+
+  // Notifier le parent quand le streaming change
+  useEffect(() => {
+    onStreamingChangeRef.current?.(isStreaming, isStreaming ? stopStreaming : undefined)
+  }, [isStreaming, stopStreaming])
 
   const addSystemMessage = async (content: string) => {
     const systemMessage: ChatMessage = {
@@ -503,21 +545,17 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }, [])
 
-  // Fonction pour rangement automatique du contenu
+  // Fonction pour rangement automatique du contenu (simplifiée)
   const autoOrganizeContent = useCallback(async (content: string, userMessage: string) => {
     try {
-      console.log('🤖 Détection automatique de rangement pour:', content.substring(0, 100) + '...')
+      console.log('🤖 Rangement automatique:', content.substring(0, 100) + '...')
       
-      // Utiliser IntelligentTargeting pour analyser
-      const targeting = new IntelligentTargeting(projectId)
-      const analysis = await targeting.analyzeTarget(content)
+      // Détection simple basée sur mots-clés
+      const targetFolder = detectTargetFolder(userMessage)
       
-      console.log('🎯 Analyse targeting:', analysis.path)
-      
-      // Si confiance élevée et dossier cible identifié
-      if (analysis.confidence > 0.7 && analysis.path.folder) {
-        const targetFolder = analysis.path.folder
-        const targetSection = analysis.path.section || 'memory'
+      // Si dossier cible identifié
+      if (targetFolder !== '*') {
+        const targetSection = 'memory'
         
         // Créer un row pour le board
         const newRow = {
@@ -530,8 +568,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
           metadata: {
             auto_generated: true,
             source: 'chat_auto_org',
-            confidence: analysis.confidence,
-            targeting: analysis.path
+            targeting: { folder: targetFolder, section: targetSection }
           }
         }
         
@@ -561,7 +598,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
           console.error('❌ Échec rangement automatique:', await boardResponse.text())
         }
       } else {
-        console.log('ℹ️ Confiance trop faible pour rangement auto:', analysis.confidence)
+        console.log('ℹ️ Pas de rangement automatique pour ce contenu')
       }
     } catch (error) {
       console.error('❌ Erreur rangement automatique:', error)
@@ -668,6 +705,42 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
       console.log('🚀 Using contextual prompt for:', targetFolder)
 
+      // 🧠 AUTO-REINFORCEMENT: Analyze user message for auto-storage
+      try {
+        const analyzeResponse = await fetch('/api/chat/analyze-and-act', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            userMessage,
+            confidence: 0
+          })
+        })
+
+        if (analyzeResponse.ok) {
+          const analysisResult = await analyzeResponse.json()
+          console.log('🧠 Analysis result:', analysisResult)
+
+          // Show notification based on action
+          if (analysisResult.action === 'auto_stored') {
+            setStorageNotifications(prev => [...prev, {
+              icon: '✅',
+              message: analysisResult.message,
+              path: analysisResult.suggestedPath,
+              documentId: analysisResult.nodeId,
+              metadata: analysisResult
+            }])
+          } else if (analysisResult.action === 'needs_confirmation') {
+            toast(analysisResult.message, {
+              duration: 5000,
+              icon: '⚠️'
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Analysis failed:', error)
+      }
+
       // Combine recent messages from ConversationManager with similar messages
       const conversationHistory = [...convContext.recentMessages, ...convContext.similarMessages]
 
@@ -688,19 +761,14 @@ export default function ChatStream({ projectId, conversationId: propConversation
         })
       }
 
-      // Ajouter targeting context si disponible
-      if (convContext.targetingContext) {
-        const targetingInfo = new IntelligentTargeting(projectId).formatTargetingForAI(convContext.targetingContext)
-        messages.push({
-          role: 'system' as const,
-          content: `CONTEXTE CIBLAGE INTELLIGENT:\n${targetingInfo}\n\nUtilisez ce ciblage pour organiser le contenu dans le board unifié approprié.`
-        })
-      }
 
       messages.push({
         role: 'user',
         content: contextualPrompt
       })
+
+      // Créer un nouvel AbortController pour cette requête
+      abortControllerRef.current = new AbortController()
 
       // Use the new chat/stream endpoint with Mem0 integration
       const response = await fetch('/api/chat/stream', {
@@ -715,7 +783,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
           useMemoryContext: true,      // Enable Mem0 memory injection
           saveMemory: true,            // Auto-save responses to Mem0
           enableAutoOrganization: true // Flag pour activer auto-org côté serveur si implémenté
-        })
+        }),
+        signal: abortControllerRef.current.signal
       })
 
       console.log('Claude API response:', response.status, response.ok)
@@ -762,6 +831,16 @@ export default function ChatStream({ projectId, conversationId: propConversation
                   bufferTimeoutRef.current = setTimeout(() => {
                     setStreamingContent(bufferRef.current)
                   }, 10) // Very short delay for buffering
+                } else if (data.type === 'storage_notification') {
+                  // Afficher notification de rangement
+                  console.log('📦 Storage notification:', data.message)
+                  setStorageNotifications(prev => [...prev, {
+                    icon: data.icon,
+                    message: data.message,
+                    path: data.path,
+                    documentId: data.documentId,
+                    metadata: data.metadata
+                  }])
                 } else if (data.type === 'action') {
                   // Handle Claude actions (memory CRUD, etc.)
                   await handleClaudeAction(data.action)
@@ -769,7 +848,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
                   // Nouvelle action pour board depuis le stream
                   console.log('🛡️ Board action from stream:', data.action)
                   // Ex: data.action = { type: 'create_row', section: 'rules', data: {...} }
-                  await handleBoardAction(data.action)
+                  // await handleBoardAction(data.action)
+                  console.log('Board action received:', data.action)
                 }
               } catch (e) {
                 // Skip invalid JSON
@@ -833,6 +913,47 @@ export default function ChatStream({ projectId, conversationId: propConversation
             console.log('✅ Auto-organization completed')
           }
 
+          // Analyse de patterns pour suggestions d'optimisation
+          try {
+            const optimizationEngine = new OptimizationEngine(projectId)
+
+            // Récupérer l'historique de conversation
+            const conversationHistory = messages.map((msg: any) => ({
+              role: msg.role,
+              content: msg.content || '',
+              timestamp: msg.created_at || new Date().toISOString()
+            }))
+
+            // Ajouter le dernier échange
+            conversationHistory.push(
+              { role: 'user' as const, content: userMessage, timestamp: new Date().toISOString() },
+              { role: 'assistant' as const, content: fullContent, timestamp: new Date().toISOString() }
+            )
+
+            // Analyser et générer des suggestions
+            const suggestions = await optimizationEngine.analyzeConversation(conversationHistory)
+
+            // Queue les suggestions pour review
+            for (const suggestion of suggestions) {
+              await optimizationEngine.queueSuggestion(suggestion)
+            }
+
+            if (suggestions.length > 0) {
+              console.log(`🎯 ${suggestions.length} nouvelles suggestions d'optimisation générées`)
+
+              // Notification si suggestions importantes
+              const highConfidenceSuggestions = suggestions.filter(s => s.confidence > 0.9)
+              if (highConfidenceSuggestions.length > 0) {
+                toast.success(`${highConfidenceSuggestions.length} suggestions d'optimisation disponibles`, {
+                  duration: 5000,
+                  icon: '✨'
+                })
+              }
+            }
+          } catch (error) {
+            console.error('Erreur analyse patterns:', error)
+          }
+
           // V3 disabled - causes CORS errors
           // Mem0 V4 with server-side routes is now the primary system
 
@@ -884,7 +1005,13 @@ export default function ChatStream({ projectId, conversationId: propConversation
           setStreamingContent('')
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Ignorer l'erreur AbortError (arrêt volontaire du streaming)
+      if (error.name === 'AbortError') {
+        console.log('Streaming stopped by user')
+        return
+      }
+
       console.error('Streaming error:', error)
       setStreamingContent('Error: Failed to get response from Claude.')
       setIsStreamComplete(true)
@@ -1064,20 +1191,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
         return ''
       }
 
-      // Convertir vers format SimpleRule pour formatRulesForAI
-      const simpleRules = relevantRules.map(rule => ({
-        id: rule.id,
-        project_id: rule.project_id,
-        name: rule.name,
-        description: rule.description,
-        trigger: rule.trigger,
-        action: rule.action,
-        enabled: rule.enabled,
-        priority: rule.priority,
-        config: rule.config
-      }))
-
-      return formatRulesForAI(targetFolder, simpleRules)
+      // Formater les règles pour l'IA
+      return relevantRules.map(rule =>
+        `- ${rule.name}: ${rule.description || rule.action}`
+      ).join('\n')
     } catch (error) {
       console.error('Erreur chargement règles:', error)
       return ''
@@ -1627,6 +1744,27 @@ export default function ChatStream({ projectId, conversationId: propConversation
               isComplete={isStreamComplete}
             />
           )}
+
+          {/* Storage Notifications */}
+          {storageNotifications.map((notification, index) => (
+            <StorageNotification
+              key={`storage-${index}`}
+              icon={notification.icon}
+              message={notification.message}
+              path={notification.path}
+              documentId={notification.documentId}
+              metadata={notification.metadata}
+              onNavigate={(docId) => {
+                // Ouvrir le board et naviguer vers le document
+                const appStore = useAppStore.getState()
+                if (appStore.setShowUnifiedBoard) {
+                  appStore.setShowUnifiedBoard(true)
+                  appStore.setUnifiedBoardTab?.('memory')
+                  toast.success('Board ouvert - Document sélectionné')
+                }
+              }}
+            />
+          ))}
 
           {/* Typing Indicator */}
           {isStreaming && !streamingContent && (

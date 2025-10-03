@@ -1,16 +1,14 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus
+  Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus, BookOpen, Trash2, Square, Edit2
 } from 'lucide-react'
 import { isValidUUID } from '@/lib/utils/uuid'
 import ChatStream from '@/components/chat/ChatStream'
-import GoalBar from '@/components/goal/GoalBar'
-import { motion, AnimatePresence } from 'framer-motion'
-import { UnifiedBoardModular } from '@/components/unified/UnifiedBoardModular'
-import { CostsDashboard } from '@/components/costs/CostsDashboard'
+import { motion } from 'framer-motion'
+import UnifiedBoard from '@/components/board/unified/UnifiedBoardUltra'
 
 import { supabase } from '@/lib/supabase/client'
 
@@ -42,10 +40,17 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
   const [message, setMessage] = useState('')
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
-  
-  // Dashboards
+
+  // Streaming control
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [stopStreamingFn, setStopStreamingFn] = useState<(() => void) | null>(null)
+
+  // Rename conversation
+  const [editingConvId, setEditingConvId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+
+  // Unified Board
   const [showUnifiedBoard, setShowUnifiedBoard] = useState(false)
-  const [showCostsDashboard, setShowCostsDashboard] = useState(false)
 
   useEffect(() => {
     loadProject()
@@ -126,6 +131,59 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
     setChatKey(prev => prev + 1)
   }
 
+  const deleteConversation = async (conversationId: string) => {
+    try {
+      // Supprimer tous les messages de la conversation
+      await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('conversation_id', conversationId)
+
+      // Supprimer la conversation
+      await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', conversationId)
+
+      // Si c'était la conversation active, sélectionner une autre
+      if (currentConversationId === conversationId) {
+        const remaining = conversations.filter(c => c.id !== conversationId)
+        if (remaining.length > 0) {
+          setCurrentConversationId(remaining[0].id)
+        } else {
+          setCurrentConversationId(null)
+        }
+        setChatKey(prev => prev + 1)
+      }
+
+      // Recharger la liste
+      await loadConversations()
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
+    }
+  }
+
+  const renameConversation = async (conversationId: string, newTitle: string) => {
+    try {
+      await supabase
+        .from('conversations')
+        .update({ title: newTitle })
+        .eq('id', conversationId)
+
+      await loadConversations()
+      setEditingConvId(null)
+      setEditingTitle('')
+    } catch (error) {
+      console.error('Error renaming conversation:', error)
+    }
+  }
+
+  // Callback stabilisé pour éviter les boucles de re-render
+  const handleStreamingChange = useCallback((streaming: boolean, stopFn?: () => void) => {
+    setIsStreaming(streaming)
+    setStopStreamingFn(() => stopFn || null)
+  }, [])
+
   const handleSendMessage = async () => {
     if (!message.trim() || !project) return
 
@@ -195,25 +253,82 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         <div className="flex-1 overflow-y-auto p-2">
           <div className="space-y-1">
             {conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => selectConversation(conv.id)}
-                className={`w-full text-left p-3 rounded-lg transition-colors ${
+                className={`group relative rounded-lg transition-colors ${
                   currentConversationId === conv.id
                     ? 'bg-[#FFFFFF] border border-[#E5E5E7] shadow-sm'
                     : 'hover:bg-[#FFFFFF]/50'
                 }`}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <MessageSquare className="w-4 h-4 text-[#6E6E80]" />
-                  <span className="text-sm font-medium text-[#202123] truncate">
-                    {conv.title}
-                  </span>
+                {editingConvId === conv.id ? (
+                  <div className="p-3 pr-10">
+                    <input
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          renameConversation(conv.id, editingTitle)
+                        } else if (e.key === 'Escape') {
+                          setEditingConvId(null)
+                          setEditingTitle('')
+                        }
+                      }}
+                      onBlur={() => {
+                        if (editingTitle.trim()) {
+                          renameConversation(conv.id, editingTitle)
+                        } else {
+                          setEditingConvId(null)
+                        }
+                      }}
+                      className="w-full px-2 py-1 text-sm border border-[#202123] rounded focus:outline-none focus:ring-1 focus:ring-[#202123]"
+                      autoFocus
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => selectConversation(conv.id)}
+                    className="w-full text-left p-3 pr-20"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <MessageSquare className="w-4 h-4 text-[#6E6E80]" />
+                      <span className="text-sm font-medium text-[#202123] truncate">
+                        {conv.title}
+                      </span>
+                    </div>
+                    <div className="text-xs text-[#6E6E80]">
+                      {conv.message_count || 0} messages • {new Date(conv.created_at).toLocaleDateString('fr-FR')}
+                    </div>
+                  </button>
+                )}
+
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditingConvId(conv.id)
+                      setEditingTitle(conv.title)
+                    }}
+                    className="p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded text-blue-600"
+                    title="Renommer"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm('Supprimer cette conversation ?')) {
+                        deleteConversation(conv.id)
+                      }
+                    }}
+                    className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-600"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                <div className="text-xs text-[#6E6E80]">
-                  {conv.message_count || 0} messages • {new Date(conv.created_at).toLocaleDateString('fr-FR')}
-                </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -244,38 +359,13 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setShowUnifiedBoard(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#202123] text-[#FFFFFF] rounded-lg hover:bg-[#202123]/90"
+                className="flex items-center gap-2 px-4 py-2 bg-[#202123] text-[#FFFFFF] rounded-lg hover:bg-[#202123]/90 border border-[#E5E5E7]"
               >
                 <Zap className="w-4 h-4" />
-                Board
-              </motion.button>
-              
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowCostsDashboard(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#F7F7F8] text-[#202123] rounded-lg hover:bg-[#E5E5E7] border border-[#E5E5E7]"
-              >
-                <DollarSign className="w-4 h-4" />
-                Coûts
-              </motion.button>
-
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => router.push('/settings')}
-                className="flex items-center gap-2 px-4 py-2 bg-[#F7F7F8] text-[#202123] rounded-lg hover:bg-[#E5E5E7] border border-[#E5E5E7]"
-              >
-                <Settings className="w-4 h-4" />
-                Settings
+                BCI
               </motion.button>
             </div>
           </div>
-        </div>
-
-        {/* Goal Bar */}
-        <div className="border-b border-[#E5E5E7] bg-[#F7F7F8]">
-          <GoalBar projectId={project.id} initialGoal={project.goal || ''} />
         </div>
 
         {/* Chat Messages */}
@@ -289,6 +379,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
                 setCurrentConversationId(id)
                 loadConversations()
               }}
+              onStreamingChange={handleStreamingChange}
             />
           </div>
         </div>
@@ -307,36 +398,39 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
                   className="w-full px-4 py-3 border border-[#E5E5E7] rounded-xl focus:outline-none focus:border-[#202123] focus:ring-1 focus:ring-[#202123]/20 bg-[#FFFFFF] text-[#202123] placeholder-[#6E6E80]"
                 />
               </div>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleSendMessage}
-                disabled={!message.trim()}
-                className="px-6 py-3 bg-[#202123] hover:bg-[#202123]/90 disabled:bg-[#E5E5E7] disabled:text-[#6E6E80] text-[#FFFFFF] rounded-xl font-medium flex items-center gap-2 transition-colors"
-              >
-                <Send className="w-4 h-4" />
-                Envoyer
-              </motion.button>
+              {isStreaming ? (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => stopStreamingFn?.()}
+                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium flex items-center gap-2 transition-colors"
+                >
+                  <Square className="w-4 h-4" />
+                  Arrêter
+                </motion.button>
+              ) : (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSendMessage}
+                  disabled={!message.trim()}
+                  className="px-6 py-3 bg-[#202123] hover:bg-[#202123]/90 disabled:bg-[#E5E5E7] disabled:text-[#6E6E80] text-[#FFFFFF] rounded-xl font-medium flex items-center gap-2 transition-colors"
+                >
+                  <Send className="w-4 h-4" />
+                  Envoyer
+                </motion.button>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Dashboards Modaux */}
-      
-      {/* Board Unifié */}
-      <UnifiedBoardModular
+      {/* Unified Knowledge Management System */}
+      <UnifiedBoard
         projectId={project.id}
+        projectName={project.name}
         isOpen={showUnifiedBoard}
         onClose={() => setShowUnifiedBoard(false)}
-      />
-
-      {/* Dashboard Coûts */}
-      <CostsDashboard
-        projectId={project.id}
-        conversationId={currentConversationId || undefined}
-        isOpen={showCostsDashboard}
-        onClose={() => setShowCostsDashboard(false)}
       />
     </div>
   )

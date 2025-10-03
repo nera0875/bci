@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx supabase:*)",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__execute_sql",
+      "Read(//c/Users/gesti/Pictures/Screenshots/**)",
+      "WebSearch",
+      "Bash(curl -X POST http://localhost:3000/api/chat/stream -H \"Content-Type: application/json\" -d '{\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"test\"\"\"\"}],\"\"\"\"projectId\"\"\"\":\"\"\"\"6eb4e422-a10c-437e-a962-61af206d79ff\"\"\"\"}')",
+      "Bash(npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(curl -X POST http://localhost:3000/api/chat/stream -H \"Content-Type: application/json\" -d '{\"\"messages\"\":[{\"\"role\"\":\"\"user\"\",\"\"content\"\":\"\"test\"\"}],\"\"projectId\"\":\"\"6eb4e422-a10c-437e-a962-61af206d79ff\"\"}')",
+      "Bash(curl -X POST http://localhost:3000/api/chat/stream -H \"Content-Type: application/json\" -d '{\"\"messages\"\":[{\"\"role\"\":\"\"user\"\",\"\"content\"\":\"\"test\"\"}],\"\"projectId\"\":\"\"6eb4e422-a10c-437e-a962-61af206d79ff\"\"}' --max-time 5)",
+      "Read(//c/Users/gesti/Desktop/**)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\n✨ Refonte majeure: Système unifié + Optimisations\n\n## 🎯 Corrections Critiques\n- ✅ Fix boucle infinie re-render (useCallback + useRef)\n- ✅ Fix erreur \"key\" prop manquante dans AnalyticsSection\n- ✅ Fix AbortError lors du stop streaming (géré proprement)\n- ✅ Fix contexte AI (invente \"mazeltof\" au lieu de DASH1)\n\n## 🚀 Nouvelles Fonctionnalités\n- ✨ Bouton Stop pour arrêter le streaming en temps réel\n- ✨ Renommer conversations (Edit2 + input inline)\n- ✨ Route API /api/unified/data (GET/POST/PUT/DELETE)\n- ✨ Analytics API (/metrics + /activities)\n\n## 🏗️ Architecture\n- 🔧 OptimizationEngine: détection patterns + suggestions auto\n- 🔧 System prompt avec contexte projet\n- 🔧 Learning system avec attack_patterns\n- 🔧 Suggestions queue avec validation manuelle\n\n## 📊 À Corriger Prochainement\n- ⚠️ Coûts API non trackés (metadata.tokens manquants)\n- ⚠️ Contexte projet pas injecté dans system prompt\n- ⚠️ Vérifier migration suggestions_queue\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(rm:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\n✨ Refonte majeure: Système unifié + Optimisations\n\n## 🎯 Corrections Critiques\n- ✅ Fix boucle infinie re-render (useCallback + useRef)\n- ✅ Fix erreur key prop manquante dans AnalyticsSection\n- ✅ Fix AbortError lors du stop streaming\n- ✅ Route API /api/unified/data créée\n\n## 🚀 Nouvelles Fonctionnalités\n- ✨ Bouton Stop streaming (AbortController)\n- ✨ Renommer conversations (inline edit)\n- ✨ Analytics API (metrics + activities)\n\n## 🏗️ Architecture\n- 🔧 OptimizationEngine: suggestions auto\n- 🔧 Learning system + attack_patterns\n- 🔧 Suggestions queue validation\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git config:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\n✨ Refonte majeure: Système unifié + Optimisations\n\n## 🎯 Corrections Critiques\n- ✅ Fix boucle infinie re-render (useCallback + useRef)\n- ✅ Fix erreur key prop manquante\n- ✅ Fix AbortError lors du stop streaming\n- ✅ Route API /api/unified/data créée\n\n## 🚀 Nouvelles Fonctionnalités\n- ✨ Bouton Stop streaming\n- ✨ Renommer conversations\n- ✨ Analytics API\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "supabase",
+    "smithery-ai-server-sequential-thinking",
+    "chrome-devtools"
+  ]
+}

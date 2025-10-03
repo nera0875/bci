@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/client'
+import type { Database } from '@/lib/supabase/database.types'
 
 export async function GET(request: NextRequest) {
   try {
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, parentId, name, type, content, view_mode, section } = await request.json()
+    const { projectId, parentId, name, type, content, view_mode, section, category } = await request.json()
 
     if (!projectId || !name || !type) {
       return NextResponse.json({
@@ -102,16 +103,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const insertData: any = {
+    const insertData: Database['public']['Tables']['memory_nodes']['Insert'] = {
       project_id: projectId,
       parent_id: parentId,
       name,
       type,
-      content: content || (type === 'document' ? `# ${name}\n\nContenu...` : null),
-      icon: type === 'folder' ? '📁' : '📄',
+      content: content || (type === 'prompt' ? "Écrivez votre prompt ici..." : type === 'document' ? `# ${name}\n\nContenu...` : null),
+      icon: type === 'prompt' ? '💭' : type === 'folder' ? '📁' : '📄',
       color: '#6E6E80',
       position: 0,
       section: section || 'memory'
+    }
+
+    if (category) {
+      (insertData as any).category = category
     }
 
     // Créer le node
@@ -126,14 +131,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Si c'est un dossier avec view_mode table, initialiser les colonnes par défaut
-    if (type === 'folder' && view_mode === 'table') {
-      await initializeDefaultColumns(data.id, name)
+    if (type === 'folder' && view_mode === 'table' && (data as any)?.id) {
+      await initializeDefaultColumns((data as any).id, name)
     }
 
     return NextResponse.json({
       success: true,
       node: data,
-      message: `${type === 'folder' ? 'Dossier' : 'Document'} "${name}" créé`
+      message: `${type === 'prompt' ? 'Prompt' : type === 'folder' ? 'Dossier' : 'Document'} "${name}" créé`
     })
   } catch (error) {
     console.error('Erreur POST memory nodes:', error)
@@ -149,9 +154,40 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'nodeId et updates requis' }, { status: 400 })
     }
 
+    // Récupérer le node pour vérifier son type
+    const { data: existingNode, error: fetchError } = await supabase
+      .from('memory_nodes')
+      .select('type')
+      .eq('id', nodeId)
+      .single()
+
+    if (fetchError) {
+      return NextResponse.json({ error: 'Node non trouvé' }, { status: 404 })
+    }
+
+    if (existingNode.type !== 'document' && existingNode.type !== 'prompt') {
+      return NextResponse.json({ error: 'Édition limitée aux documents et prompts' }, { status: 403 })
+    }
+
+    // Valider et filtrer les updates : seulement name et content pour documents
+    const allowedUpdates: Partial<Database['public']['Tables']['memory_nodes']['Update']> = {}
+    if ('name' in updates && typeof updates.name === 'string') {
+      allowedUpdates.name = updates.name
+    }
+    if ('content' in updates && typeof updates.content === 'string') {
+      allowedUpdates.content = updates.content
+    }
+    if ('category' in updates && typeof updates.category === 'string') {
+      (allowedUpdates as any).category = updates.category
+    }
+
+    if (Object.keys(allowedUpdates).length === 0) {
+      return NextResponse.json({ error: 'Aucun champ éditable fourni (name ou content)' }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('memory_nodes')
-      .update(updates)
+      .update(allowedUpdates)
       .eq('id', nodeId)
       .select()
       .single()
@@ -163,7 +199,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       node: data,
-      message: 'Node mis à jour'
+      message: `${existingNode.type === 'prompt' ? 'Prompt' : 'Document'} mis à jour`
     })
   } catch (error) {
     console.error('Erreur PUT memory nodes:', error)
@@ -226,7 +262,7 @@ async function initializeDefaultColumns(nodeId: string, folderName: string) {
           column_options: column.options,
           visible: true,
           order_index: column.order
-        })
+        } as Database['public']['Tables']['table_columns']['Insert'])
     }
   } catch (error) {
     console.error('Erreur initialisation colonnes:', error)

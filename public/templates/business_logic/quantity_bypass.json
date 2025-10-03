@@ -1,0 +1,55 @@
+{
+  "templateId": "quantity-bypass",
+  "category": "Business Logic",
+  "title": "Quantity Bypass Tests",
+  "description": "Templates pour tester les bypass de quantités (overflow, négatives, limites)",
+  "severity": "high",
+  "confidence": 0.85,
+  "tests": [
+    {
+      "name": "Quantité Négative",
+      "payload": {"quantity": -5, "price": 10.00},
+      "endpoint": "/api/cart/add",
+      "method": "POST",
+      "expected": "Quantité négative acceptée ou crédit généré",
+      "vulnerability": "Negative quantity bypass"
+    },
+    {
+      "name": "Quantité Maximum Overflow",
+      "payload": {"quantity": 999999999, "price": 0.01},
+      "endpoint": "/api/order/create",
+      "method": "POST",
+      "expected": "Total overflow ou validation fail",
+      "vulnerability": "Quantity overflow"
+    },
+    {
+      "name": "Quantité Zéro avec Prix",
+      "payload": {"quantity": 0, "price": 100},
+      "endpoint": "/api/cart/update",
+      "method": "PATCH",
+      "expected": "Commande gratuite acceptée",
+      "vulnerability": "Zero quantity free item"
+    },
+    {
+      "name": "Quantité Fractionnaire",
+      "payload": {"quantity": 1.5, "price": 20},
+      "endpoint": "/api/basket/item",
+      "method": "POST",
+      "expected": "Fraction arrondie ou erreur inattendue",
+      "vulnerability": "Fractional quantity bypass"
+    },
+    {
+      "name": "Quantité Modifiée en Race Condition",
+      "payload": {"originalQty": 1, "newQty": 100, "race": true},
+      "endpoint": "/api/checkout/process",
+      "method": "POST",
+      "expected": "Quantité finale différente acceptée",
+      "vulnerability": "Race condition quantity"
+    }
+  ],
+  "metadata": {
+    "patterns": ["negative-qty", "quantity-overflow", "zero-qty", "fractional-qty", "race-quantity"],
+    "businessModels": ["e-commerce", "inventory"],
+    "autoGenerate": true
+  }
+}

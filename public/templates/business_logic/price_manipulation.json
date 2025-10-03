@@ -1,0 +1,55 @@
+{
+  "templateId": "price-manipulation",
+  "category": "Business Logic",
+  "title": "Price Manipulation Patterns",
+  "description": "Templates pour tester les manipulations de prix (négatifs, décimales, overflow)",
+  "severity": "high",
+  "confidence": 0.9,
+  "tests": [
+    {
+      "name": "Prix Négatif Simple",
+      "payload": {"price": -10.00, "quantity": 1},
+      "endpoint": "/api/cart/add",
+      "method": "POST",
+      "expected": "Prix négatif accepté",
+      "vulnerability": "Prix négatif bypass"
+    },
+    {
+      "name": "Prix Décimal Excessif",
+      "payload": {"price": 0.0000001, "quantity": 1000000},
+      "endpoint": "/api/order/create",
+      "method": "POST",
+      "expected": "Total arrondi à 0",
+      "vulnerability": "Décimal precision bypass"
+    },
+    {
+      "name": "Prix Overflow",
+      "payload": {"price": 999999999999999, "quantity": 1},
+      "endpoint": "/api/cart/update",
+      "method": "PATCH",
+      "expected": "Overflow ou validation fail",
+      "vulnerability": "Numeric overflow"
+    },
+    {
+      "name": "Prix avec Caractères Spéciaux",
+      "payload": {"price": "10.00; DROP TABLE orders;--", "quantity": 1},
+      "endpoint": "/api/payment/process",
+      "method": "POST",
+      "expected": "Injection détectée ou bypass",
+      "vulnerability": "SQL/NoSQL injection via price"
+    },
+    {
+      "name": "Prix Modifié Post-Validation",
+      "payload": {"originalPrice": 100, "finalPrice": 0},
+      "endpoint": "/api/checkout/finalize",
+      "method": "POST",
+      "expected": "Prix final différent accepté",
+      "vulnerability": "Race condition pricing"
+    }
+  ],
+  "metadata": {
+    "patterns": ["negative-price", "decimal-bypass", "overflow", "injection-price", "race-pricing"],
+    "businessModels": ["e-commerce", "marketplace"],
+    "autoGenerate": true
+  }
+}

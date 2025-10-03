@@ -1,0 +1,55 @@
+{
+  "templateId": "workflow-escalation",
+  "category": "Business Logic",
+  "title": "Workflow Escalation Scenarios",
+  "description": "Templates pour tester les escalades de workflow (étapes sautées, statut forcé)",
+  "severity": "medium",
+  "confidence": 0.8,
+  "tests": [
+    {
+      "name": "Sauter Étape Validation",
+      "payload": {"skipValidation": true, "status": "approved"},
+      "endpoint": "/api/order/process",
+      "method": "POST",
+      "expected": "Workflow approuvé sans validation",
+      "vulnerability": "Validation bypass"
+    },
+    {
+      "name": "Forcer Statut Paiement",
+      "payload": {"orderId": 123, "paymentStatus": "paid"},
+      "endpoint": "/api/order/update-status",
+      "method": "PATCH",
+      "expected": "Statut paiement changé sans preuve",
+      "vulnerability": "Status escalation"
+    },
+    {
+      "name": "Escalade Privilèges Utilisateur",
+      "payload": {"userId": 456, "role": "admin"},
+      "endpoint": "/api/user/promote",
+      "method": "POST",
+      "expected": "Rôle admin accordé sans autorisation",
+      "vulnerability": "Privilege escalation"
+    },
+    {
+      "name": "Dupliquer Étape Workflow",
+      "payload": {"step": "payment", "repeat": true},
+      "endpoint": "/api/workflow/execute",
+      "method": "POST",
+      "expected": "Étape exécutée multiple fois",
+      "vulnerability": "Workflow duplication"
+    },
+    {
+      "name": "Modifier Conditions Business",
+      "payload": {"conditions": {"minOrder": 0, "vipRequired": false}},
+      "endpoint": "/api/policy/override",
+      "method": "PATCH",
+      "expected": "Conditions business modifiées",
+      "vulnerability": "Business rule bypass"
+    }
+  ],
+  "metadata": {
+    "patterns": ["validation-skip", "status-force", "privilege-escalation", "workflow-dupe", "rule-override"],
+    "businessModels": ["e-commerce", "saas", "workflow"],
+    "autoGenerate": true
+  }
+}

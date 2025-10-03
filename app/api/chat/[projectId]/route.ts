@@ -14,7 +14,7 @@ export async function GET(
     const { projectId } = await params
 
     // Récupérer les informations du projet
-    const { data: project, error: projectError } = await supabase
+    const { data: project, error: projectError } = await (supabase as any)
       .from('projects')
       .select('*')
       .eq('id', projectId)

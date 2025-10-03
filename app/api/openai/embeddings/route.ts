@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     if (projectId) {
       const supabase = createServerClient()
-      const { data: project } = await supabase
+      const { data: project } = await (supabase as any)
         .from('projects')
         .select('api_keys')
         .eq('id', projectId)

@@ -1,6 +1,35 @@
 import { NextRequest } from 'next/server'
 import { createServerClient } from '@/lib/supabase/client'
 import { ConversationManager, formatContextForClaude } from '@/lib/services/conversation'
+import { createEmbedding } from '@/lib/services/embeddings'
+
+// Helper function to search similar chunks
+// NOTE: memory_chunks table removed - using memory_nodes instead
+async function searchSimilarChunks(projectId: string, query: string, limit: number = 5) {
+  try {
+    const embedding = await createEmbedding(query)
+    if (!embedding || embedding.length === 0) {
+      return []
+    }
+
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+      .from('memory_nodes')
+      .select('*')
+      .eq('project_id', projectId)
+      .limit(limit)
+
+    if (error) {
+      console.error('Error searching nodes:', error)
+      return []
+    }
+
+    return data || []
+  } catch (e) {
+    console.error('searchSimilarChunks error:', e)
+    return []
+  }
+}
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
@@ -11,13 +40,13 @@ export async function POST(request: NextRequest) {
 
     // Get API key and rules from project
     const supabase = createServerClient()
-    const { data: project } = await supabase
+    const { data: project } = await (supabase as any)
       .from('projects')
       .select('api_keys, rules_text')
       .eq('id', projectId)
       .single()
 
-    const apiKey = project?.api_keys?.claude
+    const apiKey = (project as any)?.api_keys?.claude
 
     if (!apiKey) {
       return new Response('Claude API key not configured', { status: 401 })
@@ -59,7 +88,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Search for relevant chunks using RAG
-    let relevantChunks = []
+    let relevantChunks: any[] = []
     try {
       relevantChunks = await searchSimilarChunks(projectId, message, 5)
     } catch (e) {
@@ -67,10 +96,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Create system prompt with context and project rules
-    const systemPrompt = createSystemPrompt(context, relevantChunks, optimizedContext, project?.rules_text)
+    const systemPrompt = createSystemPrompt(context, relevantChunks, optimizedContext, (project as any)?.rules_text)
 
     // Build conversation messages
-    const messages = []
+    const messages: any[] = []
 
     // Use optimized context if available, otherwise fall back to provided history
     if (optimizedContext?.recentMessages) {
@@ -113,12 +142,12 @@ export async function POST(request: NextRequest) {
               tools: [
                 {
                   name: "analyze_content",
-                  description: "Analyse le contenu utilisateur selon les règles du projet pour déterminer où ranger",
+                  description: "Analyse le contenu utilisateur pour déterminer le type de faille et où ranger",
                   input_schema: {
                     type: "object",
                     properties: {
                       content: { type: "string", description: "Contenu à analyser" },
-                      intent: { type: "string", description: "Intention détectée (SQLi, XSS, Request, etc.)" },
+                      intent: { type: "string", description: "Type de faille détectée (SQLi, XSS, etc.)" },
                       confidence: { type: "number", description: "Confiance dans la détection (0-1)" }
                     },
                     required: ["content", "intent"]
@@ -132,8 +161,8 @@ export async function POST(request: NextRequest) {
                     properties: {
                       folder_name: { type: "string", description: "Nom du dossier à créer" },
                       table_name: { type: "string", description: "Nom du tableau à créer dans le dossier" },
-                      columns: { 
-                        type: "array", 
+                      columns: {
+                        type: "array",
                         items: { type: "string" },
                         description: "Colonnes du tableau (ex: ['payload', 'url', 'result'])"
                       }
@@ -148,26 +177,13 @@ export async function POST(request: NextRequest) {
                     type: "object",
                     properties: {
                       path: { type: "string", description: "Chemin cible (ex: 'Memory/Auth/SQLi Tests')" },
-                      data: { 
+                      data: {
                         type: "object",
                         description: "Données à stocker (payload, url, result, etc.)"
                       },
                       reasoning: { type: "string", description: "Explication du choix de rangement" }
                     },
                     required: ["path", "data"]
-                  }
-                },
-                {
-                  name: "suggest_rule",
-                  description: "Propose une nouvelle règle basée sur un pattern détecté",
-                  input_schema: {
-                    type: "object",
-                    properties: {
-                      pattern: { type: "string", description: "Pattern détecté dans les messages" },
-                      suggested_rule: { type: "string", description: "Règle proposée en français" },
-                      confidence: { type: "number", description: "Confiance dans cette suggestion (0-1)" }
-                    },
-                    required: ["pattern", "suggested_rule"]
                   }
                 }
               ],
@@ -227,10 +243,10 @@ export async function POST(request: NextRequest) {
                     } catch (toolError) {
                       console.error('Tool execution error:', toolError)
                       const errorChunk = encoder.encode(
-                        `data: ${JSON.stringify({ 
-                          type: 'tool_error', 
+                        `data: ${JSON.stringify({
+                          type: 'tool_error',
                           tool_name: toolUse.name,
-                          error: toolError.message 
+                          error: (toolError as any).message || 'Tool execution failed'
                         })}\n\n`
                       )
                       controller.enqueue(errorChunk)
@@ -314,7 +330,7 @@ function createSystemPrompt(context: any, relevantChunks: any[], optimizedContex
 
   // Add similar messages context if available
   const similarContext = optimizedContext?.similarMessages?.length > 0
-    ? `\nSIMILAR PREVIOUS EXCHANGES:\n${optimizedContext.similarMessages.map(m =>
+    ? `\nSIMILAR PREVIOUS EXCHANGES:\n${optimizedContext.similarMessages.map((m: any) =>
         `[${m.role}]: ${m.content.substring(0, 200)}...`
       ).join('\n')}\n`
     : '';
@@ -440,97 +456,6 @@ async function extractActions(text: string, projectId: string): Promise<any[]> {
     }
   }
 
-  // Parse BOARD_ACTION
-  while ((match = boardRegex.exec(text)) !== null) {
-    try {
-      const actionData = JSON.parse(match[1])
-      const { operation, target, data } = actionData
-
-      if (!['memory', 'rules'].includes(target)) {
-        console.error('Invalid target for BOARD_ACTION:', target)
-        actions.push({ type: 'board_action', action: actionData, status: 'error', error: 'Invalid target' })
-        continue
-      }
-
-      if (!['add_row', 'update_row', 'delete_row'].includes(operation)) {
-        console.error('Invalid operation for BOARD_ACTION:', operation)
-        actions.push({ type: 'board_action', action: actionData, status: 'error', error: 'Invalid operation' })
-        continue
-      }
-
-      let result = null
-      let status = 'error'
-      let errorMsg = ''
-
-      try {
-        if (operation === 'add_row') {
-          // Use /api/board/create
-          const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/board/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              projectId,
-              section: target,
-              ...data  // name, content, etc.
-            })
-          })
-          result = await response.json()
-          status = response.ok ? 'success' : 'error'
-          if (!response.ok) errorMsg = result.error || 'Failed to add row'
-        } else if (operation === 'update_row') {
-          // Use /api/board/update (assume it handles updates)
-          const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/board/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              projectId,
-              section: target,
-              id: data.id,
-              ...data  // other fields to update
-            })
-          })
-          result = await response.json()
-          status = response.ok ? 'success' : 'error'
-          if (!response.ok) errorMsg = result.error || 'Failed to update row'
-        } else if (operation === 'delete_row') {
-          // Use /api/board/update with delete flag (assume supported)
-          const response = await fetch(`${process.env.NEXTAUTH_URL || ''}/api/board/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              projectId,
-              section: target,
-              id: data.id,
-              delete: true
-            })
-          })
-          result = await response.json()
-          status = response.ok ? 'success' : 'error'
-          if (!response.ok) errorMsg = result.error || 'Failed to delete row'
-        }
-
-        actions.push({
-          type: 'board_action',
-          action: actionData,
-          status,
-          result,
-          error: errorMsg
-        })
-      } catch (e) {
-        console.error('BOARD_ACTION execution error:', e)
-        actions.push({
-          type: 'board_action',
-          action: actionData,
-          status: 'error',
-          error: e.message
-        })
-      }
-    } catch (e) {
-      console.error('Invalid BOARD_ACTION JSON:', e)
-      actions.push({ type: 'board_action', action: { raw: match[1] }, status: 'error', error: 'Invalid JSON' })
-    }
-  }
-
   return actions
 }
 
@@ -604,11 +529,15 @@ async function executeToolCall(toolUse: any, projectId: string) {
           table_id: table.id,
           message: `Structure créée : ${folder_name}/${table_name}`
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error creating structure:', error)
+        let errorMessage = 'Erreur inconnue lors de la création de la structure mémoire';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
         return {
           success: false,
-          error: error.message
+          error: errorMessage
         }
       }
 
@@ -674,47 +603,15 @@ async function executeToolCall(toolUse: any, projectId: string) {
           message: `Données rangées dans ${path}`,
           reasoning
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error storing in memory:', error)
+        let errorMessage = 'Erreur inconnue lors du rangement en mémoire';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
         return {
           success: false,
-          error: error.message
-        }
-      }
-
-    case 'suggest_rule':
-      try {
-        const { pattern, suggested_rule, confidence } = toolUse.input
-        
-        // Enregistrer la suggestion
-        const supabase = createServerClient()
-        const { data, error } = await supabase
-          .from('learned_patterns')
-          .insert({
-            project_id: projectId,
-            pattern_text: pattern,
-            target_location: 'suggested',
-            confidence: confidence || 0.5
-          })
-          .select()
-          .single()
-        
-        if (error) {
-          throw new Error('Failed to save pattern suggestion')
-        }
-        
-        return {
-          success: true,
-          suggestion: suggested_rule,
-          pattern,
-          confidence,
-          message: 'Suggestion de règle enregistrée'
-        }
-      } catch (error) {
-        console.error('Error suggesting rule:', error)
-        return {
-          success: false,
-          error: error.message
+          error: errorMessage
         }
       }
 

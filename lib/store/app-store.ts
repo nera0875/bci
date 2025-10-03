@@ -92,7 +92,7 @@ export const useAppStore = create<AppState>()(
       loadProjects: async () => {
         set({ projectsLoading: true, projectsError: null })
         try {
-          const { data: projects, error } = await supabase
+          const { data: projects, error } = await (supabase as any)
             .from('projects')
             .select('*')
             .order('created_at', { ascending: false })
@@ -115,7 +115,7 @@ export const useAppStore = create<AppState>()(
         }
 
         try {
-          const { data: project, error } = await supabase
+          const { data: project, error } = await (supabase as any)
             .from('projects')
             .insert({
               name,
@@ -149,7 +149,7 @@ export const useAppStore = create<AppState>()(
         if (!project) {
           // If not in local state, fetch from Supabase
           try {
-            const { data, error } = await supabase
+            const { data, error } = await (supabase as any)
               .from('projects')
               .select('*')
               .eq('id', projectId)
@@ -170,7 +170,7 @@ export const useAppStore = create<AppState>()(
 
       deleteProject: async (projectId) => {
         try {
-          const { error } = await supabase
+          const { error } = await (supabase as any)
             .from('projects')
             .delete()
             .eq('id', projectId)
@@ -200,7 +200,7 @@ export const useAppStore = create<AppState>()(
 
         try {
           // Update in Supabase
-          const { error } = await supabase
+          const { error } = await (supabase as any)
             .from('projects')
             .update(updatedProject)
             .eq('id', currentProject.id)

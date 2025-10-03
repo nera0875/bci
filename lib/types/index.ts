@@ -37,7 +37,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: string
-  context?: any
+  context?: Record<string, unknown>
 }
 
 export interface Project {
@@ -90,7 +90,7 @@ export interface MemoryNode {
   position?: number
   metadata?: Record<string, unknown>
   children?: MemoryNode[]
-  data?: any[]
+  data?: unknown[]
   level?: number
   path?: string[]
   isExpanded?: boolean

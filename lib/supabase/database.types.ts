@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -6,475 +6,270 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
-      projects: {
-        Row: {
-          id: string
-          name: string
-          goal: string | null
-          api_keys: Json
-          settings: Json
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          goal?: string | null
-          api_keys?: Json
-          settings?: Json
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          goal?: string | null
-          api_keys?: Json
-          settings?: Json
-          created_at?: string
-          updated_at?: string
-        }
-      }
       memory_nodes: {
         Row: {
-          id: string
-          project_id: string
-          type: 'folder' | 'document'
-          name: string
-          content: Json | null
-          embedding: number[] | null
           color: string | null
+          content: string | null
+          created_at: string | null
+          embedding: number[] | null
           icon: string | null
-          parent_id: string | null
-          metadata: Json | null
-          position: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          type: 'folder' | 'document'
-          name: string
-          content?: Json | null
-          embedding?: number[] | null
-          color?: string | null
-          icon?: string | null
-          parent_id?: string | null
-          metadata?: Json | null
-          position?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          type?: 'folder' | 'document'
-          name?: string
-          content?: Json | null
-          embedding?: number[] | null
-          color?: string | null
-          icon?: string | null
-          parent_id?: string | null
-          metadata?: Json | null
-          position?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      table_data: {
-        Row: {
           id: string
-          node_id: string
-          row_index: number
-          row_data: Json
-          created_at: string
-          updated_at: string
+          name: string
+          parent_id: string | null
+          position: number | null
+          project_id: string
+          section: string | null
+          type: string
+          updated_at: string | null
         }
         Insert: {
+          color?: string | null
+          content?: string | null
+          created_at?: string | null
+          embedding?: number[] | null
+          icon?: string | null
           id?: string
-          node_id: string
-          row_index?: number
-          row_data?: Json
-          created_at?: string
-          updated_at?: string
+          name: string
+          parent_id?: string | null
+          position?: number | null
+          project_id: string
+          section?: string | null
+          type: string
+          updated_at?: string | null
         }
         Update: {
+          color?: string | null
+          content?: string | null
+          created_at?: string | null
+          embedding?: number[] | null
+          icon?: string | null
           id?: string
-          node_id?: string
-          row_index?: number
-          row_data?: Json
-          created_at?: string
-          updated_at?: string
+          name?: string
+          parent_id?: string | null
+          position?: number | null
+          project_id?: string
+          section?: string | null
+          type?: string
+          updated_at?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "memory_nodes_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "memory_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       table_columns: {
         Row: {
+          column_name: string
+          column_options: Json | null
+          column_type: string
+          created_at: string | null
           id: string
           node_id: string
-          column_name: string
-          column_type: 'text' | 'select' | 'number' | 'boolean' | 'date' | 'tags'
-          column_options: Json
-          visible: boolean
-          order_index: number
-          created_at: string
+          order_index: number | null
+          visible: boolean | null
         }
         Insert: {
+          column_name: string
+          column_options?: Json | null
+          column_type: string
+          created_at?: string | null
           id?: string
           node_id: string
-          column_name: string
-          column_type: 'text' | 'select' | 'number' | 'boolean' | 'date' | 'tags'
-          column_options?: Json
-          visible?: boolean
-          order_index?: number
-          created_at?: string
+          order_index?: number | null
+          visible?: boolean | null
         }
         Update: {
+          column_name?: string
+          column_options?: Json | null
+          column_type?: string
+          created_at?: string | null
           id?: string
           node_id?: string
-          column_name?: string
-          column_type?: 'text' | 'select' | 'number' | 'boolean' | 'date' | 'tags'
-          column_options?: Json
-          visible?: boolean
-          order_index?: number
-          created_at?: string
+          order_index?: number | null
+          visible?: boolean | null
         }
-      }
-      chat_messages: {
-        Row: {
-          id: string
-          project_id: string
-          conversation_id: string | null
-          role: 'user' | 'assistant' | 'system'
-          content: string
-          streaming: boolean | null
-          metadata: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          conversation_id?: string | null
-          role: 'user' | 'assistant' | 'system'
-          content: string
-          streaming?: boolean | null
-          metadata?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          conversation_id?: string | null
-          role?: 'user' | 'assistant' | 'system'
-          content?: string
-          streaming?: boolean | null
-          metadata?: Json | null
-          created_at?: string
-        }
-      }
-      conversations: {
-        Row: {
-          id: string
-          project_id: string
-          title: string
-          is_active: boolean
-          metadata: Json | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          title: string
-          is_active?: boolean
-          metadata?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          title?: string
-          is_active?: boolean
-          metadata?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      message_cache: {
-        Row: {
-          id: string
-          content_hash: string
-          response: string
-          usage_count: number
-          last_used: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          content_hash: string
-          response: string
-          usage_count?: number
-          last_used?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          content_hash?: string
-          response?: string
-          usage_count?: number
-          last_used?: string
-          created_at?: string
-        }
-      }
-      rules: {
-        Row: {
-          id: string
-          project_id: string
-          name: string
-          description: string | null
-          trigger: string
-          action: string
-          config: Json | null
-          enabled: boolean
-          priority: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          name: string
-          description?: string | null
-          trigger: string
-          action: string
-          config?: Json | null
-          enabled?: boolean
-          priority?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          name?: string
-          description?: string | null
-          trigger?: string
-          action?: string
-          config?: Json | null
-          enabled?: boolean
-          priority?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      requests: {
-        Row: {
-          id: string
-          project_id: string
-          method: string | null
-          url: string | null
-          headers: Json | null
-          body: string | null
-          parsed_data: Json | null
-          embedding: number[] | null
-          vulnerability_score: number
-          tested: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          method?: string | null
-          url?: string | null
-          headers?: Json | null
-          body?: string | null
-          parsed_data?: Json | null
-          embedding?: number[] | null
-          vulnerability_score?: number
-          tested?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          method?: string | null
-          url?: string | null
-          headers?: Json | null
-          body?: string | null
-          parsed_data?: Json | null
-          embedding?: number[] | null
-          vulnerability_score?: number
-          tested?: boolean
-          created_at?: string
-        }
-      }
-      vulnerabilities: {
-        Row: {
-          id: string
-          project_id: string
-          request_id: string | null
-          type: string
-          severity: 'low' | 'medium' | 'high' | 'critical'
-          payload: string | null
-          evidence: Json | null
-          confidence: number
-          verified: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          request_id?: string | null
-          type: string
-          severity: 'low' | 'medium' | 'high' | 'critical'
-          payload?: string | null
-          evidence?: Json | null
-          confidence?: number
-          verified?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          request_id?: string | null
-          type?: string
-          severity?: 'low' | 'medium' | 'high' | 'critical'
-          payload?: string | null
-          evidence?: Json | null
-          confidence?: number
-          verified?: boolean
-          created_at?: string
-        }
-      }
-      attack_patterns: {
-        Row: {
-          id: string
-          project_id: string
-          pattern_type: string
-          pattern: Json
-          success_rate: number
-          usage_count: number
-          last_success: string | null
-          mutations: Json | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          pattern_type: string
-          pattern: Json
-          success_rate?: number
-          usage_count?: number
-          last_success?: string | null
-          mutations?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          pattern_type?: string
-          pattern?: Json
-          success_rate?: number
-          usage_count?: number
-          last_success?: string | null
-          mutations?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      folder_rules: {
-        Row: {
-          id: string
-          project_id: string
-          folder_id: string
-          rule_name: string
-          rule_description: string | null
-          rule_type: 'behavior' | 'validation' | 'formatting' | 'security'
-          rule_content: string
-          is_active: boolean
-          priority: number
-          metadata: Json | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          project_id: string
-          folder_id: string
-          rule_name: string
-          rule_description?: string | null
-          rule_type?: 'behavior' | 'validation' | 'formatting' | 'security'
-          rule_content: string
-          is_active?: boolean
-          priority?: number
-          metadata?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          project_id?: string
-          folder_id?: string
-          rule_name?: string
-          rule_description?: string | null
-          rule_type?: 'behavior' | 'validation' | 'formatting' | 'security'
-          rule_content?: string
-          is_active?: boolean
-          priority?: number
-          metadata?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
+        Relationships: [
+          {
+            foreignKeyName: "table_columns_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "memory_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
-      search_similar_memories: {
-        Args: {
-          project_uuid: string
-          query_embedding: number[]
-          match_count?: number
-        }
-        Returns: {
-          id: string
-          name: string
-          content: Json
-          similarity: number
-        }[]
-      }
-      search_similar_nodes: {
-        Args: {
-          query_embedding: number[]
-          project_id: string
-          match_limit?: number
-        }
-        Returns: {
-          id: string
-          name: string
-          content: Json
-          similarity: number
-        }[]
-      }
-      get_memory_tree: {
-        Args: {
-          project_uuid: string
-        }
-        Returns: {
-          id: string
-          parent_id: string | null
-          name: string
-          type: string
-          color: string
-          icon: string
-          level: number
-          path: string[]
-        }[]
-      }
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const
+

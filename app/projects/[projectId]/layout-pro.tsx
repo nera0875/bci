@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { MessageSquare, FolderOpen, Settings, X } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import ChatInterface from '@/components/chat/ChatInterface'
-import { UnifiedBoardModular } from '@/components/unified/UnifiedBoardModular'
+import SimpleBoard from '@/components/board/SimpleBoard'
 
 interface ProjectLayoutProProps {
   projectId: string
@@ -97,7 +97,7 @@ export default function ProjectLayoutPro({ projectId, projectName }: ProjectLayo
         
         {activeView === 'board' && (
           <div className="flex-1 relative">
-            <UnifiedBoardModular 
+            <SimpleBoard
               projectId={projectId}
               isOpen={true}
               onClose={() => {

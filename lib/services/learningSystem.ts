@@ -3,7 +3,6 @@
 
 import { useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { AdaptiveMemory } from './adaptiveMemory'
 
 export interface LearningPattern {
   id: string
@@ -27,11 +26,9 @@ export interface LearningPattern {
 
 export class LearningSystem {
   private projectId: string
-  private adaptiveMemory: AdaptiveMemory
 
   constructor(projectId: string) {
     this.projectId = projectId
-    this.adaptiveMemory = new AdaptiveMemory(projectId)
   }
 
   // Enregistrer un succès pour apprentissage
@@ -107,9 +104,6 @@ export class LearningSystem {
         console.log('🎯 Learning: Created new success pattern', data.technique)
       }
 
-      // Renforcement: Augmenter confiance via mémoire adaptative
-      await this.adaptiveMemory.reinforceTechnique(data.technique, data.context, true)
-
     } catch (error) {
       console.error('Learning error (success):', error)
     }
@@ -184,9 +178,6 @@ export class LearningSystem {
         newSuccessRate = 0.0
         console.log('❌ Learning: Created new failure pattern', data.technique)
       }
-
-      // Renforcement: Diminuer confiance et noter pour alternatives via mémoire adaptative
-      await this.adaptiveMemory.reinforceTechnique(data.technique, data.context, false)
 
     } catch (error) {
       console.error('Learning error (failure):', error)
@@ -306,14 +297,6 @@ export class LearningSystem {
 
       if (directPattern && directPattern.usage_count >= 3) {
         return directPattern.success_rate
-      }
-
-      // Si pas assez de data directe, utiliser similarité via mémoire pour estimation
-      const relatedMemories = await this.adaptiveMemory.searchMemory(technique, context, 5)
-      if (relatedMemories.length > 0) {
-        const avgImportance = relatedMemories.reduce((sum, item) => sum + (item.importance || 0.5), 0) / relatedMemories.length
-        // Corréler importance avec efficacité (haute importance souvent = haute efficacité)
-        return Math.min(avgImportance * 0.8 + 0.2, 1.0) // Bias vers 0.5 si peu de data
       }
 
       // Valeur par défaut si pas assez de données

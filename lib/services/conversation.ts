@@ -1,7 +1,6 @@
 import { createHash } from 'crypto'
 import { supabase } from '@/lib/supabase/client'
 import { createEmbedding } from '@/lib/services/embeddings'
-import { IntelligentTargeting } from '@/lib/services/intelligentTargeting'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -15,7 +14,6 @@ interface ConversationContext {
   summary?: string            // Résumé si conversation longue
   memoryContext: any[]        // Mémoire permanente
   cachedResponse?: string     // Si message identique trouvé
-  targetingContext?: import('@/lib/services/intelligentTargeting').TargetingContext
 }
 
 export class ConversationManager {
@@ -170,8 +168,7 @@ export class ConversationManager {
     const context: ConversationContext = {
       recentMessages: [],
       similarMessages: [],
-      memoryContext: [],
-      targetingContext: null
+      memoryContext: []
     }
 
     // 1. Vérifier le cache d'abord
@@ -215,16 +212,6 @@ export class ConversationManager {
     } catch (e) {
       console.log('Similarity search skipped (embedding error):', e)
       // Continue sans recherche de similarité - pas critique
-    }
-
-    // 3.5 Intégration ciblage intelligent pour chat-board
-    try {
-      const targeting = new IntelligentTargeting(this.projectId)
-      const targetingResult = await targeting.analyzeTarget(currentMessage)
-      context.targetingContext = targetingResult
-      console.log('🎯 Targeting context ajouté au chat:', targetingResult.path)
-    } catch (e) {
-      console.log('Targeting analysis skipped:', e)
     }
 
     // 4. Si conversation longue, récupérer/générer un résumé
