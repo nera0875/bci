@@ -1,5 +1,20 @@
 # DAILY LOG - BCI Tool v2
 
+## [2025-10-03 - Session 4 : Decision Tracking UI + SuggestionsReview Component]
+- **Fichiers créés** : components/learning/SuggestionsReview.tsx
+- **Fichiers modifiés** : ChatStream.tsx, UnifiedBoardUltra.tsx, UnifiedSidebarUltra.tsx
+- **Changements** :
+  - ✅ Decision tracking UI dans ChatStream avec toasts interactifs (✅/✏️/❌)
+  - ✅ Fonction handleAISuggestion() pour capturer suggestions IA
+  - ✅ Fonction trackUserDecision() pour insertion dans user_decisions table
+  - ✅ Toast personnalisé avec 3 boutons (Accept, Modify, Reject)
+  - ✅ Composant SuggestionsReview avec 2 onglets (Suggestions, Patterns)
+  - ✅ Interface complète pour promouvoir/rejeter implicit rules
+  - ✅ Intégration dans UnifiedBoard avec nouvel onglet "Learning"
+  - ✅ Badge notifications pour suggestions pending
+- **État** : Decision tracking UI fonctionnel, prêt à capturer décisions user
+- **Prochaine étape** : Créer PatternLearner service pour analyser user_decisions et générer patterns
+
 ## [2025-10-03 - Session 3 : Corrections critiques + Auto-Reinforcement Foundations]
 - **Fichiers modifiés** : optimizationEngine.ts, conversation.ts, ChatStream.tsx
 - **Migrations créées** : message_cache, user_decisions, implicit_rules + learned_patterns

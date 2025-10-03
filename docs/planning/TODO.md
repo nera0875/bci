@@ -3,8 +3,9 @@
 ## 🔥 Tâches Prioritaires
 
 ### Auto-Reinforcement System (NOUVEAU - 2025-10-03)
-- [ ] Implémenter decision tracking UI dans ChatStream (toasts ✅/✏️/❌)
-- [ ] Créer composant SuggestionsReview pour valider implicit rules
+- [x] Implémenter decision tracking UI dans ChatStream (toasts ✅/✏️/❌)
+- [x] Créer composant SuggestionsReview pour valider implicit rules
+- [ ] Créer PatternLearner service pour analyser user_decisions
 - [ ] Setup background job quotidien pour pattern analysis
 - [ ] Tester cycle complet: decision → pattern → implicit rule → promotion
 
@@ -18,6 +19,25 @@
 - [ ] Ajouter bouton "Expand All/Collapse All" dans Memory
 - [ ] Améliorer performance rendering arbre Memory (virtualization?)
 - [ ] Ajouter search highlighting dans Memory/Rules
+
+## ✅ Tâches Complétées (2025-10-03 Session 4)
+
+### Decision Tracking UI Implementation
+- [x] Ajouter state pendingDecisions dans ChatStream
+- [x] Créer handleAISuggestion() pour toasts interactifs
+- [x] Implémenter handleDecisionAccept/Modify/Reject
+- [x] Créer trackUserDecision() pour insertion dans user_decisions table
+- [x] Détecter data.type === 'ai_suggestion' dans streaming
+- [x] Toast personnalisé avec 3 boutons (✅ Accept, ✏️ Modify, ❌ Reject)
+
+### SuggestionsReview Component
+- [x] Créer components/learning/SuggestionsReview.tsx
+- [x] Interface pour review implicit_rules (status='suggestion')
+- [x] Interface pour review learned_patterns
+- [x] Boutons Promote (→ active) et Reject (→ deprecated)
+- [x] Affichage confidence score avec couleurs (High/Medium/Low)
+- [x] Intégrer dans UnifiedBoardUltra avec onglet "Learning"
+- [x] Ajouter section "Learning" dans UnifiedSidebarUltra
 
 ## ✅ Tâches Complétées (2025-10-03 Session 3)
 
@@ -70,8 +90,8 @@
 - [x] Simplifier configuration agents
 - [x] Intégrer system_prompt dans chat stream
 
-## 📊 Progression Globale : 78%
+## 📊 Progression Globale : 82%
 - Backend/DB : 95% ✅ (Cache + embeddings + auto-reinforcement tables actifs)
-- UI/Components : 95% ✅ (Memory expand-all + icon/color picker, erreurs fixées)
-- Intelligence/Learning : 70% 📝 (Decision tracking ready, pattern learning foundations)
-- Integration : 75% 🔧 (Contexte projet + cache + learning intégrés)
+- UI/Components : 98% ✅ (Decision tracking UI + SuggestionsReview intégrés)
+- Intelligence/Learning : 75% 📝 (UI complete, pattern learner service pending)
+- Integration : 80% 🔧 (Decision tracking connecté, pattern analysis pending)

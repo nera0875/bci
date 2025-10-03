@@ -25,7 +25,10 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nFix erreurs + Optimisation UI chat style ChatGPT\n\n**Corrections critiques:**\n- ✅ Fix autoOrganizeContent: utilise /api/memory/nodes au lieu de /unified/data\n- ✅ Fix warning GoTrueClient multiple: optimizationEngine.ts utilise client partagé\n- ✅ Documents auto créés dans memory_nodes fonctionnels\n\n**Optimisations UI:**\n- ✨ Affichage tokens/coût sous chaque message assistant\n- ✨ Badge vert \"cached\" pour réponses en cache (économie 100%)\n- ✨ Toast interactif avec bouton \"Voir\" → ouvre BCI direct\n- ✨ Event listener pour open-bci-board\n- ✨ Métadonnées visibles (modèle, tokens, coût)\n\n**Visibilité mémoire:**\n- 📁 Notification claire quand contenu ajouté en mémoire\n- 🔵 Bouton direct vers Memory dans toast\n- 💾 Indicateur cache vert pour économies\n\nÉtat: 75% → UI chat optimisé, mémoire visible\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git commit -m \"$(cat <<''EOF''\nPhase 1 & 2a: Validation intelligente + Playbook Builder\n\n**Phase 1: Système de Validation Intelligent**\n- ✅ Score de confiance automatique (0-100%)\n- ✅ Auto-rangement si confiance > 85%\n- ✅ Log pour validation si confiance 50-85%\n- ✅ Pas d''action si confiance < 50%\n- ✅ Amélioration detectTargetFolder avec parsing markdown\n\n**Phase 2a: Playbook Builder Créé**\n- ✅ Composant PlaybookBuilder.tsx avec double interface\n- ✅ Mode Visuel: formulaire intuitif sans JSON\n- ✅ Mode JSON: éditeur avec syntax highlighting\n- ✅ Toggle entre les 2 modes\n- ✅ Validation temps réel\n\n**Fichiers modifiés:**\n- components/chat/ChatStream.tsx: Système validation + détection améliorée\n- components/rules/PlaybookBuilder.tsx: NOUVEAU composant\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(npx next build:*)",
-      "Bash(dir \"C:\\Users\\gesti\\Documents\\Projets\\BCI\\supabase\\migrations\" /b)"
+      "Bash(dir \"C:\\Users\\gesti\\Documents\\Projets\\BCI\\supabase\\migrations\" /b)",
+      "Bash(git commit:*)",
+      "Bash(taskkill:*)",
+      "Bash(npx kill-port:*)"
     ]
   },
   "enabledMcpjsonServers": [

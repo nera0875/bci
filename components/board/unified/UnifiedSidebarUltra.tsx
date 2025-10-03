@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type Section = 'memory' | 'rules' | 'optimization' | 'analytics' | 'costs' | 'settings'
+type Section = 'memory' | 'rules' | 'optimization' | 'analytics' | 'costs' | 'settings' | 'learning'
 
 interface UnifiedSidebarUltraProps {
   activeSection: Section
@@ -96,6 +96,23 @@ const sections = [
     description: 'API costs & savings',
     stats: { label: 'Saved', value: '$0' },
     subItems: []
+  },
+  {
+    id: 'learning' as Section,
+    name: 'Learning',
+    shortName: 'Learn',
+    icon: Sparkles,
+    color: 'from-purple-500 to-pink-500',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500',
+    description: 'AI auto-reinforcement',
+    stats: { label: 'Patterns', value: 0 },
+    badge: 0,
+    pulse: true,
+    subItems: [
+      { name: 'Suggestions', icon: Lightbulb, count: 0 },
+      { name: 'Patterns', icon: TrendingUp, count: 0 }
+    ]
   },
   {
     id: 'settings' as Section,

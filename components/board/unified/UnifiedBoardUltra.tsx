@@ -12,6 +12,7 @@ import OptimizationSection from './sections/OptimizationSection'
 import AnalyticsSection from './sections/AnalyticsSection'
 import CostsSection from './sections/CostsSection'
 import SettingsSection from './sections/SettingsPro'
+import SuggestionsReview from '@/components/learning/SuggestionsReview'
 
 interface UnifiedBoardUltraProps {
   projectId: string
@@ -20,7 +21,7 @@ interface UnifiedBoardUltraProps {
   onClose: () => void
 }
 
-type Section = 'memory' | 'rules' | 'optimization' | 'analytics' | 'costs' | 'settings'
+type Section = 'memory' | 'rules' | 'optimization' | 'analytics' | 'costs' | 'settings' | 'learning'
 
 export default function UnifiedBoardUltra({
   projectId,
@@ -171,6 +172,10 @@ export default function UnifiedBoardUltra({
                   projectId={projectId}
                   projectName={projectName}
                 />
+              </div>
+
+              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'learning' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
+                <SuggestionsReview projectId={projectId} />
               </div>
             </div>
           </div>

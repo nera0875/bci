@@ -1,6 +1,6 @@
 # CURRENT STATE - BCI Tool v2
 
-## 📅 Dernière mise à jour : 2025-10-03 (Session corrections + Auto-Reinforcement)
+## 📅 Dernière mise à jour : 2025-10-03 (Session 4: Decision Tracking UI)
 
 ## 🔧 État Actuel du Projet
 
@@ -47,6 +47,23 @@
    - Suppression agents inutiles (memory-manager, project-analyzer, etc.)
    - Garde seulement : doc-writer, git-manager
    - CLAUDE.md simplifié pour efficacité max
+
+### ✅ Problèmes RÉSOLUS (2025-10-03 Session 4)
+
+1. **Decision Tracking UI** : CRÉÉ
+   - ✅ Toasts interactifs avec 3 boutons (✅ Accept, ✏️ Modify, ❌ Reject)
+   - ✅ Fonction handleAISuggestion() pour capter suggestions IA en temps réel
+   - ✅ Fonction trackUserDecision() pour insertion dans user_decisions table
+   - ✅ Détection data.type === 'ai_suggestion' dans streaming
+   - ✅ State pendingDecisions pour tracker suggestions en attente
+
+2. **SuggestionsReview Component** : CRÉÉ
+   - ✅ Interface complète pour review implicit_rules (status='suggestion')
+   - ✅ Interface complète pour review learned_patterns
+   - ✅ Boutons Promote (→ active) et Reject (→ deprecated)
+   - ✅ Affichage confidence score avec badges colorés (High/Medium/Low)
+   - ✅ Intégration dans UnifiedBoardUltra avec onglet "Learning"
+   - ✅ Section "Learning" dans sidebar avec badge notifications
 
 ### ✅ Problèmes RÉSOLUS (2025-10-03 Session 3)
 
@@ -124,8 +141,8 @@
 - Focus sur documentation automatique pour persistance
 - Interface doit être compacte et intuitive
 
-## 🚀 État Global : 78% Complete
+## 🚀 État Global : 82% Complete
 - Backend/DB : 95% ✅ (Cache + embeddings + auto-reinforcement tables actifs)
-- UI/Components : 95% ✅ (Refactoring majeur complété, erreurs runtime fixées)
-- Intelligence/Learning : 70% 📝 (Decision tracking ready, pattern learning foundations)
-- Integration : 75% 🔧 (Contexte projet + cache + learning intégrés)
+- UI/Components : 98% ✅ (Decision tracking UI + SuggestionsReview intégrés)
+- Intelligence/Learning : 75% 📝 (UI complete, pattern learner service pending)
+- Integration : 80% 🔧 (Decision tracking connecté, pattern analysis pending)

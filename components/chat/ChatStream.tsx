@@ -240,6 +240,14 @@ export default function ChatStream({ projectId, conversationId: propConversation
     documentId?: string
     metadata?: any
   }>>([])
+  const [pendingDecisions, setPendingDecisions] = useState<Array<{
+    id: string
+    type: string
+    suggestion: string
+    context: any
+    proposedAction: any
+    timestamp: number
+  }>>([])
   const lastProcessedMessageId = useRef<string | null>(null)
   const bufferRef = useRef<string>('')
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -271,6 +279,121 @@ export default function ChatStream({ projectId, conversationId: propConversation
   useEffect(() => {
     onStreamingChangeRef.current?.(isStreaming, isStreaming ? stopStreaming : undefined)
   }, [isStreaming, stopStreaming])
+
+  // 🎯 DECISION TRACKING FUNCTIONS
+  const handleAISuggestion = (data: any) => {
+    const decisionId = generateUUID()
+    const decision = {
+      id: decisionId,
+      type: data.suggestion_type || 'general',
+      suggestion: data.suggestion || data.message,
+      context: data.context || {},
+      proposedAction: data.proposed_action || {},
+      timestamp: Date.now()
+    }
+
+    setPendingDecisions(prev => [...prev, decision])
+
+    // Show interactive toast with decision buttons
+    toast.custom((t) => (
+      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 max-w-md border-l-4 border-purple-500">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center">
+            🤖
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              AI Suggestion
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {decision.suggestion}
+            </p>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => {
+                  handleDecisionAccept(decision)
+                  toast.dismiss(t.id)
+                }}
+                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs rounded flex items-center gap-1"
+                title="Accept suggestion"
+              >
+                <span>✅</span> Accept
+              </button>
+              <button
+                onClick={() => {
+                  handleDecisionModify(decision)
+                  toast.dismiss(t.id)
+                }}
+                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded flex items-center gap-1"
+                title="Modify suggestion"
+              >
+                <span>✏️</span> Modify
+              </button>
+              <button
+                onClick={() => {
+                  handleDecisionReject(decision)
+                  toast.dismiss(t.id)
+                }}
+                className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs rounded flex items-center gap-1"
+                title="Reject suggestion"
+              >
+                <span>❌</span> Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ), {
+      duration: 10000, // 10 seconds to decide
+      position: 'top-right'
+    })
+  }
+
+  const handleDecisionAccept = async (decision: any) => {
+    console.log('✅ Decision ACCEPTED:', decision)
+    await trackUserDecision(decision, 'accept', null)
+    setPendingDecisions(prev => prev.filter(d => d.id !== decision.id))
+    toast.success('Suggestion accepted! Learning from your preference.', { icon: '✅' })
+  }
+
+  const handleDecisionModify = async (decision: any) => {
+    console.log('✏️ Decision MODIFIED:', decision)
+    // TODO: Open modal for modification
+    toast('Modification UI coming soon...', { icon: '✏️' })
+    await trackUserDecision(decision, 'modify', { note: 'User requested modification' })
+    setPendingDecisions(prev => prev.filter(d => d.id !== decision.id))
+  }
+
+  const handleDecisionReject = async (decision: any) => {
+    console.log('❌ Decision REJECTED:', decision)
+    await trackUserDecision(decision, 'reject', null)
+    setPendingDecisions(prev => prev.filter(d => d.id !== decision.id))
+    toast.error('Suggestion rejected. Learning from your preference.', { icon: '❌' })
+  }
+
+  const trackUserDecision = async (decision: any, userChoice: 'accept' | 'reject' | 'modify', modification: any) => {
+    try {
+      const { error } = await supabase.from('user_decisions').insert({
+        project_id: projectId,
+        decision_type: decision.type,
+        context: decision.context,
+        proposed_action: decision.proposedAction,
+        user_choice: userChoice,
+        user_modification: modification,
+        confidence_score: decision.context?.confidence || 0.5,
+        tags: [decision.type, userChoice],
+        created_at: new Date().toISOString()
+      })
+
+      if (error) {
+        console.error('Failed to track decision:', error)
+      } else {
+        console.log('🎯 Decision tracked successfully')
+      }
+    } catch (error) {
+      console.error('Error tracking decision:', error)
+    }
+  }
 
   const addSystemMessage = async (content: string) => {
     const systemMessage: ChatMessage = {
@@ -941,6 +1064,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
                   console.log('💰 API Usage:', data)
                   // Stocker pour sauvegarde avec le message
                   window.sessionStorage.setItem('lastApiUsage', JSON.stringify(data))
+                } else if (data.type === 'ai_suggestion') {
+                  // 🎯 DECISION TRACKING: AI a fait une suggestion
+                  console.log('🤖 AI Suggestion detected:', data)
+                  handleAISuggestion(data)
                 } else if (data.type === 'storage_notification') {
                   // Afficher notification de rangement
                   console.log('📦 Storage notification:', data.message)
