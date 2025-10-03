@@ -1,5 +1,20 @@
 # DAILY LOG - BCI Tool v2
 
+## [2025-10-03 - Session 5 : Pattern Analysis Engine Complete]
+- **Fichiers créés** : lib/services/patternLearner.ts, app/api/learning/analyze/route.ts
+- **Fichiers modifiés** : components/learning/SuggestionsReview.tsx
+- **Changements** :
+  - ✅ Service PatternLearner complet avec clustering par embedding similarity
+  - ✅ Algorithme cosine similarity pour regrouper décisions similaires
+  - ✅ Détection patterns high_acceptance (80%+) et high_rejection (80%+)
+  - ✅ Extraction automatique conditions/actions communes
+  - ✅ Génération implicit_rules depuis learned_patterns
+  - ✅ API route /api/learning/analyze (POST trigger + GET status)
+  - ✅ Bouton "Analyze Patterns" dans SuggestionsReview
+  - ✅ Toast notifications pour résultats d'analyse
+- **État** : Pipeline complet decision → pattern → rule fonctionnel
+- **Prochaine étape** : Setup background job quotidien pour analyse automatique
+
 ## [2025-10-03 - Session 4 : Decision Tracking UI + SuggestionsReview Component]
 - **Fichiers créés** : components/learning/SuggestionsReview.tsx
 - **Fichiers modifiés** : ChatStream.tsx, UnifiedBoardUltra.tsx, UnifiedSidebarUltra.tsx

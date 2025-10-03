@@ -41,6 +41,7 @@ export default function SuggestionsReview({ projectId, onRulePromoted, onRuleRej
   const [suggestions, setSuggestions] = useState<ImplicitRule[]>([])
   const [patterns, setPatterns] = useState<LearnedPattern[]>([])
   const [loading, setLoading] = useState(true)
+  const [analyzing, setAnalyzing] = useState(false)
   const [selectedTab, setSelectedTab] = useState<'suggestions' | 'patterns'>('suggestions')
 
   useEffect(() => {
@@ -128,6 +129,31 @@ export default function SuggestionsReview({ projectId, onRulePromoted, onRuleRej
     }
   }
 
+  const handleAnalyzePatterns = async () => {
+    setAnalyzing(true)
+    try {
+      const response = await fetch('/api/learning/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId })
+      })
+
+      if (!response.ok) throw new Error('Analysis failed')
+
+      const result = await response.json()
+      toast.success(`Analysis complete! Found ${result.patterns} patterns and created ${result.rules} rules`)
+
+      // Reload data
+      await loadSuggestions()
+      await loadPatterns()
+    } catch (error) {
+      console.error('Error analyzing patterns:', error)
+      toast.error('Failed to analyze patterns')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 0.8) return 'text-green-600 bg-green-50'
     if (confidence >= 0.6) return 'text-blue-600 bg-blue-50'
@@ -163,7 +189,24 @@ export default function SuggestionsReview({ projectId, onRulePromoted, onRuleRej
             Review and approve rules learned from your behavior
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleAnalyzePatterns}
+            disabled={analyzing}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+          >
+            {analyzing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Analyze Patterns
+              </>
+            )}
+          </button>
           <span className="text-sm text-gray-600">
             {suggestions.length} pending
           </span>

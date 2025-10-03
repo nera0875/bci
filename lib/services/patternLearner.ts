@@ -1,320 +1,415 @@
-import { RAGService } from './ragService'
-import { createClient } from '@/lib/supabase/client'
-import { LearningSystem } from './learningSystem'
-import { RuleOptimizer } from './ruleOptimizer'
-import { claudeService } from './claudeService'
+/**
+ * Pattern Learner Service - Auto-Reinforcement System
+ *
+ * Analyzes user_decisions to detect patterns and generate implicit rules
+ * Implements clustering by embedding similarity and confidence scoring
+ *
+ * Architecture: user_decisions → learned_patterns → implicit_rules
+ */
 
-export interface LearnedRule {
-  pattern: string;
-  action: string; 
-  confidence: number; // 0-1
-  successCount: number;
-  failureCount: number;
-  lastUsed: Date;
-  metadata?: Record<string, any>;
+import { supabase } from '@/lib/supabase/client'
+import { generateEmbedding } from '@/lib/services/ragService'
+
+interface UserDecision {
+  id: string
+  project_id: string
+  decision_type: string
+  context: any
+  proposed_action: any
+  user_choice: 'accept' | 'reject' | 'modify'
+  user_modification: any | null
+  confidence_score: number | null
+  embedding: number[] | null
+  tags: string[]
+  created_at: string
+}
+
+interface LearnedPattern {
+  id?: string
+  project_id: string
+  pattern_type: string
+  condition: any
+  action: any
+  confidence: number
+  sample_size: number
+  drift_score: number
+  decision_ids: string[]
+  created_at?: string
+  updated_at?: string
+}
+
+interface ImplicitRule {
+  project_id: string
+  pattern_id: string
+  name: string
+  condition: any
+  action: any
+  confidence: number
+  sample_size: number
+  status: 'suggestion' | 'active' | 'deprecated'
+  success_rate: number | null
 }
 
 export class PatternLearner {
-  private rag: RAGService;
-  private learningSystem: LearningSystem;
-  private ruleOptimizer: RuleOptimizer;
-  private supabase = createClient();
+  private projectId: string
+  private minSampleSize: number = 3 // Minimum decisions to form a pattern
+  private minConfidence: number = 0.6 // Minimum confidence for pattern
+  private similarityThreshold: number = 0.8 // Cosine similarity threshold
 
   constructor(projectId: string) {
-    this.rag = new RAGService();
-    this.learningSystem = new LearningSystem(projectId);
-    this.ruleOptimizer = new RuleOptimizer(projectId, process.env.ANTHROPIC_API_KEY || '');
+    this.projectId = projectId
   }
 
-  async analyzeInteraction(userAction: any, context: any, success: boolean = false): Promise<LearnedRule[]> {
-    try {
-      console.log('🔍 Pattern Learner: Analyzing interaction', { action: userAction, success });
+  /**
+   * Main analysis function - analyzes all decisions and generates patterns
+   */
+  async analyzeDecisions(): Promise<LearnedPattern[]> {
+    console.log('🧠 Pattern Learner: Starting analysis for project:', this.projectId)
 
-      // Étape 1: Extraire patterns du userAction avec Claude
-      const extractedPatterns = await this.extractPatterns(userAction, context);
+    // 1. Load all user decisions
+    const decisions = await this.loadDecisions()
+    console.log(`📊 Loaded ${decisions.length} decisions`)
 
-      // Étape 2: Chercher rules similaires via RAG
-      const similarRules = await this.findSimilarRules(extractedPatterns, userAction.project_id || context.projectId);
+    if (decisions.length < this.minSampleSize) {
+      console.log('⚠️ Not enough decisions to analyze patterns')
+      return []
+    }
 
-      const updatedRules: LearnedRule[] = [];
+    // 2. Ensure all decisions have embeddings
+    await this.generateMissingEmbeddings(decisions)
 
-      // Étape 3: Mettre à jour les rules existantes
-      for (const rule of similarRules) {
-        let updatedRule = { ...rule };
+    // 3. Cluster decisions by similarity
+    const clusters = await this.clusterBySimilarity(decisions)
+    console.log(`🔍 Found ${clusters.length} clusters`)
 
-        if (success) {
-          // Augmenter confiance pour succès
-          updatedRule.successCount += 1;
-          updatedRule.confidence = Math.min(1.0, rule.confidence + 0.1 * (1 - rule.confidence)); // Approche asymptotique vers 1
-          updatedRule.lastUsed = new Date();
-          
-          // Enregistrer succès dans learning system
-          await this.learningSystem.recordSuccess({
-            technique: rule.pattern,
-            context: context.type || 'general',
-            payload: userAction.payload || '',
-            impact: userAction.result || 'success'
-          });
-        } else {
-          // Diminuer confiance pour échec
-          updatedRule.failureCount += 1;
-          updatedRule.confidence = Math.max(0.0, rule.confidence - 0.05); // Diminution graduelle
-          updatedRule.lastUsed = new Date();
-          
-          // Enregistrer échec
-          await this.learningSystem.recordFailure({
-            technique: rule.pattern,
-            context: context.type || 'general',
-            payload: userAction.payload || '',
-            reason: userAction.error || 'unknown'
-          });
+    // 4. Analyze each cluster for patterns
+    const patterns: LearnedPattern[] = []
+    for (const cluster of clusters) {
+      const clusterPatterns = await this.analyzeCluster(cluster)
+      patterns.push(...clusterPatterns)
+    }
+
+    console.log(`✅ Generated ${patterns.length} patterns`)
+
+    // 5. Save patterns to database
+    await this.savePatterns(patterns)
+
+    return patterns
+  }
+
+  /**
+   * Load all decisions for this project
+   */
+  private async loadDecisions(): Promise<UserDecision[]> {
+    const { data, error } = await supabase
+      .from('user_decisions')
+      .select('*')
+      .eq('project_id', this.projectId)
+      .order('created_at', { ascending: false })
+      .limit(1000)
+
+    if (error) {
+      console.error('Error loading decisions:', error)
+      return []
+    }
+
+    return data || []
+  }
+
+  /**
+   * Generate embeddings for decisions that don't have them
+   */
+  private async generateMissingEmbeddings(decisions: UserDecision[]): Promise<void> {
+    const needsEmbedding = decisions.filter(d => !d.embedding)
+
+    if (needsEmbedding.length === 0) return
+
+    console.log(`🔄 Generating embeddings for ${needsEmbedding.length} decisions...`)
+
+    for (const decision of needsEmbedding) {
+      try {
+        const text = `${decision.decision_type}: ${JSON.stringify(decision.context)} -> ${JSON.stringify(decision.proposed_action)}`
+        const embedding = await generateEmbedding(text)
+
+        await supabase
+          .from('user_decisions')
+          .update({ embedding })
+          .eq('id', decision.id)
+
+        decision.embedding = embedding
+      } catch (error) {
+        console.error('Error generating embedding for decision:', decision.id, error)
+      }
+    }
+  }
+
+  /**
+   * Cluster decisions by embedding similarity
+   */
+  private async clusterBySimilarity(decisions: UserDecision[]): Promise<UserDecision[][]> {
+    const clusters: UserDecision[][] = []
+    const processed = new Set<string>()
+
+    for (const decision of decisions) {
+      if (processed.has(decision.id) || !decision.embedding) continue
+
+      const cluster = [decision]
+      processed.add(decision.id)
+
+      for (const other of decisions) {
+        if (processed.has(other.id) || !other.embedding || decision.id === other.id) continue
+
+        const similarity = this.cosineSimilarity(decision.embedding, other.embedding)
+
+        if (similarity >= this.similarityThreshold) {
+          cluster.push(other)
+          processed.add(other.id)
         }
-
-        // Mettre à jour en base
-        await this.supabase
-          .from('learned_rules')
-          .update(updatedRule)
-          .eq('id', rule.id);
-
-        updatedRules.push(updatedRule);
       }
 
-      // Étape 4: Sauvegarder nouveaux patterns découverts
-      await this.saveLearnedPatterns(extractedPatterns, userAction.project_id || context.projectId, success);
+      if (cluster.length >= this.minSampleSize) {
+        clusters.push(cluster)
+      }
+    }
 
-      // Auto-renforcement : Optimiser règles à faible confiance
-      await this.autoReinforceLowConfidenceRules(updatedRules, context);
+    return clusters
+  }
 
-      console.log(`🔍 Pattern Learner: Updated ${updatedRules.length} rules, saved new patterns`);
-      return updatedRules;
+  /**
+   * Calculate cosine similarity between two vectors
+   */
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0
 
-    } catch (error) {
-      console.error('Erreur dans analyzeInteraction:', error);
-      return [];
+    let dotProduct = 0
+    let normA = 0
+    let normB = 0
+
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i]
+      normA += a[i] * a[i]
+      normB += b[i] * b[i]
+    }
+
+    const magnitude = Math.sqrt(normA) * Math.sqrt(normB)
+    return magnitude === 0 ? 0 : dotProduct / magnitude
+  }
+
+  /**
+   * Analyze cluster to extract patterns
+   */
+  private async analyzeCluster(cluster: UserDecision[]): Promise<LearnedPattern[]> {
+    const patterns: LearnedPattern[] = []
+
+    const acceptCount = cluster.filter(d => d.user_choice === 'accept').length
+    const rejectCount = cluster.filter(d => d.user_choice === 'reject').length
+    const total = cluster.length
+
+    const acceptRate = acceptCount / total
+    const rejectRate = rejectCount / total
+
+    // High acceptance pattern
+    if (acceptRate >= 0.8 && acceptCount >= this.minSampleSize) {
+      patterns.push({
+        project_id: this.projectId,
+        pattern_type: 'high_acceptance',
+        condition: this.extractCommonConditions(cluster),
+        action: this.extractCommonActions(cluster),
+        confidence: acceptRate,
+        sample_size: acceptCount,
+        drift_score: 0,
+        decision_ids: cluster.map(d => d.id)
+      })
+    }
+
+    // High rejection pattern
+    if (rejectRate >= 0.8 && rejectCount >= this.minSampleSize) {
+      patterns.push({
+        project_id: this.projectId,
+        pattern_type: 'high_rejection',
+        condition: this.extractCommonConditions(cluster),
+        action: { type: 'reject', reason: 'User pattern' },
+        confidence: rejectRate,
+        sample_size: rejectCount,
+        drift_score: 0,
+        decision_ids: cluster.map(d => d.id)
+      })
+    }
+
+    return patterns
+  }
+
+  /**
+   * Extract common conditions from cluster
+   */
+  private extractCommonConditions(cluster: UserDecision[]): any {
+    const allTags = cluster.flatMap(d => d.tags || [])
+    const tagCounts = new Map<string, number>()
+
+    for (const tag of allTags) {
+      tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)
+    }
+
+    const commonTags = Array.from(tagCounts.entries())
+      .filter(([_, count]) => count >= cluster.length * 0.7)
+      .map(([tag, _]) => tag)
+
+    const decisionTypes = cluster.map(d => d.decision_type)
+    const mostCommonType = this.getMostCommon(decisionTypes)
+
+    return {
+      tags: commonTags,
+      decision_type: mostCommonType,
+      sample_contexts: cluster.slice(0, 3).map(d => d.context)
     }
   }
 
-  private async extractPatterns(userAction: any, context: any): Promise<string[]> {
-    try {
-      // Utiliser Claude pour extraire patterns intelligents
-      const prompt = `Extrait les patterns techniques de cette action de pentest:
+  /**
+   * Extract common actions from cluster
+   */
+  private extractCommonActions(cluster: UserDecision[]): any {
+    const actions = cluster.map(d => d.proposed_action)
+    const actionTypes = actions.map(a => a?.type || 'unknown')
+    const mostCommonAction = this.getMostCommon(actionTypes)
 
-Action: ${JSON.stringify(userAction)}
-Contexte: ${JSON.stringify(context)}
-
-Retourne seulement un tableau de strings avec les patterns identifiés (ex: "price-negative", "idor-user", "race-condition"). Max 5 patterns.`;
-
-      const response = await fetch('/api/claude', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt, 
-          maxTokens: 200,
-          temperature: 0.1 
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Erreur extraction patterns avec Claude');
-      }
-
-      const { content } = await response.json();
-
-      // Parser comme array de strings
-      const patterns = content.replace(/^\[.*\]$/, '').split(',').map(p => p.trim().replace(/["']/g, ''));
-      return patterns.slice(0, 5);
-
-    } catch (error) {
-      console.error('Erreur extraction patterns:', error);
-      
-      // Fallback: patterns basiques depuis l'action
-      const fallbackPatterns = [];
-      if (userAction.payload?.includes('price') || userAction.payload?.includes('amount')) {
-        fallbackPatterns.push('price-manipulation');
-      }
-      if (userAction.payload?.includes('id=') || userAction.target?.includes('/user/')) {
-        fallbackPatterns.push('idor');
-      }
-      if (userAction.type === 'concurrency') {
-        fallbackPatterns.push('race-condition');
-      }
-      return fallbackPatterns;
+    return {
+      type: mostCommonAction,
+      sample_actions: actions.slice(0, 3)
     }
   }
 
-  private async findSimilarRules(patterns: string[], projectId: string): Promise<LearnedRule[]> {
-    try {
-      // Recherche RAG pour chaque pattern
-      const allSimilar: LearnedRule[] = [];
+  /**
+   * Get most common element in array
+   */
+  private getMostCommon<T>(arr: T[]): T | null {
+    if (arr.length === 0) return null
 
-      for (const pattern of patterns) {
-        const similar = await this.rag.searchSimilar(
-          `pentest rule pattern: ${pattern} action: testing vulnerability`,
-          3,
-          0.75,
-          projectId
-        );
-
-        // Mapper vers LearnedRule
-        const rules = similar.map((item: any): LearnedRule => ({
-          pattern: item.content?.title || item.type || pattern,
-          action: item.content?.description || 'test vulnerability',
-          confidence: item.metadata?.confidence || 0.5,
-          successCount: item.metadata?.successCount || 0,
-          failureCount: item.metadata?.failureCount || 0,
-          lastUsed: new Date(item.metadata?.lastUsed || Date.now()),
-          metadata: item.metadata || {}
-        }));
-
-        allSimilar.push(...rules);
-      }
-
-      // Dédupliquer et trier par similarité/confiance
-      const uniqueRules = allSimilar.filter((rule, index, self) => 
-        index === self.findIndex(r => r.pattern === rule.pattern)
-      ).sort((a, b) => b.confidence - a.confidence);
-
-      return uniqueRules.slice(0, 5); // Top 5 similaires
-
-    } catch (error) {
-      console.error('Erreur recherche similar rules:', error);
-      return [];
+    const counts = new Map<T, number>()
+    for (const item of arr) {
+      counts.set(item, (counts.get(item) || 0) + 1)
     }
+
+    let max = 0
+    let mostCommon: T | null = null
+
+    for (const [item, count] of counts.entries()) {
+      if (count > max) {
+        max = count
+        mostCommon = item
+      }
+    }
+
+    return mostCommon
   }
 
-  private async saveLearnedPatterns(patterns: string[], projectId: string, success: boolean): Promise<void> {
-    try {
-      for (const pattern of patterns) {
-        // Vérifier si pattern existe déjà
-        const { data: existing } = await this.supabase
-          .from('learned_rules')
-          .select('id')
-          .eq('project_id', projectId)
-          .eq('pattern', pattern)
-          .maybeSingle();
-
-        const baseRule: LearnedRule = {
-          pattern,
-          action: `Discovered pattern: ${pattern}`,
-          confidence: success ? 0.7 : 0.3,
-          successCount: success ? 1 : 0,
-          failureCount: success ? 0 : 1,
-          lastUsed: new Date()
-        };
+  /**
+   * Save patterns to database
+   */
+  private async savePatterns(patterns: LearnedPattern[]): Promise<void> {
+    for (const pattern of patterns) {
+      try {
+        const { data: existing } = await supabase
+          .from('learned_patterns')
+          .select('*')
+          .eq('project_id', pattern.project_id)
+          .eq('pattern_type', pattern.pattern_type)
+          .single()
 
         if (existing) {
-          // Mettre à jour
-          await this.supabase
-            .from('learned_rules')
-            .update(baseRule)
-            .eq('id', existing.id);
+          await supabase
+            .from('learned_patterns')
+            .update({
+              confidence: pattern.confidence,
+              sample_size: pattern.sample_size,
+              condition: pattern.condition,
+              action: pattern.action,
+              decision_ids: pattern.decision_ids,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id)
         } else {
-          // Créer nouveau
-          await this.supabase
-            .from('learned_rules')
-            .insert({ ...baseRule, project_id: projectId });
+          await supabase
+            .from('learned_patterns')
+            .insert(pattern)
         }
-
-        // Stocker avec embedding via RAG
-        await this.rag.storeWithEmbedding(
-          { pattern, action: baseRule.action, success },
-          { confidence: baseRule.confidence, project_id: projectId },
-          projectId
-        );
+      } catch (error) {
+        console.error('Error saving pattern:', error)
       }
-
-    } catch (error) {
-      console.error('Erreur sauvegarde patterns:', error);
     }
   }
 
-  // Auto-renforcement silencieux : optimiser règles à faible confiance
-  private async autoReinforceLowConfidenceRules(rules: LearnedRule[], context: any): Promise<void> {
-    try {
-      const lowConfidenceRules = rules.filter(rule => rule.confidence < 0.6 && rule.failureCount > 0);
-      
-      for (const rule of lowConfidenceRules) {
-        const performance = {
-          successRate: rule.successCount / (rule.successCount + rule.failureCount),
-          recentFailures: [], // À implémenter avec historique récent
-          context: context.type || 'general'
-        };
+  /**
+   * Generate implicit rules from high-confidence patterns
+   */
+  async generateImplicitRules(): Promise<ImplicitRule[]> {
+    console.log('🎯 Generating implicit rules from patterns...')
 
-        const optimizations = await this.ruleOptimizer.generateOptimization(rule, performance);
-        
-        // Appliquer la première optimisation prometteuse automatiquement si confiance haute
-        if (optimizations.length > 0 && optimizations[0].confidence > 0.8) {
-          console.log(`🔄 Auto-renforcement: Appliquant optimisation pour ${rule.pattern}`);
-          // Mise à jour de la règle avec nouvelle action optimisée
-          const optimizedRule = {
-            ...rule,
-            action: optimizations[0].implementation,
-            confidence: Math.min(1.0, rule.confidence + 0.15) // Boost modéré
-          };
+    const { data: patterns, error } = await supabase
+      .from('learned_patterns')
+      .select('*')
+      .eq('project_id', this.projectId)
+      .gte('confidence', this.minConfidence)
+      .gte('sample_size', this.minSampleSize)
 
-          await this.supabase
-            .from('learned_rules')
-            .update(optimizedRule)
-            .eq('id', rule.id || ''); // Assumer ID disponible
+    if (error || !patterns) {
+      console.error('Error loading patterns:', error)
+      return []
+    }
 
-          // Enregistrer comme apprentissage
-          await this.learningSystem.recordSuccess({
-            technique: 'auto-optimization',
-            context: 'reinforcement',
-            impact: `Optimized ${rule.pattern} with ${Math.round(optimizations[0].confidence * 100)}% confidence`
-          });
+    const rules: ImplicitRule[] = []
+
+    for (const pattern of patterns) {
+      const { data: existingRule } = await supabase
+        .from('implicit_rules')
+        .select('id')
+        .eq('pattern_id', pattern.id)
+        .single()
+
+      if (existingRule) continue
+
+      let rule: ImplicitRule | null = null
+
+      if (pattern.pattern_type === 'high_acceptance') {
+        rule = {
+          project_id: this.projectId,
+          pattern_id: pattern.id,
+          name: `Auto-accept: ${JSON.stringify(pattern.condition.tags).slice(0, 50)}`,
+          condition: pattern.condition,
+          action: { type: 'auto_accept', ...pattern.action },
+          confidence: pattern.confidence,
+          sample_size: pattern.sample_size,
+          status: 'suggestion',
+          success_rate: null
         }
-
-        // Apprentissage silencieux : enregistrer interaction d'optimisation
-        await this.learningSystem.recordSuccess({
-          technique: 'background-learning',
-          context: 'silent-reinforcement',
-          impact: `Analyzed ${lowConfidenceRules.length} low-confidence rules`
-        });
-      }
-    } catch (error) {
-      console.error('Erreur auto-renforcement:', error);
-    }
-  }
-
-  // Background learning silencieux (à appeler périodiquement)
-  async backgroundLearning(): Promise<void> {
-    try {
-      console.log('🔄 Background learning: Analyse automatique des règles');
-
-      // Récupérer toutes les règles du projet
-      const { data: allRules } = await this.supabase
-        .from('learned_rules')
-        .select('*')
-        .eq('project_id', this.learningSystem.projectId); // Assumer accès
-
-      // Analyser et optimiser en batch
-      const lowPerfRules = allRules?.filter(rule => rule.confidence < 0.7) || [];
-
-      for (const rule of lowPerfRules.slice(0, 3)) { // Limiter à 3 par cycle
-        const performance = await this.getRulePerformance(rule.id || '');
-        await this.ruleOptimizer.generateOptimization(rule as any, performance);
+      } else if (pattern.pattern_type === 'high_rejection') {
+        rule = {
+          project_id: this.projectId,
+          pattern_id: pattern.id,
+          name: `Auto-reject: ${JSON.stringify(pattern.condition.tags).slice(0, 50)}`,
+          condition: pattern.condition,
+          action: { type: 'auto_reject', reason: 'User pattern' },
+          confidence: pattern.confidence,
+          sample_size: pattern.sample_size,
+          status: 'suggestion',
+          success_rate: null
+        }
       }
 
-      console.log(`🔄 Background learning: Traité ${lowPerfRules.length} règles`);
-    } catch (error) {
-      console.error('Erreur background learning:', error);
+      if (rule) {
+        rules.push(rule)
+
+        try {
+          await supabase
+            .from('implicit_rules')
+            .insert(rule)
+
+          console.log('✅ Created implicit rule:', rule.name)
+        } catch (error) {
+          console.error('Error creating implicit rule:', error)
+        }
+      }
     }
-  }
 
-  private async getRulePerformance(ruleId: string): Promise<any> {
-    // Implémentation similaire à ruleOptimizer
-    const patterns = await this.learningSystem.getTopPatterns();
-    const rulePattern = patterns.find(p => p.id === ruleId);
-    return {
-      successRate: rulePattern?.success_rate || 0.5,
-      recentFailures: rulePattern?.pattern_data?.recent_failures || [],
-      context: rulePattern?.context || 'general'
-    };
+    return rules
   }
-}
-
-// Hook pour utiliser le Pattern Learner
-export function usePatternLearner(projectId: string) {
-  return useMemo(() => new PatternLearner(projectId), [projectId]);
 }
