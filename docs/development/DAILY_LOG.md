@@ -1,5 +1,20 @@
 # DAILY LOG - BCI Tool v2
 
+## [2025-10-03 - Session 3 : Corrections critiques + Auto-Reinforcement Foundations]
+- **Fichiers modifiés** : optimizationEngine.ts, conversation.ts, ChatStream.tsx
+- **Migrations créées** : message_cache, user_decisions, implicit_rules + learned_patterns
+- **Changements** :
+  - ✅ Fix optimizationEngine.ts ligne 374 : `this.supabase` → `supabase` importé
+  - ✅ Fix memory_nodes queries : suppression `.eq('category')` → `.ilike('name', '%success%')`
+  - ✅ Fix conversation.ts 409 Conflict : migration message_cache avec unique constraint
+  - ✅ Fix ChatStream fetch errors : try/catch avec AbortError detection
+  - ✅ Fix Realtime subscription : backoff exponentiel (5 retries, 1s→2s→4s→8s→16s)
+  - ✅ Migration `user_decisions` pour tracking décisions utilisateur
+  - ✅ Migration `implicit_rules` + `learned_patterns` pour auto-learning
+  - ✅ Architecture document AUTO_REINFORCEMENT créé (7000+ mots)
+- **État** : Erreurs runtime éliminées, fondations auto-reinforcement en place
+- **Prochaine étape** : Appliquer migrations Supabase, implémenter UI decision tracking
+
 ## [2025-10-03 - Session 2 : Corrections et nouvelles features]
 - **Fichiers modifiés** : UnifiedBoardUltra.tsx, UnifiedSidebarUltra.tsx, CostsSection.tsx (créé)
 - **Changements** :

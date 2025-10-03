@@ -484,51 +484,77 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const subscribeToMessages = () => {
     console.log('Setting up subscription for project:', projectId)
 
-    const channel = supabase
-      .channel(`chat_${projectId}`, {
-        config: {
-          presence: { key: projectId },
-          broadcast: { ack: false }
-        }
-      })
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `project_id=eq.${projectId}`
-        },
-        (payload) => {
-          console.log('New message received via subscription:', payload)
-          const newMessage = payload.new as ChatMessage
+    // Cleanup previous channel if exists
+    const existingChannel = supabase.channel(`chat_${projectId}`)
+    if (existingChannel) {
+      supabase.removeChannel(existingChannel)
+    }
 
-          // Only update messages, don't trigger Claude here
-          // (Polling will handle Claude responses to avoid duplicates)
-          // Check if message already exists to avoid duplicates
-          setMessages(prev => {
-            const exists = prev.some(msg => msg.id === newMessage.id)
-            if (exists) {
-              return prev
-            }
-            return [...prev, newMessage]
-          })
-        }
-      )
-      .subscribe((status) => {
-        console.log('Subscription status:', status)
-        if (status === 'CHANNEL_ERROR') {
-          console.error('Subscription error - retrying...')
-          // Retry after a delay
-          setTimeout(() => {
+    let retryCount = 0
+    const maxRetries = 5
+    const baseDelay = 1000 // 1 second
+
+    const setupChannel = () => {
+      const channel = supabase
+        .channel(`chat_${projectId}`, {
+          config: {
+            presence: { key: projectId },
+            broadcast: { ack: false }
+          }
+        })
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_messages',
+            filter: `project_id=eq.${projectId}`
+          },
+          (payload) => {
+            console.log('New message received via subscription:', payload)
+            const newMessage = payload.new as ChatMessage
+
+            // Only update messages, don't trigger Claude here
+            // Check if message already exists to avoid duplicates
+            setMessages(prev => {
+              const exists = prev.some(msg => msg.id === newMessage.id)
+              if (exists) {
+                return prev
+              }
+              return [...prev, newMessage]
+            })
+          }
+        )
+        .subscribe((status) => {
+          console.log('Subscription status:', status)
+
+          if (status === 'SUBSCRIBED') {
+            retryCount = 0 // Reset retry count on success
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.error('Subscription error - retrying...')
             supabase.removeChannel(channel)
-            subscribeToMessages()
-          }, 2000)
-        }
-      })
+
+            // Exponential backoff
+            if (retryCount < maxRetries) {
+              const delay = baseDelay * Math.pow(2, retryCount)
+              retryCount++
+              console.log(`Retry ${retryCount}/${maxRetries} in ${delay}ms`)
+              setTimeout(setupChannel, delay)
+            } else {
+              console.error('Max retries reached, giving up on subscription')
+            }
+          }
+        })
+
+      return channel
+    }
+
+    const channel = setupChannel()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }
 
@@ -836,24 +862,38 @@ export default function ChatStream({ projectId, conversationId: propConversation
       abortControllerRef.current = new AbortController()
 
       // Use the new chat/stream endpoint with Mem0 integration
-      const response = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages,                    // Full conversation history
-          projectId,                   // Project ID for Mem0
-          conversationId: currentConvId, // Conversation ID for tracking
-          useMemoryContext: true,      // Enable Mem0 memory injection
-          saveMemory: true,            // Auto-save responses to Mem0
-          enableAutoOrganization: true // Flag pour activer auto-org côté serveur si implémenté
-        }),
-        signal: abortControllerRef.current.signal
-      })
+      let response
+      try {
+        response = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages,                    // Full conversation history
+            projectId,                   // Project ID for Mem0
+            conversationId: currentConvId, // Conversation ID for tracking
+            useMemoryContext: true,      // Enable Mem0 memory injection
+            saveMemory: true,            // Auto-save responses to Mem0
+            enableAutoOrganization: true // Flag pour activer auto-org côté serveur si implémenté
+          }),
+          signal: abortControllerRef.current.signal
+        })
+      } catch (fetchError: any) {
+        // Ne pas logger AbortError comme une vraie erreur
+        if (fetchError.name === 'AbortError') {
+          console.log('✅ Request aborted by user')
+          setIsStreaming(false)
+          return
+        }
+        throw fetchError // Re-throw other fetch errors
+      }
 
       console.log('Claude API response:', response.status, response.ok)
-      if (!response.ok) throw new Error(`Failed to get response: ${response.status}`)
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`API Error ${response.status}: ${errorText}`)
+      }
 
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()

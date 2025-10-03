@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   Settings, Save, Brain, Cpu, Key, Plus, Trash2,
   CheckCircle, Loader2, Edit2, Copy, Download, Upload,
-  FileText, X, FolderOpen, ChevronRight, ChevronDown
+  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -80,6 +80,7 @@ export default function SettingsPro({ projectId, projectName = 'Project' }: Sett
   const [templates, setTemplates] = useState<Template[]>([])
   const [categories, setCategories] = useState<Record<string, boolean>>({})
   const [systemPrompt, setSystemPrompt] = useState('')
+  const [projectGoal, setProjectGoal] = useState('')
   const [aiModel, setAiModel] = useState('claude-sonnet-4-5-20250929')
   const [apiKeys, setApiKeys] = useState({
     anthropic: '',
@@ -107,12 +108,13 @@ export default function SettingsPro({ projectId, projectName = 'Project' }: Sett
     try {
       const { data } = await supabase
         .from('projects')
-        .select('system_prompt, settings, api_keys')
+        .select('system_prompt, settings, api_keys, goal')
         .eq('id', projectId)
         .single()
 
       if (data) {
         setSystemPrompt(data.system_prompt || '')
+        setProjectGoal(data.goal || '')
         setAiModel(data.settings?.aiModel || 'claude-3-5-sonnet-20241022')
         setApiKeys(data.api_keys || { anthropic: '', openai: '' })
       }
@@ -232,6 +234,7 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
       const { error } = await supabase
         .from('projects')
         .update({
+          goal: projectGoal,
           system_prompt: systemPrompt,
           settings: {
             aiModel,
@@ -537,8 +540,43 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
               </h2>
             </div>
 
-            {/* System Prompt */}
+            {/* Project Goal */}
             <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Target className="text-orange-500" size={20} />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Project Goal
+                    </h3>
+                  </div>
+                  {projectGoal && (
+                    <button
+                      onClick={() => {
+                        if (confirm('Clear project goal?')) {
+                          setProjectGoal('')
+                        }
+                      }}
+                      className="text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Define the main objective for this project. This will be injected into the AI context.
+                </p>
+
+                <Textarea
+                  value={projectGoal}
+                  onChange={(e) => setProjectGoal(e.target.value)}
+                  placeholder="Ex: Test the security of https://example.com API for OWASP Top 10 vulnerabilities..."
+                  className="min-h-[120px]"
+                />
+              </div>
+
+              {/* System Prompt */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">

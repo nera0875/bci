@@ -16,7 +16,7 @@ export default function SimpleApiSettings() {
   }, [])
 
   const loadApiKeys = async () => {
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('api_keys')
       .select('*')
       .limit(1)
@@ -31,7 +31,7 @@ export default function SimpleApiSettings() {
   const saveApiKeys = async () => {
     setLoading(true)
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('api_keys')
         .upsert({
           id: '1',

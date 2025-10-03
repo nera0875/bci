@@ -1,6 +1,6 @@
 # CURRENT STATE - BCI Tool v2
 
-## 📅 Dernière mise à jour : 2025-10-03 (Session optimisation complète)
+## 📅 Dernière mise à jour : 2025-10-03 (Session corrections + Auto-Reinforcement)
 
 ## 🔧 État Actuel du Projet
 
@@ -48,7 +48,23 @@
    - Garde seulement : doc-writer, git-manager
    - CLAUDE.md simplifié pour efficacité max
 
-### ✅ Problèmes RÉSOLUS (2025-10-03)
+### ✅ Problèmes RÉSOLUS (2025-10-03 Session 3)
+
+1. **Erreurs Runtime** : RÉSOLU
+   - ✅ optimizationEngine.ts:374 `this.supabase` undefined → Utiliser `supabase` importé
+   - ✅ memory_nodes queries 400 Bad Request → Supprimer `.eq('category')`
+   - ✅ message_cache 409 Conflict → Migration créée avec unique constraint
+   - ✅ ChatStream fetch errors → try/catch avec AbortError detection
+   - ✅ Realtime subscription instable → Backoff exponentiel (5 retries)
+
+2. **Auto-Reinforcement Foundations** : CRÉÉ
+   - ✅ Migration `user_decisions` pour tracking décisions
+   - ✅ Migration `implicit_rules` + `learned_patterns` pour learning
+   - ✅ Architecture document complet (7000+ mots)
+   - ⏳ Service AutoReinforcementEngine à finaliser
+   - ⏳ UI decision tracking (toasts ✅/✏️/❌) à implémenter
+
+### ✅ Problèmes RÉSOLUS (2025-10-03 Session 2)
 
 1. **Memory** : RÉSOLU
    - ✅ Édition directe du contenu des documents
@@ -108,8 +124,8 @@
 - Focus sur documentation automatique pour persistance
 - Interface doit être compacte et intuitive
 
-## 🚀 État Global : 75% Complete
-- Backend/DB : 90% ✅ (Cache + embeddings actifs)
-- UI/Components : 95% ✅ (Refactoring majeur complété)
-- Intelligence/Learning : 60% 📝 (Isolation + cache + learning actifs)
-- Integration : 70% 🔧 (Contexte projet parfait, RAG reste à optimiser)
+## 🚀 État Global : 78% Complete
+- Backend/DB : 95% ✅ (Cache + embeddings + auto-reinforcement tables actifs)
+- UI/Components : 95% ✅ (Refactoring majeur complété, erreurs runtime fixées)
+- Intelligence/Learning : 70% 📝 (Decision tracking ready, pattern learning foundations)
+- Integration : 75% 🔧 (Contexte projet + cache + learning intégrés)

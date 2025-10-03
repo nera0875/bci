@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PlaybookBuilder } from '@/components/rules/PlaybookBuilder'
 
 interface RulesCompactProps {
   projectId: string
@@ -37,8 +38,7 @@ export default function RulesCompact({ projectId }: RulesCompactProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedPlaybook, setSelectedPlaybook] = useState<Playbook | null>(null)
   const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null)
-  const [showEditor, setShowEditor] = useState(false)
-  const [editorContent, setEditorContent] = useState('')
+  const [showBuilder, setShowBuilder] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'custom'>('all')
 
@@ -100,6 +100,8 @@ export default function RulesCompact({ projectId }: RulesCompactProps) {
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
 
+      console.log('📋 Rules loaded:', data?.length || 0, 'rules', data)
+
       if (data) {
         // Transform DB data to playbook format
         const transformedPlaybooks = data.map(rule => ({
@@ -125,86 +127,65 @@ export default function RulesCompact({ projectId }: RulesCompactProps) {
   }
 
   const handleCreatePlaybook = () => {
-    const newPlaybook: Playbook = {
-      id: 'new',
-      name: 'New Playbook',
-      description: 'Describe what this playbook does',
-      enabled: true,
-      trigger: 'Define when this playbook should run',
-      actions: ['Action 1', 'Action 2'],
-      category: 'custom',
-      tags: []
-    }
-    setEditingPlaybook(newPlaybook)
-    setShowEditor(true)
-    setEditorContent(JSON.stringify(newPlaybook, null, 2))
+    setEditingPlaybook(null)
+    setShowBuilder(true)
   }
 
   const handleEditPlaybook = (playbook: Playbook) => {
     setEditingPlaybook(playbook)
-    setShowEditor(true)
-    setEditorContent(JSON.stringify(playbook, null, 2))
+    setShowBuilder(true)
   }
 
-  const handleSavePlaybook = async () => {
-    if (!editorContent) return
-
+  const handleSavePlaybook = async (playbookData: any) => {
     try {
-      const playbookData = JSON.parse(editorContent)
-
-      if (editingPlaybook?.id === 'new') {
+      if (!editingPlaybook || editingPlaybook.id === 'new' || !editingPlaybook.id) {
         // Create new playbook
         const { error } = await supabase
           .from('rules')
           .insert({
             project_id: projectId,
             name: playbookData.name,
-            description: playbookData.description,
+            description: playbookData.description || '',
             enabled: playbookData.enabled,
-            focus_type: `playbook_${Date.now()}`,
+            trigger: playbookData.trigger,
+            action: JSON.stringify(playbookData.actions),
             metadata: {
-              trigger: playbookData.trigger,
               actions: playbookData.actions,
-              category: playbookData.category,
-              tags: playbookData.tags
+              category: 'custom',
+              tags: []
             }
           })
 
         if (error) throw error
-        toast.success('Playbook created')
+        toast.success('Playbook créé')
       } else {
         // Update existing playbook
         const { error } = await supabase
           .from('rules')
           .update({
             name: playbookData.name,
-            description: playbookData.description,
+            description: playbookData.description || '',
             enabled: playbookData.enabled,
+            trigger: playbookData.trigger,
+            action: JSON.stringify(playbookData.actions),
             metadata: {
-              trigger: playbookData.trigger,
               actions: playbookData.actions,
-              category: playbookData.category,
-              tags: playbookData.tags,
-              success_rate: playbookData.success_rate
+              category: 'custom',
+              tags: []
             }
           })
-          .eq('id', editingPlaybook!.id)
+          .eq('id', editingPlaybook.id)
 
         if (error) throw error
-        toast.success('Playbook updated')
+        toast.success('Playbook mis à jour')
       }
 
       loadPlaybooks()
-      setShowEditor(false)
+      setShowBuilder(false)
       setEditingPlaybook(null)
-      setEditorContent('')
     } catch (error) {
-      if (error instanceof SyntaxError) {
-        toast.error('Invalid JSON format')
-      } else {
-        console.error('Error saving playbook:', error)
-        toast.error('Failed to save playbook')
-      }
+      console.error('Error saving playbook:', error)
+      toast.error('Failed to save playbook')
     }
   }
 
@@ -305,6 +286,7 @@ export default function RulesCompact({ projectId }: RulesCompactProps) {
 
   const activeCount = playbooks.filter(p => p.enabled).length
   const totalCount = playbooks.length
+  const filteredCount = filteredPlaybooks.length
 
   return (
     <div className="h-full flex bg-white dark:bg-gray-900">
@@ -320,6 +302,11 @@ export default function RulesCompact({ projectId }: RulesCompactProps) {
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {activeCount} active / {totalCount} total playbooks
+                {filteredCount !== totalCount && (
+                  <span className="ml-2 text-blue-600 dark:text-blue-400">
+                    • Showing {filteredCount}
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex gap-2">
@@ -523,67 +510,24 @@ export default function RulesCompact({ projectId }: RulesCompactProps) {
         </div>
       </div>
 
-      {/* Editor Panel */}
-      <AnimatePresence>
-        {showEditor && (
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            className="w-[500px] border-l border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-800"
-          >
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="font-medium text-gray-900 dark:text-white">
-                {editingPlaybook?.id === 'new' ? 'Create Playbook' : 'Edit Playbook'}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowEditor(false)
-                  setEditingPlaybook(null)
-                  setEditorContent('')
-                }}
-                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex-1 p-4">
-              <div className="mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Playbook Configuration (JSON)
-                </label>
-              </div>
-              <Textarea
-                value={editorContent}
-                onChange={(e) => setEditorContent(e.target.value)}
-                className="h-[calc(100%-100px)] font-mono text-sm bg-white dark:bg-gray-900"
-                placeholder="Enter playbook configuration..."
-              />
-            </div>
-
-            <div className="p-4 border-t border-gray-200 dark:border-gray-800 flex gap-2">
-              <Button
-                onClick={handleSavePlaybook}
-                className="flex-1 bg-gray-900 hover:bg-gray-800 text-white"
-              >
-                <Save size={16} className="mr-1" />
-                Save
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowEditor(false)
-                  setEditingPlaybook(null)
-                  setEditorContent('')
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Playbook Builder Modal */}
+      {showBuilder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <PlaybookBuilder
+            initialPlaybook={editingPlaybook ? {
+              name: editingPlaybook.name,
+              trigger: editingPlaybook.trigger,
+              actions: editingPlaybook.actions,
+              enabled: editingPlaybook.enabled
+            } : undefined}
+            onSave={handleSavePlaybook}
+            onCancel={() => {
+              setShowBuilder(false)
+              setEditingPlaybook(null)
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

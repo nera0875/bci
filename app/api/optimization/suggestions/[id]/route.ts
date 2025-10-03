@@ -9,9 +9,10 @@ const supabase = createClient(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const { status, modifiedData, processed_at } = await request.json()
 
     // Update suggestion status
@@ -23,7 +24,7 @@ export async function PATCH(
         processed_by: 'user',
         metadata: modifiedData ? { ...modifiedData, original_modified: true } : undefined
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single()
 
@@ -49,13 +50,14 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const { error } = await supabase
       .from('suggestions_queue')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) throw error
 

@@ -35,10 +35,181 @@ export class OptimizationEngine {
   }
 
   /**
+   * Analyze memory nodes (Success/Failed) to suggest new rules
+   */
+  async analyzeMemoryPatterns(): Promise<OptimizationSuggestion[]> {
+    const suggestions: OptimizationSuggestion[] = []
+
+    try {
+      // Charger les Success/Failed nodes (sans filtre category qui n'existe pas)
+      const { data: successNodes } = await supabase
+        .from('memory_nodes')
+        .select('*')
+        .eq('project_id', this.projectId)
+        .eq('section', 'memory')
+        .ilike('name', '%success%')
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      const { data: failedNodes } = await supabase
+        .from('memory_nodes')
+        .select('*')
+        .eq('project_id', this.projectId)
+        .eq('section', 'memory')
+        .ilike('name', '%failed%')
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      // Analyser les patterns dans Success pour suggérer des rules positives
+      if (successNodes && successNodes.length > 0) {
+        const successPatterns = this.extractPatternsFromMemory(successNodes, 'success')
+        for (const pattern of successPatterns) {
+          if (pattern.frequency >= 3) {
+            suggestions.push({
+              type: 'rule',
+              confidence: Math.min(0.95, 0.6 + (pattern.frequency * 0.1)),
+              suggestion: {
+                title: `Success Pattern: ${pattern.attackType}`,
+                description: `Detected ${pattern.frequency} successful ${pattern.attackType} attacks. Create rule to automate this pattern.`,
+                category: pattern.attackType,
+                impact: pattern.frequency >= 5 ? 'high' : 'medium',
+                data: {
+                  name: `Auto: ${pattern.attackType} Success Pattern`,
+                  trigger: pattern.trigger,
+                  action: JSON.stringify([
+                    { type: 'http', payload: pattern.payload },
+                    { type: 'validate', payload: 'status:200' },
+                    { type: 'store', payload: `${pattern.attackType}_result.md` }
+                  ]),
+                  metadata: {
+                    source: 'memory_analysis',
+                    attack_type: pattern.attackType,
+                    sample_payload: pattern.payload
+                  }
+                }
+              },
+              metadata: {
+                source: 'memory_success_analysis',
+                timestamp: new Date().toISOString(),
+                related: pattern.relatedNodes
+              }
+            })
+          }
+        }
+      }
+
+      // Analyser les patterns dans Failed pour suggérer des protections
+      if (failedNodes && failedNodes.length > 0) {
+        const failedPatterns = this.extractPatternsFromMemory(failedNodes, 'failed')
+        for (const pattern of failedPatterns) {
+          if (pattern.frequency >= 3) {
+            suggestions.push({
+              type: 'improvement',
+              confidence: 0.75,
+              suggestion: {
+                title: `Failed Pattern: ${pattern.attackType}`,
+                description: `Detected ${pattern.frequency} failed ${pattern.attackType} attempts. Review these failures to improve testing strategy.`,
+                category: pattern.attackType,
+                impact: 'medium',
+                data: {
+                  attack_type: pattern.attackType,
+                  common_errors: pattern.errors,
+                  suggested_fix: pattern.suggestedFix
+                }
+              },
+              metadata: {
+                source: 'memory_failed_analysis',
+                timestamp: new Date().toISOString()
+              }
+            })
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error analyzing memory patterns:', error)
+    }
+
+    return suggestions
+  }
+
+  /**
+   * Extract attack patterns from memory nodes
+   */
+  private extractPatternsFromMemory(nodes: any[], type: 'success' | 'failed') {
+    const patternMap = new Map<string, any>()
+
+    for (const node of nodes) {
+      const content = node.content || ''
+
+      // Détecter le type d'attaque depuis le contenu
+      let attackType = 'Unknown'
+      if (content.match(/idor|insecure direct object/i)) attackType = 'IDOR'
+      else if (content.match(/sql injection|sqli/i)) attackType = 'SQL Injection'
+      else if (content.match(/xss|cross-site scripting/i)) attackType = 'XSS'
+      else if (content.match(/csrf|cross-site request/i)) attackType = 'CSRF'
+      else if (content.match(/business logic/i)) attackType = 'Business Logic'
+      else if (content.match(/race condition/i)) attackType = 'Race Condition'
+
+      // Extraire payload depuis code blocks
+      const payloadMatch = content.match(/```(?:http|bash|python)?\n([\s\S]+?)\n```/)
+      const payload = payloadMatch ? payloadMatch[1].trim() : ''
+
+      // Extraire trigger pattern
+      const endpointMatch = content.match(/endpoint.*?[:：]\s*(.+)/i) ||
+                           content.match(/GET|POST|PUT|DELETE\s+([^\s]+)/i)
+      const trigger = endpointMatch ? `endpoint matches "${endpointMatch[1].trim()}"` : 'manual'
+
+      // Extraire erreurs (pour failed)
+      const errorMatch = content.match(/error.*?[:：]\s*(.+)/i) ||
+                        content.match(/failed.*?[:：]\s*(.+)/i)
+      const error = errorMatch ? errorMatch[1].trim() : ''
+
+      // Grouper par attack type
+      if (!patternMap.has(attackType)) {
+        patternMap.set(attackType, {
+          attackType,
+          frequency: 0,
+          trigger,
+          payload,
+          errors: [] as string[],
+          relatedNodes: [] as string[],
+          suggestedFix: ''
+        })
+      }
+
+      const pattern = patternMap.get(attackType)!
+      pattern.frequency++
+      pattern.relatedNodes.push(node.id)
+      if (error && type === 'failed') {
+        pattern.errors.push(error)
+      }
+
+      // Suggérer fix basé sur erreurs communes
+      if (type === 'failed' && pattern.errors.length > 0) {
+        if (pattern.errors.some(e => e.match(/401|unauthorized/i))) {
+          pattern.suggestedFix = 'Check authentication headers and token validity'
+        } else if (pattern.errors.some(e => e.match(/403|forbidden/i))) {
+          pattern.suggestedFix = 'Review authorization logic and user permissions'
+        } else if (pattern.errors.some(e => e.match(/404|not found/i))) {
+          pattern.suggestedFix = 'Verify endpoint URL and resource existence'
+        } else {
+          pattern.suggestedFix = 'Review request parameters and payload format'
+        }
+      }
+    }
+
+    return Array.from(patternMap.values())
+  }
+
+  /**
    * Analyze conversation for patterns and generate suggestions
    */
   async analyzeConversation(messages: any[]): Promise<OptimizationSuggestion[]> {
     const suggestions: OptimizationSuggestion[] = []
+
+    // Ajouter les suggestions depuis l'analyse mémoire
+    const memorysuggestions = await this.analyzeMemoryPatterns()
+    suggestions.push(...memorysuggestions)
 
     // Detect repeated queries that could be stored
     const queryPatterns = this.detectRepeatedQueries(messages)
@@ -199,7 +370,7 @@ export class OptimizationEngine {
 
     try {
       // Load existing rules
-      const { data: rules } = await this.supabase
+      const { data: rules } = await supabase
         .from('rules')
         .select('*')
         .eq('project_id', this.projectId)

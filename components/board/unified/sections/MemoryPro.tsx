@@ -5,7 +5,8 @@ import {
   Folder, File, Plus, Search, FileText, Shield,
   Database, Globe, Server, Terminal, Code, Bug,
   Key, Lock, AlertTriangle, CheckCircle, Eye,
-  Trash2, Edit2, Save, X, FolderPlus, FilePlus
+  Trash2, Edit2, Save, X, FolderPlus, FilePlus,
+  Palette, Smile
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,6 +66,8 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
   const [documentContent, setDocumentContent] = useState('')
   const [isDirty, setIsDirty] = useState(false)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [editingIconNodeId, setEditingIconNodeId] = useState<string | null>(null)
+  const [editingColorNodeId, setEditingColorNodeId] = useState<string | null>(null)
 
   useEffect(() => {
     loadMemoryStructure()
@@ -92,13 +95,18 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
       if (nodes) {
         const nodeMap = new Map<string, TreeNode>()
         const rootNodes: TreeNode[] = []
+        const allFolderIds = new Set<string>()
 
-        // First pass: create all nodes
+        // First pass: create all nodes + collect folder IDs
         nodes.forEach(node => {
           nodeMap.set(node.id, {
             ...node,
             children: []
           })
+          // Collect folder IDs for auto-expand
+          if (node.type === 'folder') {
+            allFolderIds.add(node.id)
+          }
         })
 
         // Second pass: build tree structure
@@ -114,12 +122,8 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
         })
 
         setTreeData(rootNodes)
-
-        // Auto-expand all folders
-        const allFolders = nodes
-          .filter(n => n.type === 'folder')
-          .map(n => n.id)
-        setExpandedFolders(new Set(allFolders))
+        // Auto-expand ALL folders on load
+        setExpandedFolders(allFolderIds)
       }
     } catch (error) {
       console.error('Error loading memory structure:', error)
@@ -227,6 +231,38 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
     } catch (error) {
       console.error('Error deleting:', error)
       toast.error('Failed to delete')
+    }
+  }
+
+  const handleUpdateIcon = async (nodeId: string, iconName: string) => {
+    try {
+      await supabase
+        .from('memory_nodes')
+        .update({ icon: iconName })
+        .eq('id', nodeId)
+
+      toast.success('Icon updated')
+      loadMemoryStructure()
+      setEditingIconNodeId(null)
+    } catch (error) {
+      console.error('Error updating icon:', error)
+      toast.error('Failed to update icon')
+    }
+  }
+
+  const handleUpdateColor = async (nodeId: string, color: string) => {
+    try {
+      await supabase
+        .from('memory_nodes')
+        .update({ color })
+        .eq('id', nodeId)
+
+      toast.success('Color updated')
+      loadMemoryStructure()
+      setEditingColorNodeId(null)
+    } catch (error) {
+      console.error('Error updating color:', error)
+      toast.error('Failed to update color')
     }
   }
 
@@ -375,6 +411,26 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
               title="Rename"
             >
               <Edit2 size={12} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingIconNodeId(node.id)
+              }}
+              className="p-1 hover:bg-purple-100 dark:hover:bg-purple-900/20 rounded text-purple-600"
+              title="Change Icon"
+            >
+              <Smile size={12} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditingColorNodeId(node.id)
+              }}
+              className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded text-blue-600"
+              title="Change Color"
+            >
+              <Palette size={12} />
             </button>
             <button
               onClick={(e) => {
@@ -542,6 +598,58 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
           </div>
         )}
       </div>
+
+      {/* Icon Picker Modal */}
+      {editingIconNodeId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingIconNodeId(null)}>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Choose Icon</h3>
+            <div className="grid grid-cols-6 gap-2">
+              {Object.keys(ICONS).map(iconKey => {
+                const IconComponent = ICONS[iconKey]
+                return (
+                  <button
+                    key={iconKey}
+                    onClick={() => handleUpdateIcon(editingIconNodeId, iconKey)}
+                    className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center justify-center"
+                    title={iconKey}
+                  >
+                    <IconComponent size={20} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Color Picker Modal */}
+      {editingColorNodeId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingColorNodeId(null)}>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-4">Choose Color</h3>
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { name: 'Red', value: 'red', class: 'bg-red-500' },
+                { name: 'Orange', value: 'orange', class: 'bg-orange-500' },
+                { name: 'Yellow', value: 'yellow', class: 'bg-yellow-500' },
+                { name: 'Green', value: 'green', class: 'bg-green-500' },
+                { name: 'Blue', value: 'blue', class: 'bg-blue-500' },
+                { name: 'Purple', value: 'purple', class: 'bg-purple-500' },
+                { name: 'Pink', value: 'pink', class: 'bg-pink-500' },
+                { name: 'Gray', value: 'gray', class: 'bg-gray-500' }
+              ].map(color => (
+                <button
+                  key={color.value}
+                  onClick={() => handleUpdateColor(editingColorNodeId, color.value)}
+                  className={`${color.class} w-16 h-16 rounded-lg hover:scale-110 transition-transform`}
+                  title={color.name}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

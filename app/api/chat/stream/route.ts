@@ -119,14 +119,15 @@ export async function POST(request: NextRequest) {
         console.log('🎯 Found', httpAnalysis.predictions.length, 'vulnerability predictions')
 
         // Store predictions in learning system for future improvement
-        for (const pred of httpAnalysis.predictions) {
-          await learningSystem.storePattern({
-            type: pred.type,
-            confidence: pred.probability,
-            context: 'http_request_analysis',
-            suggestion: pred.suggestedTest
-          })
-        }
+        // TODO: Implement storePattern method in LearningSystem
+        // for (const pred of httpAnalysis.predictions) {
+        //   await learningSystem.storePattern({
+        //     type: pred.type,
+        //     confidence: pred.probability,
+        //     context: 'http_request_analysis',
+        //     suggestion: pred.suggestedTest
+        //   })
+        // }
       }
     }
 

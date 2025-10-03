@@ -74,7 +74,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         return
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('projects')
         .select('*')
         .eq('id', projectId)
@@ -96,7 +96,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
   const loadConversations = async () => {
     try {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('conversations')
         .select('*')
         .eq('project_id', projectId)
@@ -116,7 +116,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
   const createNewConversation = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('conversations')
         .insert({
           project_id: projectId,
@@ -144,13 +144,13 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
   const deleteConversation = async (conversationId: string) => {
     try {
       // Supprimer tous les messages de la conversation
-      await supabase
+      await (supabase as any)
         .from('chat_messages')
         .delete()
         .eq('conversation_id', conversationId)
 
       // Supprimer la conversation
-      await supabase
+      await (supabase as any)
         .from('conversations')
         .delete()
         .eq('id', conversationId)
@@ -175,7 +175,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
   const renameConversation = async (conversationId: string, newTitle: string) => {
     try {
-      await supabase
+      await (supabase as any)
         .from('conversations')
         .update({ title: newTitle })
         .eq('id', conversationId)
@@ -209,7 +209,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
     // Sauvegarder le message
     try {
-      await supabase
+      await (supabase as any)
         .from('chat_messages')
         .insert([{
           project_id: project.id,

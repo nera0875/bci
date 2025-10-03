@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   BarChart3, TrendingUp, Activity, Brain,
   Calendar, Clock, Target, Zap, Database,
-  FileText, MessageSquare, CheckCircle
+  FileText, MessageSquare, CheckCircle, ChevronLeft, ChevronRight, Filter
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
@@ -24,6 +24,12 @@ interface Metrics {
   queryResponseTime: number
   automationRate: number
   learningProgress: number
+  // Cache metrics
+  cacheHitRate: number
+  totalCostSaved: number
+  averageCostPerMessage: number
+  totalMessages: number
+  cachedMessages: number
 }
 
 interface ActivityItem {
@@ -45,12 +51,22 @@ export default function AnalyticsSection({ projectId }: AnalyticsSectionProps) {
     patternDetections: 0,
     queryResponseTime: 0,
     automationRate: 0,
-    learningProgress: 0
+    learningProgress: 0,
+    cacheHitRate: 0,
+    totalCostSaved: 0,
+    averageCostPerMessage: 0,
+    totalMessages: 0,
+    cachedMessages: 0
   })
 
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
+
+  // Pagination & filters
+  const [currentPage, setCurrentPage] = useState(1)
+  const [activityFilter, setActivityFilter] = useState<'all' | 'memory' | 'rule' | 'suggestion' | 'pattern'>('all')
+  const itemsPerPage = 10
 
   useEffect(() => {
     loadMetrics()
@@ -76,7 +92,13 @@ export default function AnalyticsSection({ projectId }: AnalyticsSectionProps) {
         patternDetections: 15,
         queryResponseTime: 245,
         automationRate: 0.67,
-        learningProgress: 0.73
+        learningProgress: 0.73,
+        // Cache metrics (mock)
+        cacheHitRate: 0.35, // 35% de cache hits
+        totalCostSaved: 0.0142, // $0.0142 saved
+        averageCostPerMessage: 0.00023,
+        totalMessages: 156,
+        cachedMessages: 55
       })
     }
     setLoading(false)
@@ -261,6 +283,46 @@ export default function AnalyticsSection({ projectId }: AnalyticsSectionProps) {
           />
         </div>
 
+        {/* Cache Performance */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+              <Zap className="text-green-600" size={20} />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Cache Performance
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {Math.round((metrics.cacheHitRate || 0) * 100)}%
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Cache Hit Rate</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-green-600">
+                ${(metrics.totalCostSaved || 0).toFixed(4)}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Total Saved</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {metrics.cachedMessages || 0}/{metrics.totalMessages || 0}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">Cached Messages</div>
+            </div>
+          </div>
+
+          <ProgressBar value={metrics.cacheHitRate || 0} label="Cache Efficiency" color="green" />
+
+          <div className="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span>Average cost: ${(metrics.averageCostPerMessage || 0).toFixed(6)}/message</span>
+          </div>
+        </div>
+
         {/* Progress Indicators */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
@@ -278,46 +340,119 @@ export default function AnalyticsSection({ projectId }: AnalyticsSectionProps) {
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Recent Activity
             </h3>
-            <Activity size={20} className="text-gray-400" />
+
+            {/* Filter dropdown */}
+            <div className="flex items-center gap-2">
+              <select
+                value={activityFilter}
+                onChange={(e) => {
+                  setActivityFilter(e.target.value as any)
+                  setCurrentPage(1) // Reset to first page on filter change
+                }}
+                className="px-3 py-1 border rounded-lg text-sm bg-white dark:bg-gray-700"
+              >
+                <option value="all">All Activities</option>
+                <option value="memory">Memory</option>
+                <option value="rule">Rules</option>
+                <option value="suggestion">Suggestions</option>
+                <option value="pattern">Patterns</option>
+              </select>
+              <Activity size={20} className="text-gray-400" />
+            </div>
           </div>
 
-          <div className="space-y-4">
-            {activities.map((activity, index) => (
-              <motion.div
-                key={activity.id || `activity-${index}`}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="flex items-start gap-3"
-              >
-                <div className={cn(
-                  "p-2 rounded-lg",
-                  activity.type === 'memory' && "bg-blue-100 text-blue-600",
-                  activity.type === 'rule' && "bg-purple-100 text-purple-600",
-                  activity.type === 'suggestion' && "bg-green-100 text-green-600",
-                  activity.type === 'pattern' && "bg-amber-100 text-amber-600"
-                )}>
-                  {activity.type === 'memory' && <Brain size={16} />}
-                  {activity.type === 'rule' && <Target size={16} />}
-                  {activity.type === 'suggestion' && <Zap size={16} />}
-                  {activity.type === 'pattern' && <Activity size={16} />}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
-                      {activity.action}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {activity.timestamp}
-                    </span>
+          {/* Filtered & Paginated Activities */}
+          <div className="space-y-4 mb-4">
+            {activities
+              .filter(a => activityFilter === 'all' || a.type === activityFilter)
+              .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+              .map((activity, index) => (
+                <motion.div
+                  key={activity.id || `activity-${index}`}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="flex items-start gap-3"
+                >
+                  <div className={cn(
+                    "p-2 rounded-lg",
+                    activity.type === 'memory' && "bg-blue-100 text-blue-600 dark:bg-blue-900/20",
+                    activity.type === 'rule' && "bg-purple-100 text-purple-600 dark:bg-purple-900/20",
+                    activity.type === 'suggestion' && "bg-green-100 text-green-600 dark:bg-green-900/20",
+                    activity.type === 'pattern' && "bg-amber-100 text-amber-600 dark:bg-amber-900/20"
+                  )}>
+                    {activity.type === 'memory' && <Brain size={16} />}
+                    {activity.type === 'rule' && <Target size={16} />}
+                    {activity.type === 'suggestion' && <Zap size={16} />}
+                    {activity.type === 'pattern' && <Activity size={16} />}
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {activity.details}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {activity.action}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {activity.timestamp}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {activity.details}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
           </div>
+
+          {/* Pagination Controls */}
+          {(() => {
+            const filteredActivities = activities.filter(a => activityFilter === 'all' || a.type === activityFilter)
+            const totalPages = Math.ceil(filteredActivities.length / itemsPerPage)
+
+            if (totalPages <= 1) return null
+
+            return (
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-500">
+                  Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredActivities.length)} of {filteredActivities.length}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={cn(
+                          "px-3 py-1 rounded-lg text-sm",
+                          currentPage === page
+                            ? "bg-blue-600 text-white"
+                            : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Learning Insights */}
