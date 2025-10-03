@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase/client'
 
 interface Pattern {
   type: 'usage' | 'query' | 'error' | 'navigation'
@@ -25,17 +25,13 @@ interface OptimizationSuggestion {
 }
 
 export class OptimizationEngine {
-  private supabase: any
   private projectId: string
   private patterns: Map<string, Pattern[]> = new Map()
   private learningHistory: any[] = []
 
   constructor(projectId: string) {
     this.projectId = projectId
-    this.supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    // Utilise le client Supabase partagé au lieu d'en créer un nouveau
   }
 
   /**
@@ -442,7 +438,7 @@ export class OptimizationEngine {
   }
 
   private async createMemoryNode(data: any): Promise<void> {
-    await this.supabase.from('memory_nodes').insert({
+    await supabase.from('memory_nodes').insert({
       project_id: this.projectId,
       path: data.suggestedPath,
       name: data.suggestedPath.split('/').pop(),
@@ -457,7 +453,7 @@ export class OptimizationEngine {
   }
 
   private async createRule(data: any): Promise<void> {
-    await this.supabase.from('rules').insert({
+    await supabase.from('rules').insert({
       project_id: this.projectId,
       name: data.name,
       trigger: data.trigger,
@@ -500,7 +496,7 @@ export class OptimizationEngine {
    * Queue a new suggestion for review
    */
   async queueSuggestion(suggestion: OptimizationSuggestion): Promise<void> {
-    await this.supabase.from('suggestions_queue').insert({
+    await supabase.from('suggestions_queue').insert({
       project_id: this.projectId,
       type: suggestion.type,
       confidence: suggestion.confidence,

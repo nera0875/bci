@@ -55,6 +55,16 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
   useEffect(() => {
     loadProject()
     loadConversations()
+
+    // Écouter l'événement d'ouverture du board depuis les toasts
+    const handleOpenBoard = (e: Event) => {
+      setShowUnifiedBoard(true)
+    }
+    window.addEventListener('open-bci-board', handleOpenBoard as EventListener)
+
+    return () => {
+      window.removeEventListener('open-bci-board', handleOpenBoard as EventListener)
+    }
   }, [projectId])
 
   const loadProject = async () => {

@@ -158,6 +158,38 @@ const MessageComponent = React.memo(({
           </div>
         )}
 
+          {/* Afficher métadonnées (tokens, coût) pour messages assistant */}
+          {message.role === 'assistant' && message.metadata && (
+            <div className="mt-3 flex items-center gap-4 text-xs text-[#6E6E80]">
+              {message.metadata.tokens && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                    </svg>
+                    {message.metadata.tokens.input + message.metadata.tokens.output} tokens
+                  </span>
+                  {message.metadata.cost !== undefined && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded ${
+                      message.metadata.cached
+                        ? 'bg-green-50 text-green-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {message.metadata.cached ? '💾' : '💰'}
+                      ${message.metadata.cost.toFixed(6)}
+                      {message.metadata.cached && ' (cached)'}
+                    </span>
+                  )}
+                </div>
+              )}
+              {message.metadata.model && (
+                <span className="text-[#6E6E80]">
+                  {message.metadata.model.replace('claude-', '')}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Afficher les boutons d'action si c'est le dernier message assistant avec une action */}
           {message.role === 'assistant' && pendingAction && (
             <div className="mt-4">
@@ -549,53 +581,60 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const autoOrganizeContent = useCallback(async (content: string, userMessage: string) => {
     try {
       console.log('🤖 Rangement automatique:', content.substring(0, 100) + '...')
-      
+
       // Détection simple basée sur mots-clés
       const targetFolder = detectTargetFolder(userMessage)
-      
+
       // Si dossier cible identifié
       if (targetFolder !== '*') {
         const targetSection = 'memory'
-        
-        // Créer un row pour le board
-        const newRow = {
-          name: `Contenu auto-organisé: ${targetFolder}`,
-          type: targetSection,
-          content: content.substring(0, 1000) + (content.length > 1000 ? '...' : ''), // Tronquer si trop long
-          instructions: `Généré automatiquement du chat le ${new Date().toISOString()}. Contexte: ${userMessage.substring(0, 200)}`,
-          targetFolder,
-          created_at: new Date().toISOString(),
-          metadata: {
-            auto_generated: true,
-            source: 'chat_auto_org',
-            targeting: { folder: targetFolder, section: targetSection }
-          }
-        }
-        
-        // Trouver ou créer le document cible dans le board
-        const boardResponse = await fetch('/api/unified/data', {
+
+        // Créer un document dans memory_nodes
+        const memoryResponse = await fetch('/api/memory/nodes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             projectId,
+            parentId: null, // Root level
+            name: `Auto: ${targetFolder} (${new Date().toLocaleDateString('fr-FR')})`,
+            type: 'document',
+            content: content,
             section: targetSection,
-            folder: targetFolder,
-            row: newRow
+            category: targetFolder
           })
         })
-        
-        if (boardResponse.ok) {
-          const { success, nodeId } = await boardResponse.json()
-          if (success) {
-            console.log('✅ Contenu rangé automatiquement dans:', targetFolder, 'node:', nodeId)
-            toast.success(`📁 Contenu rangé automatiquement dans "${targetFolder}"`, { duration: 4000 })
-            
-            // Sync le board si ouvert - Utiliser custom event au lieu de hook dans callback
+
+        if (memoryResponse.ok) {
+          const { success, node } = await memoryResponse.json()
+          if (success && node) {
+            console.log('✅ Document créé dans memory:', node.name, 'id:', node.id)
+
+            // Toast personnalisé avec bouton pour ouvrir BCI
+            const toastContent = (
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="font-medium text-sm">📁 Contenu rangé en mémoire</div>
+                  <div className="text-xs text-gray-600 mt-1">{node.name}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('open-bci-board', { detail: { section: 'memory' } }))
+                  }}
+                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                >
+                  Voir
+                </button>
+              </div>
+            )
+            toast.success(toastContent, { duration: 6000 })
+
+            // Sync le board si ouvert
             window.dispatchEvent(new CustomEvent('board-reload', { detail: { projectId, section: targetSection } }))
             return true
           }
         } else {
-          console.error('❌ Échec rangement automatique:', await boardResponse.text())
+          const errorText = await memoryResponse.text()
+          console.error('❌ Échec création document:', errorText)
         }
       } else {
         console.log('ℹ️ Pas de rangement automatique pour ce contenu')
@@ -603,7 +642,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
     } catch (error) {
       console.error('❌ Erreur rangement automatique:', error)
     }
-    
+
     return false
   }, [projectId])
 
