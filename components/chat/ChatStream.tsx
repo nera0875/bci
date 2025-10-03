@@ -831,6 +831,11 @@ export default function ChatStream({ projectId, conversationId: propConversation
                   bufferTimeoutRef.current = setTimeout(() => {
                     setStreamingContent(bufferRef.current)
                   }, 10) // Very short delay for buffering
+                } else if (data.type === 'usage') {
+                  // PHASE 2.1: Sauvegarder métadonnées tokens
+                  console.log('💰 API Usage:', data)
+                  // Stocker pour sauvegarde avec le message
+                  window.sessionStorage.setItem('lastApiUsage', JSON.stringify(data))
                 } else if (data.type === 'storage_notification') {
                   // Afficher notification de rangement
                   console.log('📦 Storage notification:', data.message)
@@ -881,16 +886,26 @@ export default function ChatStream({ projectId, conversationId: propConversation
           await conversationManagerRef.current.cacheResponse(userMessage, fullContent)
         }
 
+        // Récupérer les métadonnées de tokens depuis sessionStorage
+        const usageData = window.sessionStorage.getItem('lastApiUsage')
+        const metadata = usageData ? JSON.parse(usageData) : {}
+
         const { data: newMessage } = await supabase
           .from('chat_messages')
           .insert({
             project_id: projectId,
             role: 'assistant' as const,
             content: fullContent,
-            conversation_id: currentConvId
+            conversation_id: currentConvId,
+            metadata: metadata
           })
           .select()
           .single()
+
+        // Nettoyer sessionStorage après utilisation
+        if (usageData) {
+          window.sessionStorage.removeItem('lastApiUsage')
+        }
 
         // Add the new message directly without reloading all
         if (newMessage) {

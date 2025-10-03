@@ -22,6 +22,7 @@ import {
 import { LearningSystem } from '@/lib/services/learningSystem'
 import { createEmbedding } from '@/lib/services/embeddings'
 import { parseHttpRequests, predictVulnerabilities, analyzeRequestSet } from '@/lib/services/httpParser'
+import { ConversationManager } from '@/lib/services/conversation'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -133,24 +134,76 @@ export async function POST(request: NextRequest) {
     const promptTemplate = selectPrompt(context)
     console.log('👨‍💻 Using expert prompt:', promptTemplate.name)
 
-    // 3. GET MEMORY CONTEXT (recherche sémantique simple)
+    // PHASE 1.2: GET REAL MEMORY NODES FROM PROJECT
     let memoryContextFormatted = ''
     try {
-      const { data: memories } = await supabase
-        .from('memory_chunks')
-        .select('*')
+      // Charger les VRAIS documents mémoire du projet
+      const { data: memoryNodes } = await supabase
+        .from('memory_nodes')
+        .select('id, name, type, content, path')
         .eq('project_id', projectId)
-        .limit(5)
-      
-      if (memories && memories.length > 0) {
-        memoryContextFormatted = formatMemoryContext({
-          successes: memories.filter(m => m.metadata?.type === 'success'),
-          failures: memories.filter(m => m.metadata?.type === 'failure')
-        })
-        console.log('🧠 Memory context loaded:', memories.length, 'items')
+        .eq('type', 'document')
+        .order('updated_at', { ascending: false })
+        .limit(10) // Top 10 documents les plus récents
+
+      if (memoryNodes && memoryNodes.length > 0) {
+        memoryContextFormatted = `
+## 📁 MÉMOIRE DU PROJET
+
+${memoryNodes.map(node => `
+**[${node.path}] ${node.name}**
+${node.content ? node.content.substring(0, 300) + (node.content.length > 300 ? '...' : '') : '(vide)'}
+`).join('\n')}
+
+---
+`
+        console.log('🧠 Memory nodes loaded:', memoryNodes.length, 'documents')
+      } else {
+        memoryContextFormatted = `
+## 📁 MÉMOIRE DU PROJET
+
+Aucun document en mémoire pour ce projet.
+Dis-le clairement à l'utilisateur au lieu d'inventer du contenu.
+
+---
+`
+        console.log('⚠️ No memory nodes found for project')
       }
     } catch (err) {
       console.warn('⚠️ Memory load failed (non-blocking):', err)
+      memoryContextFormatted = ''
+    }
+
+    // PHASE 1.3: GET ACTIVE RULES FROM PROJECT
+    let rulesContextFormatted = ''
+    try {
+      const { data: activeRules } = await supabase
+        .from('rules')
+        .select('id, name, trigger, action, enabled')
+        .eq('project_id', projectId)
+        .eq('enabled', true)
+        .limit(20)
+
+      if (activeRules && activeRules.length > 0) {
+        rulesContextFormatted = `
+## ⚙️ RÈGLES ACTIVES DU PROJET
+
+${activeRules.map(rule => `
+**${rule.name}**
+- TRIGGER: ${rule.trigger || 'Non défini'}
+- ACTION: ${rule.action || 'Non défini'}
+`).join('\n')}
+
+⚠️ Respecte ces règles pour ce projet uniquement.
+
+---
+`
+        console.log('⚙️ Active rules loaded:', activeRules.length, 'rules')
+      } else {
+        console.log('⚠️ No active rules for this project')
+      }
+    } catch (err) {
+      console.warn('⚠️ Rules load failed (non-blocking):', err)
     }
 
     // 4. GET LEARNING PREDICTIONS
@@ -161,12 +214,27 @@ export async function POST(request: NextRequest) {
     // Get API key, model and system prompt from project settings
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('api_keys, settings, system_prompt')
+      .select('id, name, goal, api_keys, settings, system_prompt')
       .eq('id', projectId)
       .single()
 
     // Use env var as fallback if no API key in DB
     const apiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
+
+    // PHASE 1.1: BUILD PROJECT CONTEXT (Isolation)
+    const projectContext = `
+# CONTEXTE PROJET ACTUEL
+
+**PROJET**: ${project?.name || 'Sans nom'}
+**ID**: ${projectId}
+**OBJECTIF**: ${project?.goal || 'Non défini'}
+
+⚠️ RÈGLE CRITIQUE: Tu travailles UNIQUEMENT sur ce projet "${project?.name}".
+JAMAIS inventer d'autres noms de projets ou de contexte fictif.
+Si aucune donnée n'existe, DIS-LE clairement au lieu d'inventer.
+
+---
+`
 
     // 5. BUILD FINAL PROMPT (use project system_prompt if available)
     const basePrompt = project?.system_prompt || promptTemplate.systemPrompt
@@ -192,8 +260,8 @@ These predictions are based on pattern analysis. Test each one to confirm.
     }
 
     const finalSystemPrompt = buildFinalPrompt(
-      basePrompt,
-      memoryContextFormatted + httpAnalysisFormatted,
+      projectContext + basePrompt,
+      memoryContextFormatted + rulesContextFormatted + httpAnalysisFormatted,
       predictionsFormatted
     )
 
@@ -276,6 +344,47 @@ These predictions are based on pattern analysis. Test each one to confirm.
       )
     }
 
+    // PHASE 2.2: CACHE INTELLIGENT - Vérifier cache avant appel API
+    const conversationManager = new ConversationManager(projectId)
+    const cachedResponse = await conversationManager.checkCache(lastUserMessage, false)
+
+    if (cachedResponse) {
+      console.log('💰 CACHE HIT - Économie de 100% des tokens!')
+
+      // Retourner réponse en cache via stream
+      const encoder = new TextEncoder()
+      const cachedStream = new ReadableStream({
+        start(controller) {
+          // Envoyer contenu depuis cache
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'content',
+            text: cachedResponse
+          })}\n\n`))
+
+          // Envoyer métadonnées (coût = 0 car cache)
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'usage',
+            model: customModel,
+            tokens: { input: 0, output: 0 },
+            cost: 0,
+            cached: true
+          })}\n\n`))
+
+          // Fin du stream
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
+          controller.close()
+        }
+      })
+
+      return new Response(cachedStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      })
+    }
+
     // Initialize Anthropic
     const anthropic = new Anthropic({
       apiKey: anthropicApiKey,
@@ -294,8 +403,10 @@ These predictions are based on pattern analysis. Test each one to confirm.
       stream: true,
     })
 
-    // Variable to collect full response for auto-storage
+    // PHASE 2.1: Variables pour tracking tokens
     let fullResponse = ''
+    let inputTokens = 0
+    let outputTokens = 0
 
     // Create a readable stream for the response
     const encoder = new TextEncoder()
@@ -304,18 +415,60 @@ These predictions are based on pattern analysis. Test each one to confirm.
       async start(controller) {
         try {
           console.log('🌊 Starting stream processing...')
-          
+
           for await (const chunk of stream) {
+            // PHASE 2.1: Capturer tokens usage
+            if (chunk.type === 'message_start') {
+              inputTokens = (chunk as any).message?.usage?.input_tokens || 0
+              console.log('📊 Input tokens:', inputTokens)
+            }
+
             if (chunk.type === 'content_block_delta') {
               const content = (chunk.delta as any).text || ''
               fullResponse += content
-              
+
               // Send content to client
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-                type: 'content', 
-                text: content 
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                type: 'content',
+                text: content
               })}\n\n`))
-            } else if (chunk.type === 'message_stop') {
+            }
+
+            // PHASE 2.1: Capturer output tokens
+            if (chunk.type === 'message_delta') {
+              const deltaTokens = (chunk as any).usage?.output_tokens || 0
+              outputTokens += deltaTokens
+            }
+
+            if (chunk.type === 'message_stop') {
+              // PHASE 2.1: Calculer coût API
+              const API_PRICING: Record<string, { input: number; output: number }> = {
+                'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
+                'claude-sonnet-4-5': { input: 3, output: 15 },
+                'claude-opus-4-1-20250805': { input: 15, output: 75 },
+                'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
+                'claude-3-opus-20240229': { input: 15, output: 75 }
+              }
+
+              const pricing = API_PRICING[customModel] || API_PRICING['claude-3-5-sonnet-20241022']
+              const costInDollars = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
+
+              console.log('💰 API Cost:', {
+                model: customModel,
+                inputTokens,
+                outputTokens,
+                cost: `$${costInDollars.toFixed(6)}`
+              })
+
+              // Envoyer métadonnées tokens au client pour sauvegarde
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                type: 'usage',
+                model: customModel,
+                tokens: { input: inputTokens, output: outputTokens },
+                cost: costInDollars,
+                cached: false
+              })}\n\n`))
+
               // 6. AUTO-STORAGE AFTER COMPLETION
               console.log('🎬 Stream completed, processing auto-storage...')
               
