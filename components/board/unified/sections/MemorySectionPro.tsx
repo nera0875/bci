@@ -3,12 +3,14 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Folder, File, Plus, ChevronRight, ChevronDown,
-  Edit2, Trash2, Save, Search, GripVertical,
+  Edit2, Trash2, Save, Search, GripVertical, Eye,
   FileText, FileCode, Lock, Shield, Database,
   Globe, Server, Terminal, Code, Bug,
   Key, Cloud, Cpu, HardDrive, Wifi,
   Zap, Package, GitBranch, Hash, AlertTriangle
 } from 'lucide-react'
+import MarkdownPreview from '@/components/memory/MarkdownPreview'
+import MarkdownEditorPro from '@/components/editor/MarkdownEditorPro'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
@@ -251,12 +253,25 @@ const SortableTreeItem = ({
 
         {/* Actions */}
         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
+          {node.type === 'document' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onSelect(node) // Set as preview
+              }}
+              className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded"
+              title="Preview"
+            >
+              <Eye size={14} className="text-blue-500" />
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation()
               setIsEditing(true)
             }}
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+            title="Edit"
           >
             <Edit2 size={14} className="text-gray-500" />
           </button>
@@ -266,6 +281,7 @@ const SortableTreeItem = ({
               onDelete(node.id)
             }}
             className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded"
+            title="Delete"
           >
             <Trash2 size={14} className="text-red-500" />
           </button>
@@ -306,6 +322,7 @@ export default function MemorySectionPro({ projectId }: MemorySectionProps) {
   const [editingContent, setEditingContent] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [previewNode, setPreviewNode] = useState<TreeNode | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -320,10 +337,11 @@ export default function MemorySectionPro({ projectId }: MemorySectionProps) {
 
   useEffect(() => {
     if (selectedNode) {
+      const content = selectedNode.content
       setEditingContent(
-        typeof selectedNode.content === 'string'
-          ? selectedNode.content
-          : JSON.stringify(selectedNode.content || '', null, 2)
+        typeof content === 'string'
+          ? content
+          : content?.text || ''
       )
     }
   }, [selectedNode])
@@ -598,19 +616,21 @@ export default function MemorySectionPro({ projectId }: MemorySectionProps) {
                   {selectedNode.name}
                 </h2>
               </div>
-              <Button onClick={saveContent} size="sm">
-                <Save size={14} className="mr-1.5" />
-                Save
-              </Button>
             </div>
 
             {/* Editor */}
-            <div className="flex-1 p-6">
-              <textarea
-                value={editingContent}
-                onChange={(e) => setEditingContent(e.target.value)}
-                className="w-full h-full p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Start writing..."
+            <div className="flex-1 overflow-hidden">
+              <MarkdownEditorPro
+                content={editingContent}
+                onChange={(markdown) => setEditingContent(markdown)}
+                placeholder="Start writing your document..."
+                projectId={projectId}
+                showAIImprove={true}
+                showPreview={true}
+                minHeight="calc(100vh - 300px)"
+                improvementContext="This is a memory document for an AI assistant. The content will be used for RAG/similarity search, so keep it clear and well-structured."
+                onSave={saveContent}
+                onCancel={() => setSelectedNode(null)}
               />
             </div>
           </>
@@ -624,6 +644,15 @@ export default function MemorySectionPro({ projectId }: MemorySectionProps) {
           </div>
         )}
       </div>
+
+      {/* Markdown Preview Modal */}
+      {previewNode && (
+        <MarkdownPreview
+          content={typeof previewNode.content === 'string' ? previewNode.content : JSON.stringify(previewNode.content || '', null, 2)}
+          title={previewNode.name}
+          onClose={() => setPreviewNode(null)}
+        />
+      )}
     </div>
   )
 }

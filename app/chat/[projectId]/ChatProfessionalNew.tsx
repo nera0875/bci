@@ -9,6 +9,9 @@ import { isValidUUID } from '@/lib/utils/uuid'
 import ChatStream from '@/components/chat/ChatStream'
 import { motion } from 'framer-motion'
 import UnifiedBoard from '@/components/board/unified/UnifiedBoardUltra'
+import { PromptStyle } from '@/components/chat/PromptStyleSelector'
+import { QuickContextBar } from '@/components/chat/QuickContextBar'
+import FloatingAIButton from '@/components/ai/FloatingAIButton'
 
 import { supabase } from '@/lib/supabase/client'
 
@@ -52,6 +55,17 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
   // Unified Board
   const [showUnifiedBoard, setShowUnifiedBoard] = useState(false)
 
+  // Prompt Style
+  const [promptStyle, setPromptStyle] = useState<PromptStyle | string>('')
+  const [customStyles, setCustomStyles] = useState<any[]>([])
+
+  // AI Text Assistant
+  const [aiTextAssistantSettings, setAiTextAssistantSettings] = useState({
+    enabled: false,
+    shortcut: 'Ctrl+Shift+P'
+  })
+  const [buttonPosition, setButtonPosition] = useState({ x: 20, y: 80 })
+
   useEffect(() => {
     loadProject()
     loadConversations()
@@ -62,8 +76,21 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
     }
     window.addEventListener('open-bci-board', handleOpenBoard as EventListener)
 
+    // Écouter les changements de settings AI Text Assistant
+    const handleSettingsChange = (e: CustomEvent) => {
+      setAiTextAssistantSettings(e.detail)
+    }
+    window.addEventListener('ai-text-assistant-settings-changed', handleSettingsChange as EventListener)
+
+    // Load button position from localStorage
+    const savedPosition = localStorage.getItem(`ai-button-position-${projectId}`)
+    if (savedPosition) {
+      setButtonPosition(JSON.parse(savedPosition))
+    }
+
     return () => {
       window.removeEventListener('open-bci-board', handleOpenBoard as EventListener)
+      window.removeEventListener('ai-text-assistant-settings-changed', handleSettingsChange as EventListener)
     }
   }, [projectId])
 
@@ -86,6 +113,34 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
       }
 
       setProject(data)
+
+      // Load AI Text Assistant settings
+      if (data.settings?.aiTextAssistant) {
+        setAiTextAssistantSettings(data.settings.aiTextAssistant)
+      }
+
+      // Charger les templates depuis localStorage
+      const savedTemplates = localStorage.getItem(`templates_${projectId}`)
+      if (savedTemplates) {
+        const templates = JSON.parse(savedTemplates)
+        const styles = templates.map((t: any) => ({
+          id: t.id,
+          label: t.name,
+          description: t.category,
+          systemPrompt: t.prompt,
+          custom: true,
+          category: t.category
+        }))
+        setCustomStyles(styles)
+
+        // Charger le style de prompt sauvegardé
+        if (data.settings?.promptStyle) {
+          setPromptStyle(data.settings.promptStyle)
+        } else if (styles.length > 0) {
+          // Par défaut, utiliser le premier template
+          setPromptStyle(styles[0].id)
+        }
+      }
     } catch (error) {
       console.error('Error loading project:', error)
       router.push('/projects')
@@ -385,6 +440,8 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
               key={chatKey}
               projectId={project.id}
               conversationId={currentConversationId}
+              promptStyle={promptStyle}
+              customStyles={customStyles}
               onConversationCreated={(id) => {
                 setCurrentConversationId(id)
                 loadConversations()
@@ -395,9 +452,70 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         </div>
 
         {/* Message Input */}
-        <div className="border-t border-[#E5E5E7] bg-[#FFFFFF] p-4">
+        <div className="bg-[#FFFFFF] p-4 border-t border-[#E5E5E7]">
           <div className="max-w-4xl mx-auto">
-            <div className="flex gap-4">
+            {/* Style actif affiché */}
+            {promptStyle && customStyles.length > 0 && (
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <span className="text-xs text-gray-500">Template actif:</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+                  <span className="text-xs font-medium text-blue-900">
+                    {customStyles.find(s => s.id === promptStyle)?.label || 'Aucun'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 items-end">
+              {/* Settings Button */}
+              <div className="pb-3">
+                <QuickContextBar
+                  currentStyle={promptStyle}
+                  onStyleChange={async (style) => {
+                    setPromptStyle(style as any)
+
+                    // Sauvegarder le style dans les settings du projet
+                    try {
+                      const { error } = await supabase
+                        .from('projects')
+                        .update({
+                          settings: {
+                            ...(project.settings || {}),
+                            promptStyle: style
+                          }
+                        })
+                        .eq('id', projectId)
+
+                      if (!error) {
+                        console.log('✅ Prompt style sauvegardé:', style)
+                        // Mettre à jour l'état local du project
+                        setProject({
+                          ...project,
+                          settings: {
+                            ...(project.settings || {}),
+                            promptStyle: style
+                          }
+                        })
+                      } else {
+                        console.error('❌ Erreur sauvegarde style:', error)
+                      }
+                    } catch (err) {
+                      console.error('❌ Erreur sauvegarde style:', err)
+                    }
+                  }}
+                  onContextSelect={(context) => {
+                    console.log('Context selected:', context)
+                    // Optionnel: Ajouter le contexte au message automatiquement
+                  }}
+                  projectId={project.id}
+                  onCustomStylesChange={(styles) => {
+                    console.log('📝 Styles mis à jour depuis QuickContextBar:', styles)
+                    setCustomStyles(styles)
+                  }}
+                />
+              </div>
+
               <div className="flex-1 relative">
                 <input
                   type="text"
@@ -441,6 +559,18 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         projectName={project.name}
         isOpen={showUnifiedBoard}
         onClose={() => setShowUnifiedBoard(false)}
+      />
+
+      {/* Floating AI Text Assistant */}
+      <FloatingAIButton
+        projectId={project.id}
+        enabled={aiTextAssistantSettings.enabled}
+        shortcut={aiTextAssistantSettings.shortcut}
+        initialPosition={buttonPosition}
+        onPositionChange={(pos) => {
+          setButtonPosition(pos)
+          localStorage.setItem(`ai-button-position-${projectId}`, JSON.stringify(pos))
+        }}
       />
     </div>
   )

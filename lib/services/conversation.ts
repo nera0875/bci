@@ -96,7 +96,14 @@ export class ConversationManager {
         .eq('content_hash', hash)
 
       console.log('💰 Économie de tokens! Message identique trouvé en cache')
-      return typeof data.response === 'string' ? data.response : JSON.stringify(data.response)
+      // response est jsonb en base, peut être string ou object
+      if (typeof data.response === 'string') {
+        return data.response
+      } else if (typeof data.response === 'object' && data.response !== null) {
+        // Si c'est un objet avec une propriété content, extraire content
+        return (data.response as any).content || JSON.stringify(data.response)
+      }
+      return JSON.stringify(data.response)
     }
 
     return null
@@ -280,15 +287,34 @@ export class ConversationManager {
       responseEmbedding = undefined
     }
 
-    await supabase
+    // Vérifier si existe déjà
+    const { data: existing } = await supabase
       .from('message_cache')
-      .upsert({
-        content_hash: hash,
-        response: response,
-        response_embedding: responseEmbedding,
-        usage_count: 1,
-        last_used: new Date().toISOString()
-      })
+      .select('id, usage_count')
+      .eq('content_hash', hash)
+      .maybeSingle()
+
+    if (existing) {
+      // Mettre à jour l'existant
+      await supabase
+        .from('message_cache')
+        .update({
+          usage_count: existing.usage_count + 1,
+          last_used: new Date().toISOString()
+        })
+        .eq('id', existing.id)
+    } else {
+      // Créer nouveau
+      await supabase
+        .from('message_cache')
+        .insert({
+          content_hash: hash,
+          response: response,
+          response_embedding: responseEmbedding,
+          usage_count: 1,
+          last_used: new Date().toISOString()
+        })
+    }
   }
 
   // Nettoyer les vieux caches

@@ -28,7 +28,10 @@
       "Bash(dir \"C:\\Users\\gesti\\Documents\\Projets\\BCI\\supabase\\migrations\" /b)",
       "Bash(git commit:*)",
       "Bash(taskkill:*)",
-      "Bash(npx kill-port:*)"
+      "Bash(npx kill-port:*)",
+      "mcp__supabase__list_tables",
+      "Bash(dir:*)",
+      "mcp__smithery-ai-server-sequential-thinking__sequentialthinking"
     ]
   },
   "enabledMcpjsonServers": [

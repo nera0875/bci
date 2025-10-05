@@ -139,7 +139,7 @@ export class OptimizationEngine {
     const patternMap = new Map<string, any>()
 
     for (const node of nodes) {
-      const content = node.content || ''
+      const content = typeof node.content === 'string' ? node.content : ''
 
       // Détecter le type d'attaque depuis le contenu
       let attackType = 'Unknown'

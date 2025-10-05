@@ -6,7 +6,7 @@ import {
   Database, Globe, Server, Terminal, Code, Bug,
   Key, Lock, AlertTriangle, CheckCircle, Eye,
   Trash2, Edit2, Save, X, FolderPlus, FilePlus,
-  Palette, Smile
+  Palette, Smile, GripVertical
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,21 @@ import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
+import MarkdownEditorPro from '@/components/editor/MarkdownEditorPro'
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+  useDroppable
+} from '@dnd-kit/core'
+import { useSortable } from '@dnd-kit/sortable'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface TreeNode {
   id: string
@@ -68,6 +83,15 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [editingIconNodeId, setEditingIconNodeId] = useState<string | null>(null)
   const [editingColorNodeId, setEditingColorNodeId] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8
+      }
+    })
+  )
 
   useEffect(() => {
     loadMemoryStructure()
@@ -278,6 +302,75 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
     })
   }
 
+  // Drag & Drop handlers
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+
+    if (!over || active.id === over.id) return
+
+    const draggedId = active.id as string
+    const targetId = over.id as string
+
+    // Find nodes in flat list
+    const flatNodes = flattenTree(treeData)
+    const draggedNode = flatNodes.find(n => n.id === draggedId)
+    const targetNode = flatNodes.find(n => n.id === targetId)
+
+    if (!draggedNode || !targetNode) return
+
+    // Prevent dropping folder into itself or its children
+    if (draggedNode.type === 'folder' && isDescendant(draggedNode, targetNode, flatNodes)) {
+      toast.error('Cannot move folder into itself')
+      return
+    }
+
+    // Determine new parent
+    const newParentId = targetNode.type === 'folder' ? targetId : targetNode.parent_id
+
+    try {
+      await supabase
+        .from('memory_nodes')
+        .update({ parent_id: newParentId })
+        .eq('id', draggedId)
+
+      toast.success('Moved successfully')
+      loadMemoryStructure()
+
+      // Expand target folder if dropped into one
+      if (targetNode.type === 'folder') {
+        setExpandedFolders(prev => new Set(prev).add(targetId))
+      }
+    } catch (error) {
+      console.error('Error moving node:', error)
+      toast.error('Failed to move')
+    }
+  }
+
+  // Helper: Flatten tree to array
+  const flattenTree = (nodes: TreeNode[]): TreeNode[] => {
+    const result: TreeNode[] = []
+    const traverse = (items: TreeNode[]) => {
+      items.forEach(item => {
+        result.push(item)
+        if (item.children) traverse(item.children)
+      })
+    }
+    traverse(nodes)
+    return result
+  }
+
+  // Helper: Check if target is descendant of source
+  const isDescendant = (parent: TreeNode, target: TreeNode, allNodes: TreeNode[]): boolean => {
+    if (parent.id === target.id) return true
+    const children = allNodes.filter(n => n.parent_id === parent.id)
+    return children.some(child => isDescendant(child, target, allNodes))
+  }
+
   // Filter nodes based on search
   const filterNodes = (nodes: TreeNode[], query: string): TreeNode[] => {
     if (!query) return nodes
@@ -294,8 +387,32 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
     }))
   }
 
-  // Render tree node
-  const renderNode = (node: TreeNode, depth: number = 0) => {
+  // Sortable wrapper for drag & drop
+  const SortableNode = ({ node, depth }: { node: TreeNode; depth: number }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging
+    } = useSortable({ id: node.id })
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1
+    }
+
+    return (
+      <div ref={setNodeRef} style={style} {...attributes}>
+        {renderNodeContent(node, depth, listeners)}
+      </div>
+    )
+  }
+
+  // Render tree node content
+  const renderNodeContent = (node: TreeNode, depth: number = 0, dragHandleListeners?: any) => {
     const Icon = getIcon(node.icon, node.type)
     const isSelected = selectedNode?.id === node.id
     const isEditing = editingNodeId === node.id
@@ -306,13 +423,23 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
       <div key={node.id}>
         <div
           className={cn(
-            "group flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-all",
+            "group flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer transition-all",
             "hover:bg-gray-100 dark:hover:bg-gray-800",
-            isSelected && "bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-300 dark:ring-blue-700"
+            isSelected && "bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-300 dark:ring-blue-700",
+            activeId === node.id && "opacity-50"
           )}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => !isEditing && handleNodeSelect(node)}
         >
+          {/* Drag Handle */}
+          <div
+            {...dragHandleListeners}
+            className="opacity-0 group-hover:opacity-100 cursor-move p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical size={14} className="text-gray-400" />
+          </div>
+
           {/* Folder expand/collapse */}
           {node.type === 'folder' && (
             <button
@@ -329,7 +456,7 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
             </button>
           )}
           {node.type === 'document' && (
-            <Icon size={16} className="text-gray-500 ml-1" style={{ color: node.color }} />
+            <Icon size={16} className="text-gray-500" style={{ color: node.color }} />
           )}
 
           {/* Name (editable) */}
@@ -448,7 +575,7 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
         {/* Render children */}
         {isExpanded && hasChildren && (
           <div>
-            {node.children!.map(child => renderNode(child, depth + 1))}
+            {node.children!.map(child => <SortableNode key={child.id} node={child} depth={depth + 1} />)}
           </div>
         )}
       </div>
@@ -501,13 +628,25 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
 
         {/* Tree List */}
         <div className="flex-1 overflow-auto p-2">
-          {filteredData.length > 0 ? (
-            filteredData.map(node => renderNode(node))
-          ) : (
-            <div className="text-center text-gray-400 mt-8">
-              {searchQuery ? 'No results found' : 'No items yet'}
-            </div>
-          )}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={flattenTree(filteredData).map(n => n.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {filteredData.length > 0 ? (
+                filteredData.map(node => <SortableNode key={node.id} node={node} depth={0} />)
+              ) : (
+                <div className="text-center text-gray-400 mt-8">
+                  {searchQuery ? 'No results found' : 'No items yet'}
+                </div>
+              )}
+            </SortableContext>
+          </DndContext>
         </div>
       </div>
 
@@ -544,15 +683,21 @@ export default function MemoryPro({ projectId }: MemoryProProps) {
               </div>
 
               {/* Document Content */}
-              <div className="flex-1 p-6">
-                <textarea
-                  value={documentContent}
-                  onChange={(e) => {
-                    setDocumentContent(e.target.value)
+              <div className="flex-1 overflow-hidden">
+                <MarkdownEditorPro
+                  content={documentContent}
+                  onChange={(markdown) => {
+                    setDocumentContent(markdown)
                     setIsDirty(true)
                   }}
-                  className="w-full h-full p-4 bg-gray-50 dark:bg-gray-800 rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Start typing..."
+                  placeholder="Start writing your document..."
+                  projectId={projectId}
+                  showAIImprove={true}
+                  showPreview={true}
+                  minHeight="calc(100vh - 300px)"
+                  improvementContext="This is a memory document for an AI assistant. The content will be used for RAG/similarity search, so keep it clear and well-structured."
+                  onSave={saveDocumentContent}
+                  onCancel={() => setSelectedNode(null)}
                 />
               </div>
             </>

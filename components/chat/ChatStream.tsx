@@ -1,20 +1,27 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { User, Bot, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { Database } from '@/lib/supabase/database.types'
 import ReactMarkdown from 'react-markdown'
+import StreamingMarkdown from './StreamingMarkdown'
+import StreamingMarkdownBatched from './StreamingMarkdownBatched'
+import SmoothTypewriter from './SmoothTypewriter'
 import StreamingText from './StreamingText'
 import { MemoryActionButtons } from './MemoryActionButtons'
 import MemoryActionDisplay from './MemoryActionDisplay'
 import StorageNotification from './StorageNotification'
+import MemoryActionModal from './MemoryActionModal'
 import { useAppStore } from '@/lib/store/app-store'
 import toast from 'react-hot-toast'
 // import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
 import { ConversationManager } from '@/lib/services/conversation'
 import { generateUUID } from '@/lib/utils/uuid'
 import { OptimizationEngine } from '@/lib/services/optimizationEngine'
+import { AIActionDetector, DetectedAction } from '@/lib/services/aiActionDetector'
+import { getStyleSystemPrompt } from '@/components/chat/PromptStyleSelector'
+import { ChatScrollAnchor } from './ChatScrollAnchor'
 
 // Helpers simplifiés
 const buildContextualPrompt = (message: string, targetFolder: string, rulesContext: string, memoryContext: any[], projectGoal: string) => {
@@ -40,21 +47,62 @@ const StreamingMessageWrapper = React.memo(({
 }: {
   content: string
   isComplete: boolean
-}) => (
-  <div className="w-full bg-[#F7F7F8]" data-streaming="true">
-    <div className="max-w-4xl mx-auto px-4 py-6 flex gap-4">
-      <div className="w-8 h-8 bg-[#202123] rounded-full flex items-center justify-center flex-shrink-0">
-        <Bot className="w-5 h-5 text-white" />
-      </div>
-      <div className="flex-1 min-w-0 text-[#202123] prose prose-sm max-w-none [&>*]:text-[#202123] [&_p]:leading-7">
-        <StreamingText
-          content={content}
-          isComplete={isComplete}
-        />
+}) => {
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const [isFading, setIsFading] = useState(false)
+  const prevIsCompleteRef = useRef(isComplete)
+
+  // Détecte le passage de streaming → complete pour déclencher fade
+  useLayoutEffect(() => {
+    if (!prevIsCompleteRef.current && isComplete) {
+      // Streaming vient de se terminer → fade out puis in
+      setIsFading(true)
+
+      // Fade in après 80ms (durée fade out)
+      const timeout = setTimeout(() => {
+        setIsFading(false)
+        // Force recalcul layout pour éviter flash
+        if (wrapperRef.current) {
+          wrapperRef.current.getBoundingClientRect()
+        }
+      }, 80)
+
+      return () => clearTimeout(timeout)
+    }
+    prevIsCompleteRef.current = isComplete
+  }, [isComplete])
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="w-full bg-[#F7F7F8]"
+      data-streaming={!isComplete}
+      style={{
+        // Transition fade smooth pour masquer le re-render
+        opacity: isFading ? 0.7 : 1,
+        transition: 'opacity 0.08s ease-in-out',
+        willChange: 'opacity',
+        transform: 'translateZ(0)', // Force GPU acceleration
+        backfaceVisibility: 'hidden' as const,
+      }}
+    >
+      <div className="max-w-4xl mx-auto px-4 py-6 flex gap-4">
+        <div className="w-8 h-8 bg-[#202123] rounded-full flex items-center justify-center flex-shrink-0">
+          <Bot className="w-5 h-5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0 text-[#202123] prose prose-sm max-w-none [&>*]:text-[#202123] [&_p]:leading-7">
+          <StreamingMarkdownBatched
+            content={content}
+            isComplete={isComplete}
+          />
+          {!isComplete && (
+            <span className="typing-cursor-smooth" />
+          )}
+        </div>
       </div>
     </div>
-  </div>
-))
+  )
+})
 StreamingMessageWrapper.displayName = 'StreamingMessageWrapper'
 
 const SystemIcon = () => (
@@ -101,62 +149,61 @@ const MessageComponent = React.memo(({
 
         <div className="flex-1 min-w-0">
           {!isSystem && message.role === 'assistant' ? (
-            <div className="prose prose-sm max-w-none text-[#202123] [&>*]:text-[#202123] [&_p]:leading-7 [&_p]:mb-4 [&_pre]:bg-[#000000] [&_pre]:text-[#FFFFFF] [&_pre]:p-4 [&_pre]:rounded-lg [&_code]:text-sm [&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg">
-              <ReactMarkdown
-                components={{
-                  // Custom renderer for paragraphs - prevent nesting issues
-                  p: ({ children }) => (
-                    <div className="mb-4 leading-7">{children}</div>
-                  ),
-                  // Custom renderer for MEMORY_ACTION blocks
-                  code: ({ className, children, ...props }) => {
-                    const match = /language-(\w+)/.exec(className || '')
-                    const content = String(children).replace(/\n$/, '')
+            (() => {
+              // Clean content: remove MEMORY_ACTION blocks + parse actions
+              let cleanContent = message.content
+              const memoryActions: any[] = []
 
-                    // Check if this is a MEMORY_ACTION block
-                    if (content.includes('MEMORY_ACTION')) {
-                      try {
-                        const actionMatch = content.match(/<!--MEMORY_ACTION\s*([\s\S]*?)-->/)
-                        if (actionMatch) {
-                          const action = JSON.parse(actionMatch[1])
-                          return <MemoryActionDisplay key={Math.random()} action={action} />
-                        }
-                      } catch (e) {
-                        // Fallback to regular code block
-                      }
-                    }
+              // Extract all MEMORY_ACTION blocks
+              const regex = /<!--MEMORY_ACTION\s*([\s\S]*?)-->/g
+              let match
+              while ((match = regex.exec(message.content)) !== null) {
+                try {
+                  const jsonStr = match[1].trim()
+                  if (!jsonStr || jsonStr.length === 0) continue
+                  const action = JSON.parse(jsonStr)
+                  memoryActions.push(action)
+                } catch (e) {
+                  // Skip incomplete JSON during streaming
+                }
+              }
 
-                    // Inline code
-                    if (!match) {
-                      return (
-                        <code className="bg-[#000000] text-[#FFFFFF] px-1 py-0.5 rounded text-sm" {...props}>
-                          {children}
-                        </code>
-                      )
-                    }
+              // Remove blocks from displayed text
+              cleanContent = cleanContent.replace(/<!--MEMORY_ACTION[\s\S]*?-->/g, '')
 
-                    // Code block
-                    return (
-                      <pre className="bg-[#000000] text-[#FFFFFF] p-4 rounded-lg overflow-x-auto my-4">
-                        <code className={className}>{children}</code>
-                      </pre>
-                    )
-                  }
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
-            </div>
+              return (
+                <>
+                  {/* Display memory actions as compact badges */}
+                  {memoryActions.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {memoryActions.map((action, idx) => (
+                        <MemoryActionDisplay key={idx} action={action} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Display cleaned markdown content with streaming-optimized rendering */}
+                  <StreamingMarkdownBatched content={cleanContent} isComplete={true} />
+                </>
+              )
+            })()
           ) : (
-            <div className="text-[#202123] leading-7">
-              {message.content}
+            <div>
+              {/* Use StreamingMarkdown for real-time rendering */}
+              {message.role === 'assistant' ? (
+                <StreamingMarkdown content={message.content} />
+              ) : (
+                <div className="text-[#202123] leading-7">
+                  {message.content}
+                </div>
+              )}
               {message.role === 'user' ? null : (
                 <div className="text-xs text-[#6E6E80] mt-2">
                   {new Date(message.created_at || Date.now()).toLocaleTimeString()}
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Afficher métadonnées (tokens, coût) pour messages assistant */}
           {message.role === 'assistant' && message.metadata && (
@@ -211,6 +258,8 @@ MessageComponent.displayName = 'MessageComponent'
 interface ChatStreamProps {
   projectId: string
   conversationId?: string | null
+  promptStyle?: string
+  customStyles?: any[]
   onConversationCreated?: (conversationId: string) => void
   onStreamingChange?: (isStreaming: boolean, stopFn?: () => void) => void
 }
@@ -225,7 +274,7 @@ interface BoardAction {
   userMessage?: string
 }
 
-export default function ChatStream({ projectId, conversationId: propConversationId, onConversationCreated, onStreamingChange }: ChatStreamProps) {
+export default function ChatStream({ projectId, conversationId: propConversationId, promptStyle = 'concis', customStyles = [], onConversationCreated, onStreamingChange }: ChatStreamProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
@@ -248,6 +297,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
     proposedAction: any
     timestamp: number
   }>>([])
+  const [detectedActions, setDetectedActions] = useState<DetectedAction[]>([])
+  const actionDetectorRef = useRef<AIActionDetector | null>(null)
   const lastProcessedMessageId = useRef<string | null>(null)
   const bufferRef = useRef<string>('')
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -256,6 +307,9 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const [conversationId, setConversationId] = useState<string | null>(propConversationId || null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const onStreamingChangeRef = useRef(onStreamingChange)
+  const isSubscribedRef = useRef<boolean>(false) // Prevent duplicate subscriptions
+  const [isAtBottom, setIsAtBottom] = useState(true) // Track if user is at bottom
+  const [modalAction, setModalAction] = useState<DetectedAction | null>(null) // Modal state
 
   // Mettre à jour la ref quand la callback change
   useEffect(() => {
@@ -395,6 +449,103 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
+  // 🎯 ACTION DETECTION & VALIDATION
+  const detectAndProposeActions = useCallback((text: string) => {
+    if (!actionDetectorRef.current) {
+      actionDetectorRef.current = new AIActionDetector(projectId)
+    }
+
+    const actions = actionDetectorRef.current.detectActions(text)
+
+    if (actions.length > 0) {
+      console.log(`🔍 Detected ${actions.length} AI actions:`, actions)
+
+      // Show interactive toast for each detected action
+      actions.forEach((action) => {
+        const actionId = generateUUID()
+
+        const actionLabels = {
+          'create_document': '📄 Créer document',
+          'create_folder': '📁 Créer dossier',
+          'edit_document': '✏️ Éditer document',
+          'organize': '🗂️ Organiser',
+          'move': '↔️ Déplacer'
+        }
+
+        const actionLabel = actionLabels[action.type] || action.type
+
+        toast.custom((t) => (
+          <div className="bg-white shadow-xl rounded-lg p-4 max-w-md border-l-4 border-blue-500">
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-900">{actionLabel}</p>
+                <p className="text-sm text-gray-700 mt-1">
+                  {action.data.name || 'Sans nom'}
+                </p>
+                {action.data.content && (
+                  <p className="text-xs text-gray-500 mt-1 truncate">
+                    {action.data.content.substring(0, 80)}...
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                    Confiance: {Math.round(action.confidence * 100)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={async () => {
+                  toast.dismiss(t.id)
+                  toast.loading('Exécution...')
+
+                  const result = await actionDetectorRef.current!.executeAction(action)
+
+                  if (result.success) {
+                    toast.dismiss()
+                    toast.success(`✅ ${actionLabel} réussi!`, { duration: 3000 })
+                    // Reload memory board
+                    window.dispatchEvent(new CustomEvent('board-reload', {
+                      detail: { projectId, section: 'memory' }
+                    }))
+                  } else {
+                    toast.dismiss()
+                    toast.error(`❌ Erreur: ${result.error}`)
+                  }
+                }}
+                className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+              >
+                ✅ Exécuter
+              </button>
+              <button
+                onClick={() => {
+                  toast.dismiss(t.id)
+                  setModalAction(action)
+                }}
+                className="px-3 py-2 bg-violet-500 text-white text-sm rounded hover:bg-violet-600 transition-colors"
+              >
+                ✏️ Modifier
+              </button>
+              <button
+                onClick={() => toast.dismiss(t.id)}
+                className="px-3 py-2 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300 transition-colors"
+              >
+                ❌ Ignorer
+              </button>
+            </div>
+          </div>
+        ), {
+          duration: 15000,
+          position: 'top-right'
+        })
+      })
+
+      setDetectedActions(prev => [...prev, ...actions])
+    }
+  }, [projectId])
+
   const addSystemMessage = async (content: string) => {
     const systemMessage: ChatMessage = {
       id: generateUUID(),
@@ -514,6 +665,15 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const rafRef = useRef<number | undefined>()
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Handle scroll to detect if user is at bottom
+  const handleScroll = useCallback(() => {
+    if (!containerRef.current) return
+
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current
+    const atBottom = scrollHeight - clientHeight <= scrollTop + 1
+    setIsAtBottom(atBottom)
+  }, [])
+
   const scrollToBottom = useCallback(() => {
     // Cancel any pending animation frame
     if (rafRef.current) {
@@ -605,7 +765,14 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }
 
   const subscribeToMessages = () => {
+    // Prevent duplicate subscriptions
+    if (isSubscribedRef.current) {
+      console.log('⏭️ Already subscribed, skipping...')
+      return () => {} // Return empty cleanup
+    }
+
     console.log('Setting up subscription for project:', projectId)
+    isSubscribedRef.current = true
 
     // Cleanup previous channel if exists
     const existingChannel = supabase.channel(`chat_${projectId}`)
@@ -614,10 +781,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
 
     let retryCount = 0
-    const maxRetries = 5
+    const maxRetries = 3 // Réduit de 5 à 3
     const baseDelay = 1000 // 1 second
 
-    const setupChannel = () => {
+    const setupChannel = (): any => {
       const channel = supabase
         .channel(`chat_${projectId}`, {
           config: {
@@ -649,23 +816,19 @@ export default function ChatStream({ projectId, conversationId: propConversation
           }
         )
         .subscribe((status) => {
-          console.log('Subscription status:', status)
-
+          // Silent logging - no console spam
           if (status === 'SUBSCRIBED') {
             retryCount = 0 // Reset retry count on success
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.error('Subscription error - retrying...')
             supabase.removeChannel(channel)
 
-            // Exponential backoff
+            // Exponential backoff - silent retry
             if (retryCount < maxRetries) {
               const delay = baseDelay * Math.pow(2, retryCount)
               retryCount++
-              console.log(`Retry ${retryCount}/${maxRetries} in ${delay}ms`)
               setTimeout(setupChannel, delay)
-            } else {
-              console.error('Max retries reached, giving up on subscription')
             }
+            // Max retries reached - fail silently, realtime not critical
           }
         })
 
@@ -677,6 +840,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
     return () => {
       if (channel) {
         supabase.removeChannel(channel)
+        isSubscribedRef.current = false // Reset on cleanup
       }
     }
   }
@@ -870,7 +1034,13 @@ export default function ChatStream({ projectId, conversationId: propConversation
       }
 
       // Get optimized context from ConversationManager
-      const convContext = await conversationManagerRef.current.getOptimizedContext(userMessage)
+      let convContext
+      try {
+        convContext = await conversationManagerRef.current.getOptimizedContext(userMessage)
+      } catch (error) {
+        console.warn('⚠️ Conv context failed, using fallback:', error)
+        convContext = { cachedResponse: null, relevantMessages: [], contextSummary: '' }
+      }
 
       // If we have a cached response, use it!
       if (convContext.cachedResponse) {
@@ -901,8 +1071,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
       const targetFolder = detectTargetFolder(userMessage)
       const rulesContext = await getRulesContext(userMessage)
       const memoryContext = await getMemoryContext(userMessage)
-      const similarContent = await searchSimilarContent(userMessage)
       const projectGoal = await getProjectGoal()
+
+      // Disable RAG search temporarily (API errors)
+      const similarContent: any[] = []
 
       console.log('🎯 Context detected:', targetFolder)
       console.log('📋 Rules loaded:', rulesContext ? 'YES' : 'NO')
@@ -998,7 +1170,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
             conversationId: currentConvId, // Conversation ID for tracking
             useMemoryContext: true,      // Enable Mem0 memory injection
             saveMemory: true,            // Auto-save responses to Mem0
-            enableAutoOrganization: true // Flag pour activer auto-org côté serveur si implémenté
+            enableAutoOrganization: true, // Flag pour activer auto-org côté serveur si implémenté
+            stylePrompt: getStyleSystemPrompt(promptStyle as any, customStyles) // Inject style system prompt
           }),
           signal: abortControllerRef.current.signal
         })
@@ -1139,16 +1312,22 @@ export default function ChatStream({ projectId, conversationId: propConversation
           window.sessionStorage.removeItem('lastApiUsage')
         }
 
-        // Add the new message directly without reloading all
+        // Add the new message directly (Realtime will also add it, but this is instant fallback)
         if (newMessage) {
+          setMessages(prev => {
+            // Check if already added by Realtime
+            const exists = prev.some(msg => msg.id === newMessage.id)
+            if (exists) return prev
+            return [...prev, newMessage]
+          })
+
           // Process MEMORY_ACTION commands from Claude's response
           try {
             const actions = await parseMemoryActions(fullContent)
             if (actions.length > 0) {
-              console.log('✅ Processing', actions.length, 'memory actions')
-              for (const action of actions) {
-                await handleClaudeAction(action)
-              }
+              console.log(`✅ ${actions.length} memory action(s) detected - waiting for user validation`)
+              setPendingActions(actions)
+              setPendingMemoryAction(actions[0]) // Show first action for validation
             }
           } catch (error) {
             console.log('⚠️ Memory action processing skipped:', error)
@@ -1159,6 +1338,9 @@ export default function ChatStream({ projectId, conversationId: propConversation
           if (organized) {
             console.log('✅ Auto-organization completed')
           }
+
+          // 🔍 AI ACTION DETECTION: Détecter les actions depuis le texte de l'IA
+          detectAndProposeActions(fullContent)
 
           // Analyse de patterns pour suggestions d'optimisation
           try {
@@ -1232,18 +1414,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
             })
           })
 
-          // DÉSACTIVÉ : Plus d'analyse automatique d'intention
-          // L'utilisateur doit demander explicitement les actions mémoire
-
-          // Analyser SEULEMENT si l'utilisateur demande explicitement
-          if (checkExplicitMemoryRequest(lastUserMessage)) {
-            // Parse les actions depuis la réponse de Claude
-            const actions = await parseMemoryActions(fullContent)
-            if (actions.length > 0) {
-              setPendingActions(actions)
-              setPendingMemoryAction(actions[0])
-            }
-          }
+          // MEMORY_ACTION parsing is now handled above (lines 1247-1257)
+          // This ensures validation UI shows for all MEMORY_ACTION blocks
         } else {
           // If no message saved, still clean up smoothly
           setIsStreamComplete(true)
@@ -1310,11 +1482,13 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
     while ((match = regex.exec(text)) !== null) {
       try {
-        const action = JSON.parse(match[1])
+        const jsonStr = match[1].trim()
+        if (!jsonStr || jsonStr.length === 0) continue // Skip empty
+        const action = JSON.parse(jsonStr)
         actions.push(action)
         console.log('📋 Parsed memory action:', action.operation, action.data?.name)
       } catch (e) {
-        console.error('Invalid memory action JSON:', e)
+        // Silently skip malformed JSON (incomplete streaming)
       }
     }
 
@@ -1667,9 +1841,9 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
   // Update memory node (Using Supabase only)
   const updateMemoryNode = async (data: any) => {
-    const { id, name, content, append = false, new_name } = data
+    const { id, name, content: inputContent, append = false, new_name } = data
 
-    console.log('📝 Updating memory node:', { id, name, content: content?.substring(0, 50) })
+    console.log('📝 Updating memory node:', { id, name, content: inputContent?.substring(0, 50) })
 
     if (!id && !name) {
       console.error('❌ Cannot update node without ID or name')
@@ -1680,6 +1854,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
     try {
       // Find the node by name if no ID provided
       let nodeId = id
+      let finalContent = inputContent
+
       if (!id && name) {
         const { data: nodes, error: findError } = await supabase
           .from('memory_nodes')
@@ -1696,13 +1872,13 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
         if (nodes) {
           nodeId = nodes.id
-          
+
           // If append mode, add to existing content
           if (append && nodes.content) {
             const existingContent = typeof nodes.content === 'string'
               ? nodes.content
               : JSON.stringify(nodes.content)
-            content = existingContent + '\n\n' + content
+            finalContent = existingContent + '\n\n' + inputContent
           }
         }
       }
@@ -1711,8 +1887,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
       const updateData: any = {
         updated_at: new Date().toISOString()
       }
-      
-      if (content !== undefined) updateData.content = content
+
+      if (finalContent !== undefined) updateData.content = finalContent
       if (new_name) updateData.name = new_name
 
       const { error } = await supabase
@@ -1968,6 +2144,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
         ref={containerRef}
         className="flex-1 p-6 chat-container overflow-y-auto"
         style={{ height: 'calc(100vh - 200px)' }}
+        onScroll={handleScroll}
       >
         <div className="max-w-4xl mx-auto space-y-6">
           {filteredMessages.map((message, index) => {
@@ -2031,8 +2208,57 @@ export default function ChatStream({ projectId, conversationId: propConversation
               </div>
             </div>
           )}
+
+          {/* Invisible anchor for scroll detection */}
+          <ChatScrollAnchor
+            trackVisibility={isStreaming}
+            isAtBottom={isAtBottom}
+            scrollAreaRef={containerRef}
+          />
         </div>
       </div>
+
+      {/* Memory Action Modal */}
+      {modalAction && (
+        <MemoryActionModal
+          action={{
+            type: modalAction.type as any,
+            name: modalAction.data.name || '',
+            content: modalAction.data.content,
+            targetFolder: modalAction.data.targetFolder,
+            confidence: modalAction.confidence
+          }}
+          projectId={projectId}
+          onConfirm={async (modifiedAction) => {
+            toast.loading('Exécution...')
+
+            const updatedAction = {
+              ...modalAction,
+              data: {
+                ...modalAction.data,
+                name: modifiedAction.name,
+                content: modifiedAction.content
+              }
+            }
+
+            const result = await actionDetectorRef.current!.executeAction(updatedAction)
+
+            if (result.success) {
+              toast.dismiss()
+              toast.success(`✅ Action réussie!`, { duration: 3000 })
+              window.dispatchEvent(new CustomEvent('board-reload', {
+                detail: { projectId, section: 'memory' }
+              }))
+            } else {
+              toast.dismiss()
+              toast.error(`❌ Erreur: ${result.error}`)
+            }
+
+            setModalAction(null)
+          }}
+          onCancel={() => setModalAction(null)}
+        />
+      )}
     </>
   )
 }

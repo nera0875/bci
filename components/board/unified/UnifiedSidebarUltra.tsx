@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type Section = 'memory' | 'rules' | 'optimization' | 'analytics' | 'costs' | 'settings' | 'learning'
+type Section = 'memory' | 'rules' | 'system' | 'intelligence' | 'costs' | 'settings'
 
 interface UnifiedSidebarUltraProps {
   activeSection: Section
@@ -54,35 +54,36 @@ const sections = [
     ]
   },
   {
-    id: 'optimization' as Section,
-    name: 'Optimization',
-    shortName: 'Opt',
+    id: 'system' as Section,
+    name: 'System Prompts',
+    shortName: 'System',
+    icon: Sparkles,
+    color: 'from-indigo-500 to-purple-600',
+    bgColor: 'bg-indigo-500/10',
+    borderColor: 'border-indigo-500',
+    description: 'Foundation prompts & templates',
+    stats: { label: 'Active', value: 2 },
+    subItems: [
+      { name: 'Templates', icon: Layers, count: 5 },
+      { name: 'Custom', icon: GitBranch, count: 2 }
+    ]
+  },
+  {
+    id: 'intelligence' as Section,
+    name: 'Intelligence',
+    shortName: 'Intel',
     icon: Zap,
-    color: 'from-yellow-500 to-orange-500',
+    color: 'from-gradient-500 to-orange-500',
     bgColor: 'bg-yellow-500/10',
     borderColor: 'border-yellow-500',
-    description: 'AI-powered improvements',
+    description: 'Suggestions, patterns & stats',
     stats: { label: 'Pending', value: 0 },
     badge: 0,
     pulse: true,
     subItems: [
       { name: 'Suggestions', icon: Lightbulb, count: 0 },
-      { name: 'Applied', icon: Sparkles, count: 0 }
-    ]
-  },
-  {
-    id: 'analytics' as Section,
-    name: 'Analytics',
-    shortName: 'Stats',
-    icon: BarChart3,
-    color: 'from-green-500 to-emerald-500',
-    bgColor: 'bg-green-500/10',
-    borderColor: 'border-green-500',
-    description: 'Performance insights',
-    stats: { label: 'Success Rate', value: '87%' },
-    subItems: [
-      { name: 'Patterns', icon: TrendingUp, count: 24 },
-      { name: 'Reports', icon: Database, count: 6 }
+      { name: 'Patterns', icon: TrendingUp, count: 0 },
+      { name: 'Stats', icon: BarChart3, count: 0 }
     ]
   },
   {
@@ -96,23 +97,6 @@ const sections = [
     description: 'API costs & savings',
     stats: { label: 'Saved', value: '$0' },
     subItems: []
-  },
-  {
-    id: 'learning' as Section,
-    name: 'Learning',
-    shortName: 'Learn',
-    icon: Sparkles,
-    color: 'from-purple-500 to-pink-500',
-    bgColor: 'bg-purple-500/10',
-    borderColor: 'border-purple-500',
-    description: 'AI auto-reinforcement',
-    stats: { label: 'Patterns', value: 0 },
-    badge: 0,
-    pulse: true,
-    subItems: [
-      { name: 'Suggestions', icon: Lightbulb, count: 0 },
-      { name: 'Patterns', icon: TrendingUp, count: 0 }
-    ]
   },
   {
     id: 'settings' as Section,
@@ -138,14 +122,14 @@ export default function UnifiedSidebarUltra({
   const [hoveredSection, setHoveredSection] = useState<Section | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Update optimization badge
+  // Update intelligence badge
   const sectionsWithBadge = sections.map(section => ({
     ...section,
-    badge: section.id === 'optimization' ? pendingSuggestions : section.badge,
-    stats: section.id === 'optimization'
+    badge: section.id === 'intelligence' ? pendingSuggestions : section.badge,
+    stats: section.id === 'intelligence'
       ? { ...section.stats, value: pendingSuggestions }
       : section.stats,
-    subItems: section.id === 'optimization'
+    subItems: section.id === 'intelligence'
       ? section.subItems.map((item, idx) => ({
           ...item,
           count: idx === 0 ? pendingSuggestions : item.count

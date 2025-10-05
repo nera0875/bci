@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import UnifiedSidebarUltra from './UnifiedSidebarUltra'
-import MemorySection from './sections/MemoryPro'
-import RulesSection from './sections/RulesCompact'
-import OptimizationSection from './sections/OptimizationSection'
-import AnalyticsSection from './sections/AnalyticsSection'
+import MemorySection from './sections/MemoryProV2'
+import RulesSection from './sections/RulesCompactV3'
+import SystemPromptsSection from './sections/SystemPromptsSection'
+import IntelligenceSection from './sections/IntelligenceSection'
 import CostsSection from './sections/CostsSection'
-import SettingsSection from './sections/SettingsPro'
-import SuggestionsReview from '@/components/learning/SuggestionsReview'
+import SettingsSection from './sections/SettingsProV2'
+import { supabase } from '@/lib/supabase/client'
 
 interface UnifiedBoardUltraProps {
   projectId: string
@@ -21,7 +21,7 @@ interface UnifiedBoardUltraProps {
   onClose: () => void
 }
 
-type Section = 'memory' | 'rules' | 'optimization' | 'analytics' | 'costs' | 'settings' | 'learning'
+type Section = 'memory' | 'rules' | 'system' | 'intelligence' | 'costs' | 'settings'
 
 export default function UnifiedBoardUltra({
   projectId,
@@ -34,10 +34,13 @@ export default function UnifiedBoardUltra({
   const [pendingSuggestions, setPendingSuggestions] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [quickAccessOpen, setQuickAccessOpen] = useState(false)
+  const [memoryCount, setMemoryCount] = useState(0)
+  const [rulesCount, setRulesCount] = useState(0)
 
   useEffect(() => {
     if (isOpen) {
       loadPendingSuggestions()
+      loadRealStats()
     }
   }, [isOpen, projectId])
 
@@ -48,6 +51,28 @@ export default function UnifiedBoardUltra({
       setPendingSuggestions(data.count || 0)
     } catch (error) {
       console.error('Error loading suggestions count:', error)
+    }
+  }
+
+  const loadRealStats = async () => {
+    try {
+      // Load memory items count
+      const { count: memCount } = await supabase
+        .from('memory_nodes')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+
+      // Load active rules count
+      const { count: ruleCount } = await supabase
+        .from('rules')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('enabled', true)
+
+      setMemoryCount(memCount || 0)
+      setRulesCount(ruleCount || 0)
+    } catch (error) {
+      console.error('Error loading real stats:', error)
     }
   }
 
@@ -95,12 +120,12 @@ export default function UnifiedBoardUltra({
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-6">
               <div className="text-center">
                 <p className="text-xs text-[#9A9BAE]">Memory Items</p>
-                <p className="text-sm font-semibold text-[#ECECF1]">128</p>
+                <p className="text-sm font-semibold text-[#ECECF1]">{memoryCount}</p>
               </div>
               <div className="w-px h-8 bg-[#40414F]" />
               <div className="text-center">
                 <p className="text-xs text-[#9A9BAE]">Active Rules</p>
-                <p className="text-sm font-semibold text-[#ECECF1]">12</p>
+                <p className="text-sm font-semibold text-[#ECECF1]">{rulesCount}</p>
               </div>
               <div className="w-px h-8 bg-[#40414F]" />
               <div className="text-center">
@@ -152,15 +177,12 @@ export default function UnifiedBoardUltra({
                 <RulesSection projectId={projectId} />
               </div>
 
-              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'optimization' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
-                <OptimizationSection
-                  projectId={projectId}
-                  onSuggestionProcessed={() => loadPendingSuggestions()}
-                />
+              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'system' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
+                <SystemPromptsSection projectId={projectId} />
               </div>
 
-              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'analytics' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
-                <AnalyticsSection projectId={projectId} />
+              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'intelligence' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
+                <IntelligenceSection projectId={projectId} />
               </div>
 
               <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'costs' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
@@ -172,10 +194,6 @@ export default function UnifiedBoardUltra({
                   projectId={projectId}
                   projectName={projectName}
                 />
-              </div>
-
-              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'learning' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
-                <SuggestionsReview projectId={projectId} />
               </div>
             </div>
           </div>

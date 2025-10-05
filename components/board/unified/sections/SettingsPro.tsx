@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   Settings, Save, Brain, Cpu, Key, Plus, Trash2,
   CheckCircle, Loader2, Edit2, Copy, Download, Upload,
-  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target
+  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target, Eye
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -97,22 +97,39 @@ export default function SettingsPro({ projectId, projectName = 'Project' }: Sett
   const [editingModelData, setEditingModelData] = useState<AIModel | null>(null)
   const [showModelEditor, setShowModelEditor] = useState(false)
   const [apiValidation, setApiValidation] = useState<{ status: 'idle' | 'testing' | 'success' | 'error', message?: string }>({ status: 'idle' })
+  const [editingProjectName, setEditingProjectName] = useState(false)
+  const [newProjectName, setNewProjectName] = useState(projectName)
+  const [showBasePromptModal, setShowBasePromptModal] = useState(false)
+  const [basePromptContent, setBasePromptContent] = useState('')
+  const [activeTab, setActiveTab] = useState<'general' | 'prompts' | 'templates' | 'models' | 'api'>('general')
 
   useEffect(() => {
     loadSettings()
     loadTemplates()
     loadCustomModels()
+    loadBasePrompt()
   }, [projectId])
+
+  const loadBasePrompt = async () => {
+    try {
+      const response = await fetch('/api/system-prompt')
+      const data = await response.json()
+      setBasePromptContent(data.prompt || '')
+    } catch (error) {
+      console.error('Error loading base prompt:', error)
+    }
+  }
 
   const loadSettings = async () => {
     try {
       const { data } = await supabase
         .from('projects')
-        .select('system_prompt, settings, api_keys, goal')
+        .select('name, system_prompt, settings, api_keys, goal')
         .eq('id', projectId)
         .single()
 
       if (data) {
+        setNewProjectName(data.name || projectName)
         setSystemPrompt(data.system_prompt || '')
         setProjectGoal(data.goal || '')
         setAiModel(data.settings?.aiModel || 'claude-3-5-sonnet-20241022')
@@ -254,6 +271,32 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
       toast.error('Failed to save settings')
     }
     setSaving(false)
+  }
+
+  const saveProjectName = async () => {
+    if (!newProjectName.trim()) {
+      toast.error('Le nom du projet ne peut pas être vide')
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ name: newProjectName.trim() })
+        .eq('id', projectId)
+
+      if (!error) {
+        toast.success('Nom du projet mis à jour !')
+        setEditingProjectName(false)
+        // Reload page to update header
+        window.location.reload()
+      } else {
+        throw error
+      }
+    } catch (error) {
+      console.error('Error saving project name:', error)
+      toast.error('Erreur lors de la sauvegarde')
+    }
   }
 
   const handleCreateTemplate = () => {
@@ -406,10 +449,51 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
     return acc
   }, {} as Record<string, Template[]>)
 
+  const tabs = [
+    { id: 'general' as const, label: 'General', icon: Settings },
+    { id: 'prompts' as const, label: 'Prompts', icon: Brain },
+    { id: 'templates' as const, label: 'Templates', icon: FileText },
+    { id: 'models' as const, label: 'AI Models', icon: Cpu },
+    { id: 'api' as const, label: 'API Keys', icon: Key }
+  ]
+
   return (
-    <div className="h-full flex bg-white dark:bg-gray-900">
-      {/* Templates Sidebar */}
-      <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+      {/* Header avec Tabs */}
+      <div className="border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center gap-3 px-6 py-4">
+          <Settings className="text-gray-600 dark:text-gray-400" size={24} />
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Project Settings
+          </h2>
+        </div>
+
+        {/* Tabs Navigation */}
+        <div className="flex gap-1 px-6">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors",
+                  activeTab === tab.id
+                    ? "bg-white dark:bg-gray-900 text-gray-900 dark:text-white border-t-2 border-x border-gray-200 dark:border-gray-700 border-t-blue-500"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
+                )}
+              >
+                <Icon size={16} />
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-4xl mx-auto p-6">{/* Templates Sidebar - REMOVED, now in Templates tab */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
             Prompt Templates
@@ -540,8 +624,71 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
               </h2>
             </div>
 
-            {/* Project Goal */}
+            {/* Project Name */}
             <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="text-green-500" size={20} />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Project Name
+                    </h3>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Edit your project name. This will update across the entire application.
+                </p>
+
+                <div className="flex items-center gap-2">
+                  {editingProjectName ? (
+                    <>
+                      <Input
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        className="flex-1"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveProjectName()
+                          if (e.key === 'Escape') {
+                            setEditingProjectName(false)
+                            setNewProjectName(projectName)
+                          }
+                        }}
+                      />
+                      <Button onClick={saveProjectName} className="bg-green-600 hover:bg-green-700">
+                        <CheckCircle size={16} />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingProjectName(false)
+                          setNewProjectName(projectName)
+                        }}
+                      >
+                        <X size={16} />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {newProjectName}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => setEditingProjectName(true)}
+                      >
+                        <Edit2 size={16} className="mr-2" />
+                        Edit
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Project Goal */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -585,11 +732,22 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
                       System Prompt
                     </h3>
                   </div>
-                  {activeTemplate && (
-                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-sm">
-                      {activeTemplate.name}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowBasePromptModal(true)}
+                      className="text-xs"
+                    >
+                      <Eye size={14} className="mr-1" />
+                      View Base Prompt
+                    </Button>
+                    {activeTemplate && (
+                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-sm">
+                        {activeTemplate.name}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
@@ -972,6 +1130,90 @@ Tests: Fuzzing, JWT manipulation, versioning issues.`,
                     className="bg-gray-900 hover:bg-gray-800 text-white"
                   >
                     Save Model
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Base Prompt Viewer Modal */}
+      <AnimatePresence>
+        {showBasePromptModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowBasePromptModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Eye className="text-blue-600 dark:text-blue-400" size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                      Base System Prompt
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                      Prompt caché injecté automatiquement dans chaque requête
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowBasePromptModal(false)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <pre className="text-xs font-mono text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
+                    {basePromptContent || 'Chargement...'}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                    DEPRECATED
+                  </span>
+                  <span>Ce prompt sera bientôt supprimé</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(basePromptContent)
+                      toast.success('Prompt copié !')
+                    }}
+                  >
+                    <Copy size={14} className="mr-1" />
+                    Copier
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowBasePromptModal(false)}
+                    className="bg-gray-900 hover:bg-gray-800 text-white"
+                  >
+                    Fermer
                   </Button>
                 </div>
               </div>

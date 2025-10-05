@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 interface MemoryActionDisplayProps {
   action: {
-    operation: 'create' | 'update' | 'delete'
+    operation: 'create' | 'update' | 'append' | 'delete'
     data: {
       type?: 'folder' | 'document'
       name: string
@@ -51,6 +51,8 @@ export default function MemoryActionDisplay({ action }: MemoryActionDisplayProps
         return `${action.data.type === 'folder' ? 'Dossier' : 'Document'} "${action.data.name}" créé`
       case 'update':
         return `Document "${action.data.name}" modifié`
+      case 'append':
+        return `Contenu ajouté à "${action.data.name}"`
       case 'delete':
         return `Élément "${action.data.name}" supprimé`
       default:
