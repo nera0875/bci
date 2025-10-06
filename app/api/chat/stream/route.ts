@@ -7,6 +7,7 @@ import {
   detectContext,
   selectPrompt,
   extractTechnique,
+  extractEndpoint,
   detectSuccess
 } from '@/lib/services/promptSystem'
 import {
@@ -14,12 +15,8 @@ import {
   commandToApiCall,
   generateCommandResponse
 } from '@/lib/services/commandParser'
-import {
-  buildFinalPrompt,
-  formatMemoryContext,
-  formatLearningPredictions,
-  DEFAULT_MINIMAL_PROMPT
-} from '@/lib/services/systemPrompt'
+import { DEFAULT_MINIMAL_PROMPT } from '@/lib/services/systemPrompt'
+import { buildSystemPromptsText } from '@/lib/services/systemPromptsLoader'
 import { FORMATTING_INSTRUCTIONS } from '@/lib/services/formattingInstructions'
 import { LearningSystem } from '@/lib/services/learningSystem'
 import { createEmbedding } from '@/lib/services/embeddings'
@@ -137,72 +134,113 @@ export async function POST(request: NextRequest) {
     const promptTemplate = selectPrompt(context)
     console.log('👨‍💻 Using expert prompt:', promptTemplate.name)
 
-    // PHASE 1.2: RAG SIMILARITY SEARCH - Charger documents pertinents
+    // PHASE 1.2: RAG SIMILARITY SEARCH - Charger facts + documents pertinents
     let memoryContextFormatted = ''
     try {
       // Créer embedding du message user pour similarity search
       const embedding = await createEmbedding(lastUserMessage)
 
       if (embedding && embedding.length > 0) {
-        // Similarity search via RPC function
-        const { data: memoryNodes } = await supabase.rpc('similarity_search', {
+        // 🧠 Search memory_facts (atomic facts, rapide)
+        const { data: memoryFacts } = await supabase.rpc('search_memory_facts', {
           query_embedding: embedding,
-          similarity_threshold: 0.7,
-          max_results: 10,
-          filter_project_id: projectId
+          filter_project_id: projectId,
+          match_threshold: 0.7,
+          match_count: 15
         })
 
-        if (memoryNodes && memoryNodes.length > 0) {
-          memoryContextFormatted = `
-## 📁 MÉMOIRE PERTINENTE (${memoryNodes.length} documents similaires)
+        // ❌ REMOVED: memory_nodes (ancien système Success/Unknown)
+        // Nouveau système: uniquement memory_facts
 
-${memoryNodes.map((node: any) => `
-**[${node.name}]** (${(node.similarity * 100).toFixed(0)}% match)
-${node.content ? node.content.substring(0, 500) + (node.content.length > 500 ? '...' : '') : '(vide)'}
-`).join('\n---\n')}
+        // Build context (facts priorités car plus pertinents)
+        let factsContext = ''
+        if (memoryFacts && memoryFacts.length > 0) {
+          factsContext = `
+## 🧠 MÉMOIRE ACTIVE (${memoryFacts.length} facts pertinents)
+
+${memoryFacts.map((fact: any) => {
+  const meta = fact.metadata || {}
+  const details = []
+  if (meta.category) details.push(`📁 ${meta.category}`)
+  if (meta.type) details.push(meta.type)
+  if (meta.technique) details.push(meta.technique)
+  if (meta.severity) details.push(`⚠️ ${meta.severity}`)
+  if (meta.result) details.push(meta.result === 'success' ? '✅ Success' : '❌ Failed')
+  if (meta.tags?.length > 0) details.push(`🏷️ ${meta.tags.join(', ')}`)
+
+  return `• ${fact.fact}\n  ${details.join(' | ')} (${(fact.similarity * 100).toFixed(0)}% match)`
+}).join('\n\n')}
 
 ---
 `
-          console.log('🧠 RAG loaded:', memoryNodes.length, 'similar documents')
-        } else {
+          console.log('🧠 RAG loaded:', memoryFacts.length, 'facts')
+        }
+
+        // ❌ REMOVED: docsContext (ancien système memory_nodes)
+
+        memoryContextFormatted = factsContext
+
+        if (!memoryFacts?.length) {
           memoryContextFormatted = `
 ## 📁 MÉMOIRE DU PROJET
 
-Aucun document similaire trouvé (threshold 70%).
-Dis-le clairement à l'utilisateur.
+Aucune mémoire similaire trouvée (threshold 70%).
 
 ---
 `
-          console.log('⚠️ No similar documents found (threshold 0.7)')
+          console.log('⚠️ No similar memory found (threshold 0.7)')
         }
       } else {
-        console.warn('⚠️ Embedding creation failed, fallback to recent docs')
-        // Fallback: charger par date si embedding fail
-        const { data: fallbackNodes } = await supabase
-          .from('memory_nodes')
-          .select('name, content')
+        console.warn('⚠️ Embedding creation failed, fallback to recent memory')
+        // Fallback: charger facts récents
+        const { data: recentFacts } = await supabase
+          .from('memory_facts')
+          .select('fact, metadata')
           .eq('project_id', projectId)
-          .eq('type', 'document')
-          .order('updated_at', { ascending: false })
-          .limit(5)
+          .order('created_at', { ascending: false })
+          .limit(10)
 
-        if (fallbackNodes && fallbackNodes.length > 0) {
+        if (recentFacts && recentFacts.length > 0) {
           memoryContextFormatted = `
-## 📁 MÉMOIRE RÉCENTE (${fallbackNodes.length} documents)
+## 🧠 MÉMOIRE RÉCENTE (${recentFacts.length} facts)
 
-${fallbackNodes.map((node: any) => `
-**[${node.name}]**
-${node.content || '(vide)'}
-`).join('\n')}
+${recentFacts.map((f: any) => `• ${f.fact} [${f.metadata?.type || 'general'}]`).join('\n')}
 
 ---
 `
-          console.log('📅 Fallback: loaded', fallbackNodes.length, 'recent documents')
+          console.log('📅 Fallback: loaded', recentFacts.length, 'recent facts')
         }
       }
     } catch (err) {
       console.warn('⚠️ Memory load failed (non-blocking):', err)
       memoryContextFormatted = ''
+    }
+
+    // PHASE 1.2b: GET CUSTOM CATEGORIES (server-side accessible)
+    let categoriesContextFormatted = ''
+    try {
+      const { data: categories } = await supabase
+        .from('memory_categories')
+        .select('key, label, icon')
+        .eq('project_id', projectId)
+        .order('label', { ascending: true })
+
+      if (categories && categories.length > 0) {
+        categoriesContextFormatted = `
+## 📁 CATÉGORIES DISPONIBLES (${categories.length} catégories)
+
+**IMPORTANT**: Quand tu ranges un fact, utilise UNE de ces catégories existantes:
+
+${categories.map(cat => `- **${cat.icon} ${cat.label}** (key: \`${cat.key}\`)`).join('\n')}
+
+⚠️ Si aucune catégorie ne correspond, laisse le champ category vide (pas de nouvelle catégorie auto).
+
+---
+`
+        console.log('📁 Loaded', categories.length, 'custom categories')
+      }
+    } catch (err) {
+      console.warn('⚠️ Categories load failed (non-blocking):', err)
     }
 
     // PHASE 1.3: GET ACTIVE RULES FROM PROJECT (Structured)
@@ -211,7 +249,7 @@ ${node.content || '(vide)'}
     try {
       const { data: activeRules } = await supabase
         .from('rules')
-        .select('id, name, category, trigger_type, trigger_config, action_type, action_config, target_folders, enabled')
+        .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, target_categories, target_tags, enabled')
         .eq('project_id', projectId)
         .eq('enabled', true)
         .limit(50)
@@ -219,28 +257,18 @@ ${node.content || '(vide)'}
       if (activeRules && activeRules.length > 0) {
         focusedRules = activeRules
 
-        // 🎯 Load ALL target folder names in ONE query (performance)
-        const allTargetFolderIds = activeRules
-          .flatMap(r => r.target_folders || [])
-          .filter((id, index, self) => id && self.indexOf(id) === index) // unique IDs
-
-        let folderNamesMap: Record<string, string> = {}
-        if (allTargetFolderIds.length > 0) {
-          const { data: folders } = await supabase
-            .from('memory_nodes')
-            .select('id, name')
-            .in('id', allTargetFolderIds)
-            .eq('type', 'folder')
-
-          if (folders) {
-            folderNamesMap = folders.reduce((acc, f) => ({ ...acc, [f.id]: f.name }), {})
-          }
-        }
-
         rulesContextFormatted = `
 ## ⚙️ RÈGLES ACTIVES DU PROJET (${focusedRules.length} playbooks)
 
+**⚠️ IMPORTANT - CIBLAGE DES RÈGLES:**
+Certaines règles ont un CIBLAGE (target categories/tags). Tu dois RESPECTER ce ciblage strictement :
+- Si une règle cible `category='success'`, elle ne s'applique QU'AUX facts avec `metadata.category='success'`
+- Si une règle cible `tags=['idor']`, elle ne s'applique QU'AUX facts avec `metadata.tags` contenant 'idor'
+- Si pas de ciblage (🎯 absent), la règle s'applique à TOUS les facts
+
 ${focusedRules.map(rule => {
+  const ruleIcon = rule.icon || '🎯'
+
   let triggerDesc = 'Non défini'
   if (rule.trigger_type === 'endpoint') {
     triggerDesc = `Endpoint: ${rule.trigger_config?.url_pattern || 'N/A'} (${rule.trigger_config?.http_method || 'ANY'})`
@@ -249,42 +277,45 @@ ${focusedRules.map(rule => {
     triggerDesc = keywords.length > 0
       ? `Si message contient: ${keywords.join(' OU ')}`
       : 'Aucun mot-clé défini'
-  } else if (rule.trigger_type === 'pattern') {
-    triggerDesc = `Pattern success rate > ${(rule.trigger_config?.min_success_rate * 100) || 70}%`
-  } else if (rule.trigger_type === 'manual') {
-    triggerDesc = 'Manuel uniquement'
   }
 
   let actionDesc = 'Non défini'
-  if (rule.action_type === 'extract') {
-    actionDesc = `Extraire: ${rule.action_config?.parameter || 'N/A'}`
-  } else if (rule.action_type === 'test') {
-    actionDesc = `Test ${rule.action_config?.test_type || 'N/A'} sur param: ${rule.action_config?.parameter || 'N/A'}`
+  if (rule.action_type === 'test') {
+    const testType = rule.action_config?.test_type || 'N/A'
+    const instructions = rule.action_config?.instructions || ''
+    actionDesc = `Test ${testType}${instructions ? ` - ${instructions}` : ''}`
   } else if (rule.action_type === 'store') {
-    actionDesc = `Ranger le résultat dans Memory`
-  } else if (rule.action_type === 'analyze') {
-    actionDesc = `Analyser la réponse`
+    actionDesc = `Créer automatiquement un fact dans memory_facts`
   }
 
-  let targetFoldersDesc = ''
-  if (rule.target_folders && rule.target_folders.length > 0) {
-    const folderNames = rule.target_folders
-      .map(id => folderNamesMap[id] || 'Unknown')
-      .join(', ')
-    targetFoldersDesc = `\n- 📁 CIBLAGE OBLIGATOIRE: Tu DOIS ranger dans → "${folderNames}" uniquement`
+  let targetingDesc = ''
+  const hasTargeting = (rule.target_categories && rule.target_categories.length > 0) ||
+                       (rule.target_tags && rule.target_tags.length > 0)
+
+  if (hasTargeting) {
+    const catCondition = rule.target_categories && rule.target_categories.length > 0
+      ? `category='${rule.target_categories.join("' OU '")}'`
+      : null
+    const tagCondition = rule.target_tags && rule.target_tags.length > 0
+      ? `tags contiennent ['${rule.target_tags.join("', '")}']`
+      : null
+
+    const conditions = [catCondition, tagCondition].filter(Boolean).join(' ET ')
+    targetingDesc = `\n- 🎯 **CIBLAGE STRICT**: Cette règle ne s'applique QUE si le fact a ${conditions}\n  ⚠️ Si le fact ne match pas ces conditions, IGNORE cette règle complètement.`
   }
 
   return `
-**[${rule.category || 'custom'}] ${rule.name}**
-- DÉCLENCHEUR: ${triggerDesc}
-- ACTION: ${actionDesc}${targetFoldersDesc}
+**${ruleIcon} [${rule.category || 'custom'}] ${rule.name}**
+- QUAND: ${triggerDesc}
+- ALORS: ${actionDesc}${targetingDesc}
 `
 }).join('\n')}
 
 ⚠️ **INSTRUCTIONS STRICTES** :
-- Si une règle a "CIBLAGE OBLIGATOIRE", tu DOIS respecter le dossier indiqué
 - Si le message user contient un mot-clé d'une règle → applique cette règle automatiquement
-- Ne crée JAMAIS de nouveau dossier si un ciblage est spécifié
+- Si une règle a un CIBLAGE → applique-la uniquement sur les facts qui matchent les categories/tags
+- Quand action = "test" → teste l'endpoint avec variations selon les instructions
+- Quand action = "store" → crée un fact dans memory_facts avec les métadonnées appropriées
 
 ---
 `
@@ -389,10 +420,8 @@ ${matchingRules.map(rule => {
       }
     }
 
-    // 4. GET LEARNING PREDICTIONS
-    const predictions = await learningSystem.getPredictions(context, 5)
-    const predictionsFormatted = formatLearningPredictions(predictions)
-    console.log('📊 Learning predictions:', predictions.length)
+    // 4. (SUPPRIMÉ) GET LEARNING PREDICTIONS - Ancien système
+    // Nouveau système: memory_facts RAG déjà chargé ci-dessus
 
     // Get API key, model and system prompt from project settings
     const { data: project, error: projectError } = await supabase
@@ -404,25 +433,70 @@ ${matchingRules.map(rule => {
     // Use env var as fallback if no API key in DB
     const apiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
 
-    // PHASE 1.1: BUILD PROJECT CONTEXT (Isolation)
+    // PHASE 1.1: BUILD PROJECT CONTEXT (Isolation) + BIZLOGIC AWARENESS
+    // Load discovered endpoints from memory_facts
+    const { data: discoveredEndpoints } = await supabase
+      .from('memory_facts')
+      .select('metadata')
+      .eq('project_id', projectId)
+      .not('metadata->endpoint', 'is', null)
+      .limit(50)
+
+    const uniqueEndpoints = new Set(
+      discoveredEndpoints?.map(f => f.metadata?.endpoint).filter(Boolean) || []
+    )
+
+    const { data: testedCategories } = await supabase
+      .from('memory_facts')
+      .select('metadata')
+      .eq('project_id', projectId)
+      .not('metadata->category', 'is', null)
+      .limit(100)
+
+    const categoryCounts: Record<string, number> = {}
+    testedCategories?.forEach(f => {
+      const cat = f.metadata?.category
+      if (cat) categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
+    })
+
     const projectContext = `
 # CONTEXTE PROJET ACTUEL
 
 **PROJET**: ${project?.name || 'Sans nom'}
 **ID**: ${projectId}
 **OBJECTIF**: ${project?.goal || 'Non défini'}
+**TYPE**: Business Logic Pentesting (Burp Suite)
 
-⚠️ RÈGLE CRITIQUE: Tu travailles UNIQUEMENT sur ce projet "${project?.name}".
-JAMAIS inventer d'autres noms de projets ou de contexte fictif.
-Si aucune donnée n'existe, DIS-LE clairement au lieu d'inventer.
+## 🎯 ENDPOINTS DÉCOUVERTS (${uniqueEndpoints.size} endpoints)
+
+${uniqueEndpoints.size > 0
+  ? Array.from(uniqueEndpoints).map(e => `- ${e}`).join('\n')
+  : '(Aucun endpoint testé pour le moment)'}
+
+## 📊 TESTS EFFECTUÉS PAR CATÉGORIE
+
+${Object.keys(categoryCounts).length > 0
+  ? Object.entries(categoryCounts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([cat, count]) => `- **${cat}**: ${count} test${count > 1 ? 's' : ''}`)
+      .join('\n')
+  : '(Aucun test enregistré)'}
+
+⚠️ **RÈGLE CRITIQUE**: Tu travailles UNIQUEMENT sur ce projet "${project?.name}".
+- JAMAIS inventer d'autres noms de projets ou de contexte fictif
+- Si aucune donnée n'existe, DIS-LE clairement au lieu d'inventer
+- Focus BizLogic: payment_manipulation, workflow_bypass, race_condition, privilege_escalation
 
 ---
 `
 
-    // 5. BUILD FINAL PROMPT (Settings = SEULE source de vérité)
-    // Si Settings > System Prompt est vide, utiliser DEFAULT_MINIMAL_PROMPT (3 lignes neutres)
-    // Ne JAMAIS utiliser promptTemplate.systemPrompt pour respecter le choix utilisateur
-    const basePrompt = project?.system_prompt || DEFAULT_MINIMAL_PROMPT
+    // 5. LOAD SYSTEM PROMPTS FROM PANEL (localStorage)
+    // Charge les prompts cochés actifs, triés par priorité
+    const systemPromptsFromPanel = buildSystemPromptsText(projectId)
+    console.log('📋 System Prompts Panel loaded:', systemPromptsFromPanel ? 'YES' : 'NO (using fallback)')
+
+    // Fallback si aucun prompt coché: utiliser project.system_prompt ou DEFAULT_MINIMAL_PROMPT
+    const basePrompt = systemPromptsFromPanel || project?.system_prompt || DEFAULT_MINIMAL_PROMPT
 
     // Add HTTP analysis to the prompt if available
     let httpAnalysisFormatted = ''
@@ -526,11 +600,29 @@ Exemples :
 
 `
 
-    const finalSystemPrompt = buildFinalPrompt(
-      styleInstruction + projectContext + basePrompt + memoryActionInstructions + FORMATTING_INSTRUCTIONS,
-      memoryContextFormatted + matchedRulesPrompt + rulesContextFormatted + httpAnalysisFormatted,
-      predictionsFormatted
-    )
+    // 6. BUILD FINAL SYSTEM PROMPT (NOUVEAU SYSTÈME PROPRE ET TRANSPARENT)
+    // Ordre strict: System Prompts → Rules → Memory → Contexte technique
+    const finalSystemPrompt =
+      // PARTIE 1: PROMPTS DE BASE (priorité utilisateur)
+      styleInstruction +                    // Style temporaire (si présent)
+      projectContext +                       // Contexte projet (endpoints, tests)
+      basePrompt +                           // System Prompts Panel (cochés actifs)
+
+      // PARTIE 2: RULES (playbooks structurés)
+      '\n\n---\n\n' +
+      matchedRulesPrompt +                   // Rules auto-détectées (priorité haute)
+      rulesContextFormatted +                // Toutes les rules actives
+
+      // PARTIE 3: MEMORY (RAG similarity + Categories)
+      '\n\n---\n\n' +
+      categoriesContextFormatted +           // Catégories disponibles (Supabase)
+      memoryContextFormatted +               // Facts + Docs similaires (RAG)
+      httpAnalysisFormatted +                // HTTP analysis
+
+      // PARTIE 4: INSTRUCTIONS TECHNIQUES
+      '\n\n---\n\n' +
+      memoryActionInstructions +             // Commandes MEMORY_ACTION
+      FORMATTING_INSTRUCTIONS                // Instructions formatage
 
     console.log('✅ Final prompt built, length:', finalSystemPrompt.length)
 
@@ -738,8 +830,17 @@ Exemples :
 
               // 6. AUTO-STORAGE AFTER COMPLETION
               console.log('🎬 Stream completed, processing auto-storage...')
-              
+
               try {
+                // 🧠 Extract facts from AI response (Mem0-style)
+                const { extractFactsFromMessage } = await import('@/lib/services/factExtractor')
+                const factsCount = await extractFactsFromMessage(
+                  fullResponse,
+                  projectId,
+                  process.env.ANTHROPIC_API_KEY || ''
+                )
+                console.log(`🧠 Extracted ${factsCount} fact(s) from response`)
+
                 // Detect if success or failure
                 const isSuccess = detectSuccess(lastUserMessage + ' ' + fullResponse)
                 console.log('🔍 Success detected:', isSuccess)
@@ -773,49 +874,73 @@ Exemples :
 
                   console.log(`📦 Auto-stored in Memory/${isSuccess ? 'Success' : 'Failed'}/${context}`)
 
-                  // 7. CREATE VISUAL ELEMENTS IN BOARD & SEND NOTIFICATION
-                  try {
-                    const folderName = isSuccess ? 'Success' : 'Failed'
-                    const section = 'memory'
-                    
-                    const boardResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL ? 'http://localhost:3000' : ''}/api/board/auto-create`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        projectId,
-                        section,
-                        folderName: `${folderName}/${context}`,
-                        itemName: technique,
-                        itemContent: `${lastUserMessage}\n\nRésultat: ${fullResponse.substring(0, 500)}`,
-                        context,
-                        technique
-                      })
-                    })
+                  // ❌ DÉSACTIVÉ: Ancien système memory_nodes Success/Failed
+                  // Remplacé par factExtractor.ts → memory_facts uniquement
+                  // Note: Learning system toujours actif (lignes 864-880)
+                }
 
-                    if (boardResponse.ok) {
-                      const boardResult = await boardResponse.json()
-                      console.log('🎨 Board visual created:', boardResult.message)
-                      
-                      // Envoyer notification de rangement dans le stream
-                      const notificationPath = boardResult.path || `${section}/${folderName}/${context}`
-                      controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                        type: 'storage_notification',
-                        icon: isSuccess ? '✅' : '❌',
-                        message: `Rangé dans ${notificationPath}`,
-                        path: notificationPath,
-                        documentId: boardResult.documentId,
-                        metadata: {
-                          context,
-                          technique,
-                          success: isSuccess
-                        }
-                      })}\n\n`))
-                    } else {
-                      console.warn('⚠️ Board creation failed (non-blocking)')
-                    }
-                  } catch (boardError) {
-                    console.warn('⚠️ Board creation error (non-blocking):', boardError)
+                // 🤖 PHASE 4: Auto-parse HTTP requests (Burp) + Detect vulnerabilities
+                try {
+                  const { OptimizationEngine } = await import('@/lib/services/optimizationEngine')
+                  const engine = new OptimizationEngine(projectId)
+
+                  // Parse HTTP requests from user message (Burp format)
+                  const httpSuggestions = await engine.analyzeHTTPRequests(lastUserMessage)
+
+                  if (httpSuggestions.length > 0) {
+                    console.log(`🔍 Parsed ${httpSuggestions.length} HTTP request(s) from Burp`)
+
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                      type: 'http_parsed',
+                      count: httpSuggestions.length,
+                      message: `🔍 ${httpSuggestions.length} HTTP request(s) captured and stored`
+                    })}\n\n`))
                   }
+
+                  // Analyze AI response for vulnerability keywords
+                  const vulnSuggestions = await engine.analyzeAIResponse(fullResponse, lastUserMessage)
+
+                  if (vulnSuggestions.length > 0) {
+                    console.log(`🚨 Detected potential vulnerability in AI response`)
+
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                      type: 'vuln_detected',
+                      message: `🚨 Potential vulnerability detected - check Intelligence panel`
+                    })}\n\n`))
+                  }
+                } catch (optimizationError) {
+                  console.warn('⚠️ Optimization engine error (non-blocking):', optimizationError)
+                }
+
+                // 🤖 PHASE 5: Generate AI test suggestions after each message
+                try {
+                  const { generateNextTestSuggestions, saveSuggestionsToQueue } = await import('@/lib/services/generateNextTestSuggestions')
+
+                  // Build context from current conversation
+                  const testContext = {
+                    lastTestEndpoint: extractEndpoint(lastUserMessage),
+                    lastTestTechnique: extractTechnique(lastUserMessage),
+                    lastTestStatus: isSuccess ? 'success' as const : 'failed' as const,
+                  }
+
+                  console.log('🤖 Generating AI test suggestions with context:', testContext)
+
+                  const suggestions = await generateNextTestSuggestions(projectId, testContext)
+
+                  if (suggestions.length > 0) {
+                    await saveSuggestionsToQueue(projectId, suggestions)
+                    console.log(`🤖 Generated ${suggestions.length} AI suggestions`)
+
+                    // Send suggestion notification in stream
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                      type: 'ai_suggestions',
+                      count: suggestions.length,
+                      suggestions: suggestions.slice(0, 3), // Top 3 for preview
+                      message: `🤖 ${suggestions.length} new test suggestions generated`
+                    })}\n\n`))
+                  }
+                } catch (suggestionError) {
+                  console.warn('⚠️ AI suggestion generation error (non-blocking):', suggestionError)
                 }
               } catch (storageError) {
                 console.error('⚠️ Auto-storage error (non-blocking):', storageError)

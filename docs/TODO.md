@@ -1,77 +1,93 @@
-# 📋 TODO - Tâches Projet DASH1
+# 📋 TODO - Pentesting Focus
 
-**Dernière MAJ:** 2025-10-04 12:00
+**✅ SYSTÈME ACTUEL: FactsMemoryViewPro.tsx (propre, organisé, modulaire)**
 
----
-
-## 🔴 CRITIQUE (Bloque fonctionnalités)
-
-Aucune tâche critique en attente ✅
+**Total: 8 tâches optimisation | ~15h**
 
 ---
 
-## 🟡 IMPORTANT (UI/UX dégradée)
+## 🔥 PHASE 1: Optimisations Système Actuel (1-2 jours)
 
-- [ ] **Refonte Rules UI avec catégories** - 4h - DEPUIS: 2025-10-03
-  - Problème: Trigger/Action confus, pas de catégories, templates mélangés
-  - Solution: Tabs (Authentication/API/Business Logic) + switches Focus ON/OFF
-  - Fichier: `RulesCompact.tsx`
+- [ ] **Inline edit (double-click)** 🟡 - 3h
+  - Double-click sur fact → edit inline sans ouvrir side panel
+  - Edit tags, severity, technique directement dans l'accordion
+  - Save avec Enter, cancel avec Esc
+  - Garde side panel pour édition complète si besoin
 
-- [ ] **Fix Memory drag & drop** - 2h - DEPUIS: 2025-10-03
-  - Problème: Implementation incomplète (ligne 100+ tronquée)
-  - Solution: Implémenter react-beautiful-dnd ou @dnd-kit
-  - Fichier: `MemoryPro.tsx`
-
-- [ ] **Refonte Intelligence UI** - 2h - DEPUIS: 2025-10-03
-  - Problème: Scroll infini, pas de catégorisation claire
-  - Solution: Boutons filters par type (Storage/Rules/Improvements/Patterns)
-  - Fichier: `SuggestionsPanel.tsx`, `IntelligenceSection.tsx`
+- [ ] **Auto-expand categories avec facts** 🟢 - 1h
+  - Categories avec facts s'expand automatiquement au chargement
+  - Garde collapsed state en localStorage
+  - Améliore UX (moins de clics)
 
 ---
 
-## 🟢 AMÉLIORATION (Post-100%)
+## 🎯 PHASE 2: Quick Filters & Bulk Operations (1-2 jours)
 
-- [ ] **Background job pattern analysis** - 2h
-  - Cron quotidien pour analyser user_decisions
-  - Auto-génération learned_patterns sans intervention
-  - Auto-promotion implicit_rules si confidence > 90%
+- [ ] **Quick filters par technique** 🟡 - 2h
+  - Badges cliquables: [SQLi] [IDOR] [XSS] [BLV] [Price Manip]
+  - Click → filter facts par technique
+  - Counter sur chaque badge (ex: "SQLi (5)")
 
-- [ ] **Memory breadcrumb navigation** - 1h
-  - Afficher chemin complet (Home > Success > SQL Injection)
-  - Clic sur breadcrumb pour naviguer
+- [ ] **Quick filters par severity** 🟡 - 1h
+  - Badges cliquables: [🔴 Critical] [🟠 High] [🟡 Medium] [🟢 Low]
+  - Tri par severity par défaut (critical en haut)
 
-- [ ] **Virtualization arbre Memory** - 3h
-  - react-window pour performance si 1000+ items
-  - Lazy loading enfants folders
+- [ ] **Quick filters par result** 🟡 - 1h
+  - Badges: [✅ Success] [❌ Failed] [⏳ Testing]
+  - Voir rapidement vulns confirmées vs tests ratés
 
-- [ ] **Export/Import projet complet** - 4h
-  - Export: memory + rules + patterns + settings → JSON
-  - Import: merge ou replace
-  - Templates partagés communauté
-
----
-
-## ✅ TERMINÉES (Auto-supprimées après 24h)
-
-- [x] **Fix user_decisions insert** - 2025-10-03 ← SUPPRIMÉ 2025-10-04
-- [x] **Refonte mémoire Claude (3 fichiers .md)** - 2025-10-03 ← SUPPRIMÉ 2025-10-04
-- [x] **Session 9 complète** - 2025-10-03 ← SUPPRIMÉ 2025-10-04
+- [ ] **Bulk operations** 🟡 - 2h
+  - Checkbox select multiple facts
+  - Actions: Bulk delete, Bulk add tags, Bulk export
+  - Barre d'actions flottante quand sélection active
 
 ---
 
-## 📊 Progression
+## 🚀 PHASE 3: Export & Integration Burp (1 jour)
 
-| Priorité | Tâches pending | Temps estimé |
-|----------|----------------|--------------|
-| 🔴 CRITIQUE | 0 | 0h ✅ |
-| 🟡 IMPORTANT | 3 | 8h |
-| 🟢 AMÉLIORATION | 4 | 10h |
-| **TOTAL** | **7** | **18h** |
+- [ ] **Export Markdown amélioré** 🟢 - 2h
+  - Bouton "Export" → rapport MD format Bug Bounty
+  - Groupé par severity PUIS technique
+  - Inclut endpoints, payloads, tags
+  - Template customizable
+
+- [ ] **Import requêtes Burp** 🟢 - 3h
+  - Bouton "Import Burp" (parse .txt ou .xml)
+  - Auto-créer facts depuis requêtes HTTP
+  - Détecte: endpoint, method, params, headers
+  - Preview avant import (confirmation)
 
 ---
 
-**⚠️ RÈGLES:**
-- Tâche terminée → Je coche ✅ immédiatement
-- 24h après → Je SUPPRIME la ligne (pas d'historique infini)
-- Seules les tâches PENDING restent visibles
-- Nouvelle tâche → J'ajoute avec priorité + estimation + date DEPUIS
+## ⚠️ SUPPRIMÉ / REJETÉ
+
+**Rejeté (Session 17):**
+- ❌ **FactsMemoryViewUltra.tsx** → Anarchie, facts partout, trop désorganisé
+- ❌ **Supprimer memory_categories table** → Nécessaire pour FactsMemoryViewPro.tsx
+- ❌ **Unifier Category + Tags** → Categories = organisation, Tags = metadata (2 usages différents)
+- ❌ **Supprimer memory_nodes complètement** → Gardée vide pour FK rules (pas utilisée)
+
+**Pas prioritaire:**
+- ~~Token usage tracking UI~~ → Header affiche déjà "Costs: $0"
+- ~~Success rate visualization~~ → Patterns panel affiche déjà success rate
+- ~~Dashboard temps réel~~ → Header affiche Memory Items (10), Suggestions (34)
+- ~~Breadcrumb navigation~~ → Sidebar suffit
+- ~~Search global (⌘K)~~ → Quick search existe
+- ~~Test Matrix Phases 5-8~~ → Complexe, pas bloquant
+- ~~Real-time collaboration~~ → Pas nécessaire (usage solo)
+- ~~WebSocket~~ → Pas nécessaire
+- ~~Documentation~~ → Pas prioritaire
+
+---
+
+## ✅ SYSTÈME ACTUEL VALIDÉ
+
+**FactsMemoryViewPro.tsx features:**
+- ✅ Accordions par categories (expand/collapse)
+- ✅ Category management modal (create/edit/delete emoji + label)
+- ✅ Side panel édition complète (description, category, severity, technique, tags)
+- ✅ Filters: Search, Category dropdown, Severity dropdown
+- ✅ Badges severity colorés
+- ✅ Metadata visible (created_at, updated_at)
+- ✅ Supabase API /api/memory/categories
+- ✅ Migration auto localStorage → Supabase
