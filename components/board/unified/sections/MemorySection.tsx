@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import FactsMemoryViewPro from '@/components/memory/FactsMemoryViewPro'
 import PatternsPanel from './intelligence/PatternsPanel'
-import StatsPanel from './intelligence/StatsPanel'
 
 interface MemorySectionProps {
   projectId: string
@@ -18,15 +17,12 @@ export default function MemorySectionNew({ projectId }: MemorySectionProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         {/* Tabs navigation */}
         <div className="px-6 pt-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-2">
             <TabsTrigger value="facts" className="text-sm">
               📄 Facts
             </TabsTrigger>
             <TabsTrigger value="patterns" className="text-sm">
               🔍 Patterns
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="text-sm">
-              📊 Stats
             </TabsTrigger>
           </TabsList>
         </div>
@@ -39,10 +35,6 @@ export default function MemorySectionNew({ projectId }: MemorySectionProps) {
 
           <TabsContent value="patterns" className="h-full m-0 p-0">
             <PatternsPanel projectId={projectId} />
-          </TabsContent>
-
-          <TabsContent value="stats" className="h-full m-0 p-0">
-            <StatsPanel projectId={projectId} />
           </TabsContent>
         </div>
       </Tabs>
