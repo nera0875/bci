@@ -1978,6 +1978,33 @@ export default function ChatStream({ projectId, conversationId: propConversation
               console.warn('Embedding generation failed, fact will be created without embedding:', err)
             }
 
+            // Auto-créer les templates pour les nouveaux tags
+            if (factData.tags && factData.tags.length > 0) {
+              const existingTemplatesRes = await fetch(`/api/tags/templates?projectId=${projectId}`)
+              if (existingTemplatesRes.ok) {
+                const existingTemplates = await existingTemplatesRes.json()
+                const existingTagNames = existingTemplates.map((t: any) => t.name)
+
+                // Créer templates pour nouveaux tags avec couleurs automatiques
+                const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'yellow', 'red', 'gray']
+                for (let i = 0; i < factData.tags.length; i++) {
+                  const tagName = factData.tags[i]
+                  if (!existingTagNames.includes(tagName)) {
+                    // Créer le template avec une couleur automatique
+                    await fetch('/api/tags/templates', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        projectId,
+                        name: tagName,
+                        color: colors[i % colors.length] // Rotation de couleurs
+                      })
+                    })
+                  }
+                }
+              }
+            }
+
             const { data: insertedFact, error: factError } = await supabase
               .from('memory_facts')
               .insert({
