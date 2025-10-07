@@ -991,9 +991,6 @@ export default function ChatStream({ projectId, conversationId: propConversation
       const memoryContext = await getMemoryContext(userMessage)
       const projectGoal = await getProjectGoal()
 
-      // Disable RAG search temporarily (API errors)
-      const similarContent: any[] = []
-
       console.log('🎯 Context detected:', targetFolder)
       console.log('📋 Rules loaded:', rulesContext ? 'YES' : 'NO')
       console.log('🧠 Memory context:', memoryContext.length, 'items')
@@ -1309,14 +1306,65 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
   const getMemoryContext = async (userMessage?: string) => {
     try {
-      // Use direct Supabase query for memory context
-      const { data } = await supabase
-        .from('memory_nodes')
-        .select('name, type, content')
-        .eq('project_id', projectId)
-        .limit(10)
+      // Load memory search settings from project
+      const { data: projectSettings } = await supabase
+        .from('projects')
+        .select('settings')
+        .eq('id', projectId)
+        .single()
 
-      return data || []
+      const memorySearch = projectSettings?.settings?.memorySearch || {
+        enabled: true,
+        similarityThreshold: 0.7,
+        maxResults: 5,
+        minConfidence: 0.6
+      }
+
+      if (!memorySearch.enabled || !userMessage) {
+        console.log('🔍 Memory search disabled or no user message')
+        return []
+      }
+
+      // Create embedding for user message
+      const embeddingResponse = await fetch('/api/openai/embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: userMessage })
+      })
+
+      if (!embeddingResponse.ok) {
+        console.warn('❌ Failed to create embedding for search')
+        return []
+      }
+
+      const { embedding } = await embeddingResponse.json()
+
+      // Search similar facts using RPC function
+      const { data: similarFacts, error } = await supabase.rpc('search_memory_facts', {
+        query_embedding: embedding,
+        filter_project_id: projectId,
+        match_threshold: memorySearch.similarityThreshold,
+        match_count: memorySearch.maxResults
+      })
+
+      if (error) {
+        console.warn('❌ Similarity search error:', error)
+        return []
+      }
+
+      // Filter by confidence and format results
+      const filteredFacts = (similarFacts || [])
+        .filter((f: any) => f.similarity >= memorySearch.minConfidence)
+        .map((f: any) => ({
+          fact: f.fact,
+          category: f.metadata?.category || 'uncategorized',
+          similarity: f.similarity,
+          tags: f.metadata?.tags || []
+        }))
+
+      console.log(`🔍 Found ${filteredFacts.length} similar facts (threshold: ${memorySearch.similarityThreshold})`)
+
+      return filteredFacts
     } catch (error) {
       console.warn('Memory context error:', error)
       return []

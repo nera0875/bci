@@ -44,7 +44,7 @@ const DEFAULT_AI_MODELS: AIModel[] = [
 ]
 
 export default function SettingsProV2({ projectId, projectName = 'Project' }: SettingsProV2Props) {
-  const [activeTab, setActiveTab] = useState<'general' | 'models' | 'api'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'models' | 'api' | 'memory'>('general')
   const [projectGoal, setProjectGoal] = useState('')
   const [aiModel, setAiModel] = useState('claude-sonnet-4-5-20250929')
   const [apiKeys, setApiKeys] = useState({ anthropic: '', openai: '' })
@@ -57,6 +57,14 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
   const [aiTextAssistant, setAiTextAssistant] = useState({
     enabled: false,
     shortcut: 'Ctrl+Shift+P'
+  })
+
+  // Memory Search Settings
+  const [memorySearch, setMemorySearch] = useState({
+    enabled: true,
+    similarityThreshold: 0.7, // 0.0 à 1.0
+    maxResults: 5, // Nombre max de facts retournés
+    minConfidence: 0.6 // Seuil minimum de confiance
   })
 
   useEffect(() => {
@@ -76,6 +84,12 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
       setAiModel(data.settings?.aiModel || 'claude-sonnet-4-5-20250929')
       setApiKeys(data.api_keys || { anthropic: '', openai: '' })
       setAiTextAssistant(data.settings?.aiTextAssistant || { enabled: false, shortcut: 'Ctrl+Shift+P' })
+      setMemorySearch(data.settings?.memorySearch || {
+        enabled: true,
+        similarityThreshold: 0.7,
+        maxResults: 5,
+        minConfidence: 0.6
+      })
     }
   }
 
@@ -86,7 +100,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
         .from('projects')
         .update({
           goal: projectGoal,
-          settings: { aiModel, aiTextAssistant },
+          settings: { aiModel, aiTextAssistant, memorySearch },
           api_keys: apiKeys
         })
         .eq('id', projectId)
@@ -96,6 +110,10 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
         // Dispatch event to update FloatingAIButton
         window.dispatchEvent(new CustomEvent('ai-text-assistant-settings-changed', {
           detail: aiTextAssistant
+        }))
+        // Dispatch event to update memory search settings
+        window.dispatchEvent(new CustomEvent('memory-search-settings-changed', {
+          detail: memorySearch
         }))
       } else {
         throw error
@@ -109,7 +127,8 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
   const tabs = [
     { id: 'general' as const, label: 'General', icon: Settings },
     { id: 'models' as const, label: 'AI Models', icon: Cpu },
-    { id: 'api' as const, label: 'API Keys', icon: Key }
+    { id: 'api' as const, label: 'API Keys', icon: Key },
+    { id: 'memory' as const, label: 'Memory Search', icon: Brain }
   ]
 
   return (
@@ -310,6 +329,120 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
                     onChange={(e) => setApiKeys({ ...apiKeys, openai: e.target.value })}
                     placeholder="sk-..."
                   />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Memory Search Tab */}
+          {activeTab === 'memory' && (
+            <div className="space-y-6">
+              {/* Enable/Disable */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Brain className="text-blue-500" size={20} />
+                    <h3 className="text-lg font-semibold">Recherche de similarité</h3>
+                  </div>
+                  <Switch
+                    checked={memorySearch.enabled}
+                    onCheckedChange={(checked) => setMemorySearch({ ...memorySearch, enabled: checked })}
+                  />
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Active la recherche intelligente dans la mémoire en utilisant des embeddings vectoriels.
+                </p>
+              </div>
+
+              {/* Similarity Threshold */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Seuil de similarité</label>
+                    <span className="text-sm font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                      {memorySearch.similarityThreshold.toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={memorySearch.similarityThreshold}
+                    onChange={(e) => setMemorySearch({ ...memorySearch, similarityThreshold: parseFloat(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  />
+                </div>
+                <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
+                  <p>🎯 <strong>0.9-1.0</strong> : Quasi identique (très peu de résultats)</p>
+                  <p>💎 <strong>0.8-0.9</strong> : Très similaire (recommandé pour précision)</p>
+                  <p>✅ <strong>0.7-0.8</strong> : Similaire (bon équilibre) <span className="text-blue-500">← Défaut</span></p>
+                  <p>🔍 <strong>0.6-0.7</strong> : Vaguement lié (plus de résultats)</p>
+                  <p>⚠️ <strong>&lt;0.6</strong> : Peu pertinent (beaucoup de bruit)</p>
+                </div>
+              </div>
+
+              {/* Max Results */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Résultats maximum</label>
+                    <span className="text-sm font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                      {memorySearch.maxResults}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="1"
+                    value={memorySearch.maxResults}
+                    onChange={(e) => setMemorySearch({ ...memorySearch, maxResults: parseInt(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  />
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Nombre maximum de facts retournés par recherche. <strong>Plus = plus de contexte mais plus de tokens</strong>.
+                </p>
+              </div>
+
+              {/* Min Confidence */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Confiance minimum</label>
+                    <span className="text-sm font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                      {memorySearch.minConfidence.toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={memorySearch.minConfidence}
+                    onChange={(e) => setMemorySearch({ ...memorySearch, minConfidence: parseFloat(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  />
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Filtre les résultats en dessous de ce niveau de confiance. <strong>Plus haut = plus de qualité</strong>.
+                </p>
+              </div>
+
+              {/* Info Card */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <Sparkles className="text-blue-600 dark:text-blue-400 flex-shrink-0" size={20} />
+                  <div className="text-sm text-blue-900 dark:text-blue-100">
+                    <p className="font-semibold mb-2">💡 Conseils d'utilisation</p>
+                    <ul className="space-y-1 text-xs">
+                      <li>• <strong>Trop de résultats vides ?</strong> → Baisse le seuil de similarité à 0.6-0.65</li>
+                      <li>• <strong>Trop de résultats non pertinents ?</strong> → Monte le seuil à 0.75-0.8</li>
+                      <li>• <strong>Optimiser les coûts ?</strong> → Réduis les résultats max à 3-5</li>
+                      <li>• <strong>Maximum de contexte ?</strong> → Monte à 10-15 résultats avec seuil 0.7</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
