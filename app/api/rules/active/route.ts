@@ -23,7 +23,10 @@ export async function GET(request: NextRequest) {
     // Get all enabled rules for this project
     let query = supabase
       .from('rules')
-      .select('*')
+      .select(`
+        *,
+        category:rule_categories(id, key, label, icon, description)
+      `)
       .eq('project_id', projectId)
       .eq('enabled', true)
       .order('priority', { ascending: false })

@@ -139,7 +139,10 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
     try {
       const { data, error } = await supabase
         .from('rules')
-        .select('*')
+        .select(`
+          *,
+          rule_category:rule_categories!category_id(id, key, label, icon, description)
+        `)
         .eq('project_id', projectId)
         .order('priority', { ascending: true })
 
@@ -223,7 +226,7 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
     const grouped: Record<string, any[]> = {}
 
     rules.forEach(rule => {
-      const categoryKey = rule.category || 'uncategorized'
+      const categoryKey = rule.rule_category?.key || rule.category || 'uncategorized'
       if (!grouped[categoryKey]) {
         grouped[categoryKey] = []
       }

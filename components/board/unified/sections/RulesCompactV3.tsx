@@ -25,6 +25,7 @@ interface Rule {
   enabled: boolean
   icon?: string
   category?: string
+  category_id?: string
   trigger_type?: string
   trigger_config?: any
   target_categories?: string[]
@@ -274,8 +275,11 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
       setLoading(true)
       const { data, error } = await supabase
         .from('rules')
-        .select('*')
-        .eq('project_id', projectId)
+        .select(`
+        *,
+        rule_category:rule_categories!category_id(id, key, label, icon, description)
+      `)
+      .eq('project_id', projectId)
         .order('priority', { ascending: true })
 
       if (error) throw error
@@ -526,7 +530,11 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
   )
 
   const rulesByCategory = categories.reduce((acc, cat) => {
-    acc[cat.value] = filteredRules.filter(r => r.category === cat.value)
+    // Match by category_id (UUID) now, fallback to old category (string) for backward compat
+    acc[cat.value] = filteredRules.filter(r => {
+      const catId = (categories.find(c => c.value === cat.value) as any)?.id
+      return r.category_id === catId || r.category === cat.value
+    })
     return acc
   }, {} as Record<string, Rule[]>)
 

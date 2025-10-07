@@ -97,7 +97,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
   const loadProject = async () => {
     try {
       if (!isValidUUID(projectId)) {
-        router.push('/projects')
+        router.push('/chat/6eb4e422-a10c-437e-a962-61af206d79ff')
         return
       }
 
@@ -108,7 +108,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         .single()
 
       if (error || !data) {
-        router.push('/projects')
+        router.push('/chat/6eb4e422-a10c-437e-a962-61af206d79ff')
         return
       }
 
@@ -150,7 +150,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
       }
     } catch (error) {
       console.error('Error loading project:', error)
-      router.push('/projects')
+      router.push('/chat/6eb4e422-a10c-437e-a962-61af206d79ff')
     } finally {
       setLoading(false)
     }
@@ -301,13 +301,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         {/* Header Sidebar */}
         <div className="p-4 border-b border-[#E5E5E7]">
           <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => router.push('/projects')}
-              className="flex items-center gap-2 text-[#6E6E80] hover:text-[#202123]"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="text-sm">Projets</span>
-            </button>
+            {/* Removed back button - single project mode */}
           </div>
           
           <h2 className="font-semibold text-[#202123] mb-2">{project.name}</h2>
