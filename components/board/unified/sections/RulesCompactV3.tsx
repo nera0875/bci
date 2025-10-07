@@ -194,6 +194,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
   const [showCategoryManager, setShowCategoryManager] = useState(false)
   const [categories, setCategories] = useState<Array<{ value: string; label: string; icon: string; color: string }>>([])
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set())
+  const [showUncategorized, setShowUncategorized] = useState(true)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -315,12 +316,14 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           description: rule.description,
           icon: rule.icon,
           category: rule.category,
+          category_id: rule.category_id,
           trigger_type: rule.trigger_type,
           trigger_config: rule.trigger_config,
           target_categories: rule.target_categories,
           target_tags: rule.target_tags,
           action_type: rule.action_type,
           action_config: rule.action_config,
+          action_instructions: rule.action_instructions,
           enabled: false,
           priority: (rule.priority || 0) + 1
         })
@@ -345,8 +348,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
     setSelectedRuleIds(newSelection)
   }
 
-  const selectAllInCategory = (category: string) => {
-    const categoryRules = filteredRules.filter(r => r.category === category)
+  const selectAllInCategory = (categoryKey: string, categoryRules: Rule[]) => {
     const newSelection = new Set(selectedRuleIds)
     const allSelected = categoryRules.every(r => newSelection.has(r.id))
 
@@ -394,7 +396,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             name: ruleData.name,
             description: ruleData.description,
             icon: ruleData.icon,
-            category: ruleData.category,
+            category_id: ruleData.category_id,
             trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
             action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
             trigger_type: ruleData.trigger_type,
@@ -418,7 +420,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             name: ruleData.name,
             description: ruleData.description,
             icon: ruleData.icon || '🎯',
-            category: ruleData.category,
+            category_id: ruleData.category_id,
             trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
             action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
             trigger_type: ruleData.trigger_type,
@@ -453,18 +455,22 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
 
     // Si drop sur une catégorie
     if (over.id.startsWith('category-')) {
-      const targetCategory = over.id.replace('category-', '')
+      const targetCategoryKey = over.id.replace('category-', '')
       const rule = rules.find(r => r.id === active.id)
+      const targetCategory = categories.find(c => c.value === targetCategoryKey)
 
-      if (rule && rule.category !== targetCategory) {
-        supabase
-          .from('rules')
-          .update({ category: targetCategory })
-          .eq('id', rule.id)
-          .then(() => {
-            toast.success(`Rule déplacée vers ${targetCategory}`)
-            loadRules()
-          })
+      if (rule && targetCategory) {
+        const targetCategoryId = (targetCategory as any).id
+        if (rule.category_id !== targetCategoryId) {
+          supabase
+            .from('rules')
+            .update({ category_id: targetCategoryId })
+            .eq('id', rule.id)
+            .then(() => {
+              toast.success(`Rule déplacée vers ${targetCategory.label}`)
+              loadRules()
+            })
+        }
       }
       return
     }
@@ -514,6 +520,9 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
     return acc
   }, {} as Record<string, Rule[]>)
 
+  // Rules sans catégorie
+  const uncategorizedRules = filteredRules.filter(r => !r.category_id && !r.category)
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -537,7 +546,21 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
               </p>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
+              {uncategorizedRules.length > 0 && (
+                <label className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showUncategorized}
+                    onChange={(e) => setShowUncategorized(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 bg-white dark:bg-gray-800 border-orange-300 rounded focus:ring-orange-500 cursor-pointer"
+                  />
+                  <span className="text-sm">📋</span>
+                  <span className="text-xs font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                    Uncategorized ({uncategorizedRules.length})
+                  </span>
+                </label>
+              )}
               <Button
                 onClick={() => setShowCategoryManager(true)}
                 variant="outline"
@@ -566,6 +589,24 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             />
           </div>
 
+          {/* Toggle uncategorized */}
+          {uncategorizedRules.length > 0 && (
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => setShowUncategorized(!showUncategorized)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all",
+                  showUncategorized
+                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                )}
+              >
+                <span className="text-base">📋</span>
+                <span>Show uncategorized ({uncategorizedRules.length})</span>
+              </button>
+            </div>
+          )}
+
           {/* Bulk Actions Toolbar */}
           {selectedRuleIds.size > 0 && (
             <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center justify-between">
@@ -593,6 +634,57 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
 
         {/* Categories with rules */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Uncategorized section */}
+          {showUncategorized && uncategorizedRules.length > 0 && (
+            <DroppableCategory key="uncategorized" category="uncategorized">
+              <div className="border border-orange-300 dark:border-orange-700 rounded-lg overflow-hidden">
+                {/* Category Header */}
+                <div className="w-full flex items-center justify-between p-4 bg-orange-50 dark:bg-orange-900/20">
+                  <button
+                    onClick={() => toggleCategory('uncategorized')}
+                    className="flex items-center gap-3 flex-1 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedCategories.has('uncategorized') ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                      <span className="text-2xl">📋</span>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                          Uncategorized
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {uncategorizedRules.length} rule{uncategorizedRules.length > 1 ? 's' : ''} • {uncategorizedRules.filter(r => r.enabled).length} active
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Category Rules */}
+                {expandedCategories.has('uncategorized') && (
+                  <div className="p-4 space-y-2 bg-white dark:bg-gray-900">
+                    <SortableContext items={uncategorizedRules.map(r => r.id)} strategy={verticalListSortingStrategy}>
+                      {uncategorizedRules.map(rule => (
+                        <SortableRule
+                          key={rule.id}
+                          rule={rule}
+                          isChecked={selectedRuleIds.has(rule.id)}
+                          onToggle={handleToggleEnabled}
+                          onCheck={(e) => {
+                            e.stopPropagation()
+                            toggleRuleSelection(rule.id)
+                          }}
+                          onEdit={(r) => { setEditingRule(r); setShowBuilder(true); }}
+                          onDelete={handleDeleteRule}
+                          onDuplicate={handleDuplicateRule}
+                        />
+                      ))}
+                    </SortableContext>
+                  </div>
+                )}
+              </div>
+            </DroppableCategory>
+          )}
+
           {categories.map(category => {
             const categoryRules = rulesByCategory[category.value] || []
             const isExpanded = expandedCategories.has(category.value)
@@ -624,7 +716,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          selectAllInCategory(category.value)
+                          selectAllInCategory(category.value, categoryRules)
                         }}
                         className="text-xs text-purple-600 dark:text-purple-400 hover:underline px-2 py-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
                       >

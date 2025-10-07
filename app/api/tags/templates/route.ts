@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
       .from('tag_templates')
       .select('*')
       .eq('project_id', projectId)
-      .order('name')
+      .order('category', { ascending: true, nullsFirst: false })
+      .order('position', { ascending: true, nullsFirst: false })
+      .order('name', { ascending: true })
 
     if (error) throw error
 
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, name, color } = body
+    const { projectId, name, color, category, position } = body
 
     if (!projectId || !name || !color) {
       return NextResponse.json(
@@ -57,7 +59,9 @@ export async function POST(request: NextRequest) {
       .insert({
         project_id: projectId,
         name,
-        color
+        color,
+        category: category || 'general',
+        position: position ?? 0
       })
       .select()
       .single()
@@ -117,7 +121,7 @@ export async function DELETE(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, color } = body
+    const { id, name, color, category, position } = body
 
     if (!id || !name || !color) {
       return NextResponse.json(
@@ -126,13 +130,19 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const updateData: any = {
+      name,
+      color,
+      updated_at: new Date().toISOString()
+    }
+
+    // Only update category/position if provided
+    if (category !== undefined) updateData.category = category
+    if (position !== undefined) updateData.position = position
+
     const { data, error } = await supabase
       .from('tag_templates')
-      .update({
-        name,
-        color,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single()

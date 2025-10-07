@@ -1,18 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Plus, Save, GripVertical, Trash2, Edit2 } from 'lucide-react'
+import { X, Plus, Save, GripVertical, Trash2, Edit2, ChevronDown, ChevronRight, Folder } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { CategoryPanel, type Category } from '@/components/shared'
 
 export interface TagTemplate {
   id: string
   name: string
   color: string
+  category?: string | null // Category for grouping (e.g., "security", "status")
+  position?: number // Display order within category
   usageCount?: number // Nombre de facts utilisant ce tag
 }
 
@@ -34,6 +37,68 @@ const COLORS = [
   { name: 'gray', label: 'Gris', bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', hex: '#9ca3af' }
 ]
 
+// Category droppable component
+function TagCategory({
+  category,
+  label,
+  tags,
+  isExpanded,
+  onToggle,
+  onEdit,
+  onDelete
+}: {
+  category: string
+  label: string
+  tags: TagTemplate[]
+  isExpanded: boolean
+  onToggle: () => void
+  onEdit: (tag: TagTemplate) => void
+  onDelete: (id: string) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `droppable-${category}`,
+    data: { category }
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-lg border transition-all ${
+        isOver ? 'ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/10' : 'border-gray-200 dark:border-gray-800'
+      }`}
+    >
+      {/* Category Header */}
+      <button
+        onClick={onToggle}
+        className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          <Folder size={18} className="text-gray-500" />
+          <span className="font-medium">{label}</span>
+          <span className="text-xs text-gray-500">({tags.length})</span>
+        </div>
+      </button>
+
+      {/* Tags List */}
+      {isExpanded && (
+        <div className="p-3 space-y-2 border-t border-gray-200 dark:border-gray-800">
+          <SortableContext items={tags.map(t => t.id)} strategy={verticalListSortingStrategy}>
+            {tags.map(tag => (
+              <SortableTag
+                key={tag.id}
+                tag={tag}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </SortableContext>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SortableTag({
   tag,
   onEdit,
@@ -50,7 +115,10 @@ function SortableTag({
     transform,
     transition,
     isDragging
-  } = useSortable({ id: tag.id })
+  } = useSortable({
+    id: tag.id,
+    data: { category: tag.category }
+  })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -64,7 +132,7 @@ function SortableTag({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 group"
+      className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 group"
     >
       <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1">
         <GripVertical size={16} className="text-gray-400" />
@@ -108,6 +176,11 @@ export function TagManagementPanel({
 }: TagManagementPanelProps) {
   const [tags, setTags] = useState<TagTemplate[]>(initialTags)
   const [editingTag, setEditingTag] = useState<TagTemplate | null>(null)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['general']))
+  const [isManagingCategories, setIsManagingCategories] = useState(false)
+  const [tagCategories, setTagCategories] = useState<Array<{key: string, label: string, icon: string}>>([
+    { key: 'general', label: 'General', icon: '📁' }
+  ])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -115,14 +188,79 @@ export function TagManagementPanel({
     })
   )
 
+  // Group tags by category
+  const groupedTags = () => {
+    const groups: Record<string, TagTemplate[]> = {}
+
+    tags.forEach(tag => {
+      const category = tag.category || 'general'
+      if (!groups[category]) groups[category] = []
+      groups[category].push(tag)
+    })
+
+    // Sort tags within each category by position
+    Object.keys(groups).forEach(category => {
+      groups[category].sort((a, b) => {
+        const posA = a.position ?? 999999
+        const posB = b.position ?? 999999
+        return posA - posB
+      })
+    })
+
+    return groups
+  }
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(category)) {
+        next.delete(category)
+      } else {
+        next.add(category)
+      }
+      return next
+    })
+  }
+
   const handleDragEnd = (event: any) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
 
-    const oldIndex = tags.findIndex(t => t.id === active.id)
-    const newIndex = tags.findIndex(t => t.id === over.id)
+    const activeTag = tags.find(t => t.id === active.id)
+    if (!activeTag) return
 
-    setTags(arrayMove(tags, oldIndex, newIndex))
+    // Determine target category
+    let targetCategory = activeTag.category
+    if (over.data?.current?.category) {
+      targetCategory = over.data.current.category
+    } else if (typeof over.id === 'string' && over.id.startsWith('droppable-')) {
+      targetCategory = over.id.replace('droppable-', '')
+    } else {
+      const overTag = tags.find(t => t.id === over.id)
+      targetCategory = overTag?.category
+    }
+
+    // Move between categories
+    if (activeTag.category !== targetCategory) {
+      const updatedTag = { ...activeTag, category: targetCategory, position: 0 }
+      setTags(tags.map(t => t.id === activeTag.id ? updatedTag : t))
+      toast.success('Tag moved to ' + targetCategory)
+    } else {
+      // Reorder within category
+      const categoryTags = tags.filter(t => (t.category || 'general') === (activeTag.category || 'general'))
+      const oldIndex = categoryTags.findIndex(t => t.id === active.id)
+      const newIndex = categoryTags.findIndex(t => t.id === over.id)
+
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const reordered = arrayMove(categoryTags, oldIndex, newIndex)
+      const updatedTags = reordered.map((t, idx) => ({ ...t, position: idx }))
+
+      setTags(tags.map(t => {
+        const updated = updatedTags.find(ut => ut.id === t.id)
+        return updated || t
+      }))
+    }
   }
 
   const handleAddTag = () => {
@@ -130,6 +268,8 @@ export function TagManagementPanel({
       id: `tag_${Date.now()}`,
       name: 'New Tag',
       color: 'blue',
+      category: 'general',
+      position: 0,
       usageCount: 0
     }
     setEditingTag(newTag)
@@ -191,17 +331,30 @@ export function TagManagementPanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Manage Categories Button */}
+          <Button onClick={() => setIsManagingCategories(true)} variant="outline" size="sm">
+            <Folder className="w-4 h-4 mr-2" />
+            Manage Tag Categories
+          </Button>
+
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={tags.map(t => t.id)} strategy={verticalListSortingStrategy}>
-              {tags.map(tag => (
-                <SortableTag
-                  key={tag.id}
-                  tag={tag}
-                  onEdit={setEditingTag}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </SortableContext>
+            <div className="space-y-3">
+              {Object.entries(groupedTags()).map(([category, categoryTags]) => {
+                const categoryInfo = tagCategories.find(c => c.key === category) || { key: category, label: category, icon: '📁' }
+                return (
+                  <TagCategory
+                    key={category}
+                    category={category}
+                    label={categoryInfo.label}
+                    tags={categoryTags}
+                    isExpanded={expandedCategories.has(category)}
+                    onToggle={() => toggleCategory(category)}
+                    onEdit={setEditingTag}
+                    onDelete={handleDelete}
+                  />
+                )
+              })}
+            </div>
           </DndContext>
 
           {tags.length === 0 && (
@@ -269,6 +422,22 @@ export function TagManagementPanel({
               </div>
             </div>
 
+            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Category</label>
+              <select
+                value={editingTag.category || 'general'}
+                onChange={(e) => setEditingTag({ ...editingTag, category: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
+              >
+                {tagCategories.map(cat => (
+                  <option key={cat.key} value={cat.key}>
+                    {cat.icon} {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex gap-2 pt-4">
               <Button onClick={handleSaveEdit} className="flex-1 bg-green-600 hover:bg-green-700">
                 Save
@@ -279,6 +448,32 @@ export function TagManagementPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Category Management with CategoryPanel */}
+      {isManagingCategories && (
+        <CategoryPanel
+          categories={tagCategories.map(c => ({
+            id: c.key,
+            value: c.key,
+            label: c.label,
+            icon: c.icon,
+            color: 'gray' as const
+          }))}
+          onSave={async (newCategories) => {
+            const formatted = newCategories.map(c => ({
+              key: c.value,
+              label: c.label,
+              icon: c.icon
+            }))
+
+            setTagCategories(formatted)
+            setIsManagingCategories(false)
+            toast.success('Tag categories saved!')
+          }}
+          onCancel={() => setIsManagingCategories(false)}
+          title="Manage Tag Categories"
+        />
       )}
     </div>
   )

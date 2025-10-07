@@ -1978,32 +1978,61 @@ export default function ChatStream({ projectId, conversationId: propConversation
               console.warn('Embedding generation failed, fact will be created without embedding:', err)
             }
 
-            // Auto-créer les templates pour les nouveaux tags
+            // Auto-créer les templates pour les nouveaux tags (support Category:tag format)
             if (factData.tags && factData.tags.length > 0) {
               const existingTemplatesRes = await fetch(`/api/tags/templates?projectId=${projectId}`)
               if (existingTemplatesRes.ok) {
                 const existingTemplates = await existingTemplatesRes.json()
                 const existingTagNames = existingTemplates.map((t: any) => t.name)
 
-                // Créer templates pour nouveaux tags avec couleurs automatiques
+                // Créer templates pour nouveaux tags avec couleurs et catégories automatiques
                 const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'yellow', 'red', 'gray']
+                const categoryColors: Record<string, string> = {
+                  'security': 'red',
+                  'severity': 'orange',
+                  'status': 'green',
+                  'type': 'blue',
+                  'general': 'gray'
+                }
+
                 for (let i = 0; i < factData.tags.length; i++) {
-                  const tagName = factData.tags[i]
+                  const tagSpec = factData.tags[i]
+
+                  // Parse format "Category:tagname" ou juste "tagname"
+                  let category = 'general'
+                  let tagName = tagSpec
+
+                  if (tagSpec.includes(':')) {
+                    const parts = tagSpec.split(':')
+                    category = parts[0].toLowerCase()
+                    tagName = parts[1]
+                  }
+
                   if (!existingTagNames.includes(tagName)) {
-                    // Créer le template avec une couleur automatique
+                    // Couleur basée sur la catégorie ou rotation automatique
+                    const color = categoryColors[category] || colors[i % colors.length]
+
+                    // Créer le template avec catégorie et couleur
                     await fetch('/api/tags/templates', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         projectId,
                         name: tagName,
-                        color: colors[i % colors.length] // Rotation de couleurs
+                        color,
+                        category,
+                        position: i
                       })
                     })
                   }
                 }
               }
             }
+
+            // Nettoyer les tags (enlever préfixe "Category:" si présent)
+            const cleanedTags = (factData.tags || []).map((tag: string) => {
+              return tag.includes(':') ? tag.split(':')[1] : tag
+            })
 
             const { data: insertedFact, error: factError } = await supabase
               .from('memory_facts')
@@ -2013,7 +2042,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
                 embedding,
                 metadata: {
                   category: factData.category || 'general',
-                  tags: factData.tags || [],
+                  tags: cleanedTags,
                   severity: factData.severity || 'low',
                   technique: factData.technique || null,
                   endpoint: factData.endpoint || null

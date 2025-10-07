@@ -379,19 +379,20 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
                     {Object.entries(groupedRules).map(([categoryKey, categoryRules]: [string, any]) => {
                       const category = categories.find(c => c.key === categoryKey)
                       const isExpanded = expandedCategories.has(categoryKey)
+                      const isUncategorized = categoryKey === 'uncategorized'
 
                       return (
-                        <div key={categoryKey} className="border border-gray-200 rounded-lg">
+                        <div key={categoryKey} className={`border rounded-lg ${isUncategorized ? 'border-orange-300 bg-orange-50/50' : 'border-gray-200'}`}>
                           {/* Category Header */}
                           <button
                             onClick={() => toggleCategory(categoryKey)}
-                            className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-t-lg transition-colors"
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-t-lg transition-colors ${isUncategorized ? 'bg-orange-100 hover:bg-orange-200' : 'bg-gray-50 hover:bg-gray-100'}`}
                           >
                             <div className="flex items-center gap-2">
                               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                              <span className="text-sm">{category?.icon || '📁'}</span>
+                              <span className="text-sm">{isUncategorized ? '📋' : (category?.icon || '📁')}</span>
                               <span className="text-xs font-medium text-gray-900">
-                                {category?.label || categoryKey}
+                                {isUncategorized ? 'Uncategorized' : (category?.label || categoryKey)}
                               </span>
                               <span className="text-xs text-gray-500">
                                 ({categoryRules.filter((r: any) => r.enabled).length}/{categoryRules.length})

@@ -14,7 +14,8 @@ interface PlaybookData {
   name: string
   description?: string
   icon?: string  // Emoji
-  category?: string
+  category?: string // Deprecated - use category_id
+  category_id?: string
   trigger_type: 'endpoint' | 'context' | 'always'
   trigger_config: any
   target_categories?: string[]  // Categories from memory_facts
@@ -49,11 +50,11 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
   const [name, setName] = useState(initialData?.name || '')
   const [description, setDescription] = useState(initialData?.description || '')
   const [icon, setIcon] = useState(initialData?.icon || '🎯')
-  const [category, setCategory] = useState(initialData?.category || '')
+  const [categoryId, setCategoryId] = useState(initialData?.category_id || '')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   // Charger les catégories de rules depuis Supabase (rule_categories)
-  const [ruleCategories, setRuleCategories] = useState<Array<{ value: string; label: string; icon: string }>>([])
+  const [ruleCategories, setRuleCategories] = useState<Array<{ id: string; value: string; label: string; icon: string }>>([])
 
   // Charger les catégories de memory depuis Supabase (memory_categories)
   const [memoryCategories, setMemoryCategories] = useState<Array<{ value: string; label: string; icon: string }>>([])
@@ -70,6 +71,7 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
 
       if (categories) {
         const formatted = categories.map((cat: any) => ({
+          id: cat.id,
           value: cat.key,
           label: cat.label,
           icon: cat.icon || '📁'
@@ -131,7 +133,7 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
       name: name.trim(),
       description: description.trim(),
       icon,
-      category,
+      category_id: categoryId || undefined,
       trigger_type: triggerType,
       trigger_config: triggerConfig,
       target_categories: enableFactTargeting ? targetCategories : undefined,
@@ -288,13 +290,13 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
                     Category <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
                   <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
                     className="w-full text-base h-11 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   >
                     <option value="">-- Aucune catégorie --</option>
                     {ruleCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
+                      <option key={cat.id} value={cat.id}>
                         {cat.icon} {cat.label}
                       </option>
                     ))}
