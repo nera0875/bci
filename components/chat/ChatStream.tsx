@@ -1329,7 +1329,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
       const embeddingResponse = await fetch('/api/openai/embeddings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: userMessage })
+        body: JSON.stringify({ text: userMessage, projectId })
       })
 
       if (!embeddingResponse.ok) {
@@ -1339,12 +1339,25 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
       const { embedding } = await embeddingResponse.json()
 
+      console.log('🔍 Searching with:', {
+        projectId,
+        threshold: memorySearch.similarityThreshold,
+        maxResults: memorySearch.maxResults,
+        embeddingLength: embedding?.length
+      })
+
       // Search similar facts using RPC function
       const { data: similarFacts, error } = await supabase.rpc('search_memory_facts', {
         query_embedding: embedding,
         filter_project_id: projectId,
         match_threshold: memorySearch.similarityThreshold,
         match_count: memorySearch.maxResults
+      })
+
+      console.log('🔍 RPC returned:', {
+        resultsCount: similarFacts?.length || 0,
+        error: error?.message,
+        sampleResult: similarFacts?.[0]
       })
 
       if (error) {
@@ -1948,11 +1961,29 @@ export default function ChatStream({ projectId, conversationId: propConversation
           case 'create_fact':
             // Nouveau système: créer un fact dans memory_facts
             const factData = action.data
+
+            // ✅ Générer embedding automatiquement (comme l'UI Memory Facts)
+            let embedding = null
+            try {
+              const embeddingRes = await fetch('/api/openai/embeddings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: factData.fact, projectId })
+              })
+              if (embeddingRes.ok) {
+                const embData = await embeddingRes.json()
+                embedding = embData.embedding
+              }
+            } catch (err) {
+              console.warn('Embedding generation failed, fact will be created without embedding:', err)
+            }
+
             const { data: insertedFact, error: factError } = await supabase
               .from('memory_facts')
               .insert({
                 project_id: projectId,
                 fact: factData.fact,
+                embedding,
                 metadata: {
                   category: factData.category || 'general',
                   tags: factData.tags || [],
@@ -1966,7 +1997,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
             if (factError) throw factError
 
-            showToast(`✅ Fact ajouté en mémoire: "${factData.fact.substring(0, 50)}..."`, 'success')
+            showToast(`✅ Fact ajouté en mémoire: "${factData.fact.substring(0, 50)}..."` + (embedding ? ' (avec embedding)' : ''), 'success')
             break
 
           case 'update_fact':

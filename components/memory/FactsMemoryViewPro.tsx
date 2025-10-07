@@ -115,15 +115,21 @@ function SortableCategory({
       >
         {/* Category Header */}
         <div className="flex items-center">
-          {/* Drag handle pour catégorie */}
-          <div
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-3 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-150 group/handle"
-            title="Drag to reorder category"
-          >
-            <GripVertical size={18} className="text-gray-400 group-hover/handle:text-blue-500 transition-colors" />
-          </div>
+          {/* Drag handle pour catégorie (désactivé pour "uncategorized") */}
+          {category !== 'uncategorized' ? (
+            <div
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-3 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-150 group/handle"
+              title="Drag to reorder category"
+            >
+              <GripVertical size={18} className="text-gray-400 group-hover/handle:text-blue-500 transition-colors" />
+            </div>
+          ) : (
+            <div className="p-3">
+              <GripVertical size={18} className="text-gray-300 opacity-30 cursor-not-allowed" />
+            </div>
+          )}
 
           <button
             onClick={onToggle}
@@ -351,6 +357,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   const [isManagingTags, setIsManagingTags] = useState(false)
   const [tagTemplates, setTagTemplates] = useState<Array<{id: string, name: string, color: string}>>([])
 
+  // Show/hide uncategorized facts
+  const [showUncategorized, setShowUncategorized] = useState(true)
+
   // Color classes mapping - DARK & BOLD pour meilleure visibilité
   const TAG_COLORS: Record<string, {bg: string, text: string, border: string}> = {
     blue: { bg: 'bg-blue-500/20 dark:bg-blue-500/30', text: 'text-blue-800 dark:text-blue-200 font-semibold', border: 'border-blue-500/40' },
@@ -558,7 +567,11 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     }
 
     if (selectedCategory !== 'all') {
-      result = result.filter(f => f.metadata.category === selectedCategory)
+      if (selectedCategory === 'uncategorized') {
+        result = result.filter(f => !f.metadata.category)
+      } else {
+        result = result.filter(f => f.metadata.category === selectedCategory)
+      }
     }
 
     if (selectedSeverity !== 'all') {
@@ -574,9 +587,16 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
     filteredFacts.forEach(fact => {
       const category = fact.metadata.category || null
-      // Skip facts without category (they shouldn't exist anymore)
-      if (!category) return
-      
+
+      // Collect facts without category into "uncategorized" if enabled
+      if (!category) {
+        if (showUncategorized) {
+          if (!groups['uncategorized']) groups['uncategorized'] = []
+          groups['uncategorized'].push(fact)
+        }
+        return
+      }
+
       // Skip facts whose category no longer exists (deleted from customCategories)
       if (!validCategories[category]) return
 
@@ -623,6 +643,12 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     customCategories.forEach(cat => {
       allCats[cat.key] = {label: cat.label, icon: cat.icon}
     })
+
+    // 3. Ajouter la catégorie système "uncategorized" si des facts sans catégorie existent
+    const hasUncategorized = facts.some(f => !f.metadata.category)
+    if (hasUncategorized && showUncategorized) {
+      allCats['uncategorized'] = {label: 'No Category', icon: '📂'}
+    }
 
     return allCats
   }
@@ -887,6 +913,11 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
       const activeCategory = active.id.replace('category-', '')
       const overCategory = over.id.replace('category-', '').replace('droppable-', '')
 
+      // Empêcher le drag de la catégorie système "uncategorized"
+      if (activeCategory === 'uncategorized' || overCategory === 'uncategorized') {
+        return
+      }
+
       const groupedFacts = groupByCategory()
       const categories = Object.keys(groupedFacts)
 
@@ -945,10 +976,13 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
           newPosition = destinationFacts.length
         }
 
+        // Si drag vers "uncategorized", mettre category à null
+        const targetCategory = overCategory === 'uncategorized' ? null : overCategory
+
         const { error } = await supabase
           .from('memory_facts')
           .update({
-            metadata: { ...activeFact.metadata, category: overCategory, position: newPosition }
+            metadata: { ...activeFact.metadata, category: targetCategory, position: newPosition }
           })
           .eq('id', activeFact.id)
 
@@ -1018,7 +1052,14 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   // Include default + custom categories in dropdown
   const allCategories = getAllCategories()
   const categoriesFromFacts = new Set(facts.map(f => f.metadata.category).filter(Boolean))
+  const hasUncategorized = facts.some(f => !f.metadata.category)
   const allCategoryKeys = new Set([...Object.keys(allCategories), ...categoriesFromFacts])
+
+  // Add "uncategorized" to dropdown if facts without category exist
+  if (hasUncategorized && showUncategorized) {
+    allCategoryKeys.add('uncategorized')
+  }
+
   const uniqueCategories = ['all', ...Array.from(allCategoryKeys)]
   const groupedFacts = groupByCategory()
 
@@ -1060,6 +1101,15 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 <Edit2 className="w-4 h-4 mr-2" />
                 Categories
               </Button>
+              <label className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showUncategorized}
+                  onChange={(e) => setShowUncategorized(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-gray-700 dark:text-gray-300">Show uncategorized</span>
+              </label>
             </div>
           </div>
 

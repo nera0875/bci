@@ -207,16 +207,6 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
     </div>
   )
 }
-
-// Default categories (harmonisées avec factExtractor + memory_facts)
-const DEFAULT_CATEGORIES = [
-  { value: 'auth', label: 'Authentication', icon: '🔐', color: 'blue' },
-  { value: 'api', label: 'API Security', icon: '🔌', color: 'green' },
-  { value: 'business_logic', label: 'Business Logic', icon: '🧠', color: 'purple' },
-  { value: 'info_disclosure', label: 'Info Disclosure', icon: '📢', color: 'orange' },
-  { value: 'general', label: 'General', icon: '⚙️', color: 'gray' }
-]
-
 export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
   const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
@@ -225,7 +215,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [showCategoryManager, setShowCategoryManager] = useState(false)
-  const [categories, setCategories] = useState<Array<{ value: string; label: string; icon: string; color: string }>>(DEFAULT_CATEGORIES)
+  const [categories, setCategories] = useState<Array<{ value: string; label: string; icon: string; color: string }>>([])
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set())
 
   const sensors = useSensors(
