@@ -144,41 +144,17 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
           </span>
         </div>
 
-        {/* Affichage selon le type de rule */}
-        {rule.trigger_type === 'always' && rule.action_instructions ? (
-          // Pour les rules "always": afficher un extrait des instructions
-          <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
-            {rule.action_instructions
-              .replace(/^#+\s*/gm, '') // Enlever les markdown headers
-              .replace(/\*\*/g, '') // Enlever le bold
-              .split('\n')
-              .filter(line => line.trim().length > 20) // Garder que les lignes avec du contenu
-              .slice(0, 2) // Prendre les 2 premières lignes
-              .join(' ')
-              .substring(0, 150)}...
-          </div>
-        ) : (
-          // Pour les rules conditionnelles: afficher WHEN/THEN classique
-          <div className="text-xs space-y-0.5">
-            <div className="flex items-start gap-2">
-              <span className="font-bold text-blue-600 dark:text-blue-400 uppercase min-w-[45px]">WHEN</span>
-              <span className="text-gray-600 dark:text-gray-400 truncate">
-                {rule.trigger_type === 'context' && `Message contains: ${rule.trigger_config?.keywords?.join(', ') || 'keywords'}`}
-                {rule.trigger_type === 'endpoint' && `Endpoint: ${rule.trigger_config?.url_pattern || 'pattern'}`}
-                {!rule.trigger_type && <span className="italic">Not configured</span>}
-              </span>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="font-bold text-green-600 dark:text-green-400 uppercase min-w-[45px]">THEN</span>
-              <span className="text-gray-600 dark:text-gray-400 truncate">
-                {rule.action_type === 'test' && `Test ${rule.action_config?.test_type || 'auto'}`}
-                {rule.action_type === 'store' && 'Store in memory_facts'}
-                {rule.action_instructions && rule.action_instructions.split('\n').filter(l => l.trim().length > 10)[0]?.substring(0, 80)}
-                {!rule.action_type && !rule.action_instructions && <span className="italic">Not configured</span>}
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Preview simplifié des instructions */}
+        <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+          {(rule.action_instructions || rule.description || 'No instructions configured')
+            .replace(/^#+\s*/gm, '') // Enlever les markdown headers
+            .replace(/\*\*/g, '') // Enlever le bold
+            .split('\n')
+            .filter(line => line.trim().length > 10) // Garder que les lignes avec du contenu
+            .slice(0, 2) // Prendre les 2 premières lignes
+            .join(' ')
+            .substring(0, 150)}...
+        </div>
       </div>
 
       {/* Actions */}

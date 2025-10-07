@@ -1101,6 +1101,10 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 <Edit2 className="w-4 h-4 mr-2" />
                 Categories
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsManagingTags(true)}>
+                <Tag className="w-4 h-4 mr-2" />
+                Tags
+              </Button>
               <label className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                 <input
                   type="checkbox"
@@ -1424,17 +1428,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
             {/* Tags */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  🏷️ Tags
-                </label>
-                <button
-                  onClick={() => setIsManagingTags(true)}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Manage Tags
-                </button>
-              </div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                🏷️ Tags
+              </label>
               <TagPicker
                 projectId={projectId}
                 selectedTags={editedTags}

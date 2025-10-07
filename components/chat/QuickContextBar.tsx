@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { PlaybookBuilderV2 } from '@/components/rules/PlaybookBuilderV2'
 
 interface QuickContextBarProps {
   currentStyle: string
@@ -120,6 +121,8 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
   const [categories, setCategories] = React.useState<any[]>([])
   const [expandedCategories, setExpandedCategories] = React.useState<Set<string>>(new Set())
   const [viewingRule, setViewingRule] = React.useState<any | null>(null)
+  const [editingRule, setEditingRule] = React.useState<any | null>(null)
+  const [showBuilder, setShowBuilder] = React.useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -242,8 +245,9 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
   }
 
   const handleEditRule = (rule: any) => {
-    // TODO: Ouvrir le PlaybookBuilder en mode édition
-    toast.info('Ouvre Rules & Playbooks pour éditer')
+    setEditingRule(rule)
+    setShowBuilder(true)
+    setViewingRule(null) // Fermer le modal de détails si ouvert
   }
 
   const handleDeleteRule = async (ruleId: string) => {
@@ -264,6 +268,67 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
       toast.error('Erreur lors de la suppression')
     }
   }
+
+  const handleSaveRule = async (ruleData: any) => {
+    try {
+      if (editingRule?.id) {
+        const { error } = await supabase
+          .from('rules')
+          .update({
+            name: ruleData.name,
+            description: ruleData.description,
+            icon: ruleData.icon,
+            category_id: ruleData.category_id,
+            trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
+            action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
+            trigger_type: ruleData.trigger_type,
+            trigger_config: ruleData.trigger_config,
+            target_categories: ruleData.target_categories,
+            target_tags: ruleData.target_tags,
+            action_type: ruleData.action_type,
+            action_config: ruleData.action_config,
+            action_instructions: ruleData.action_instructions,
+            enabled: ruleData.enabled
+          })
+          .eq('id', editingRule.id)
+
+        if (error) throw error
+        toast.success('Rule mise à jour !')
+      } else {
+        const { error } = await supabase
+          .from('rules')
+          .insert({
+            project_id: projectId,
+            name: ruleData.name,
+            description: ruleData.description,
+            icon: ruleData.icon || '🎯',
+            category_id: ruleData.category_id,
+            trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
+            action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
+            trigger_type: ruleData.trigger_type,
+            trigger_config: ruleData.trigger_config,
+            target_categories: ruleData.target_categories,
+            target_tags: ruleData.target_tags,
+            action_type: ruleData.action_type,
+            action_config: ruleData.action_config,
+            action_instructions: ruleData.action_instructions,
+            enabled: false,
+            priority: rules.length + 1
+          })
+
+        if (error) throw error
+        toast.success('Rule créée !')
+      }
+
+      setShowBuilder(false)
+      setEditingRule(null)
+      await loadRules()
+    } catch (error: any) {
+      console.error('Error saving rule:', error)
+      toast.error(`Erreur sauvegarde: ${error.message || 'Unknown'}`)
+    }
+  }
+
 
   return (
     <div className="relative">
