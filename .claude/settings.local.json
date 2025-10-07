@@ -31,7 +31,8 @@
       "Bash(npx kill-port:*)",
       "mcp__supabase__list_tables",
       "Bash(dir:*)",
-      "mcp__smithery-ai-server-sequential-thinking__sequentialthinking"
+      "mcp__smithery-ai-server-sequential-thinking__sequentialthinking",
+      "Read(//c/Users/gesti/.claude/**)"
     ]
   },
   "enabledMcpjsonServers": [

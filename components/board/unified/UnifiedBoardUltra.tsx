@@ -6,9 +6,6 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import UnifiedSidebarUltra from './UnifiedSidebarUltra'
-import MemorySection from './sections/MemoryProV2'
-import RulesSection from './sections/RulesCompactV3'
-import SystemPromptsSection from './sections/SystemPromptsSection'
 import IntelligenceSection from './sections/IntelligenceSection'
 import CostsSection from './sections/CostsSection'
 import SettingsSection from './sections/SettingsProV2'
@@ -21,7 +18,7 @@ interface UnifiedBoardUltraProps {
   onClose: () => void
 }
 
-type Section = 'memory' | 'rules' | 'system' | 'intelligence' | 'costs' | 'settings'
+type Section = 'intelligence' | 'costs' | 'settings'
 
 export default function UnifiedBoardUltra({
   projectId,
@@ -29,7 +26,7 @@ export default function UnifiedBoardUltra({
   isOpen,
   onClose
 }: UnifiedBoardUltraProps) {
-  const [activeSection, setActiveSection] = useState<Section>('memory')
+  const [activeSection, setActiveSection] = useState<Section>('intelligence')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [pendingSuggestions, setPendingSuggestions] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -45,20 +42,16 @@ export default function UnifiedBoardUltra({
   }, [isOpen, projectId])
 
   const loadPendingSuggestions = async () => {
-    try {
-      const response = await fetch(`/api/optimization/suggestions/count?projectId=${projectId}`)
-      const data = await response.json()
-      setPendingSuggestions(data.count || 0)
-    } catch (error) {
-      console.error('Error loading suggestions count:', error)
-    }
+    // ❌ SUPPRIMÉ: Ancien système d'optimization suggestions
+    // Maintenant géré via pending_facts
+    setPendingSuggestions(0)
   }
 
   const loadRealStats = async () => {
     try {
-      // Load memory items count
+      // Load memory items count (NEW: using memory_facts)
       const { count: memCount } = await supabase
-        .from('memory_nodes')
+        .from('memory_facts')
         .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId)
 
@@ -169,18 +162,6 @@ export default function UnifiedBoardUltra({
             {/* Content Area - Optimized with persistent tabs */}
             <div className="flex-1 relative bg-gradient-to-br from-gray-50 via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900 overflow-hidden">
               {/* All sections mounted, only active one visible - instant switching */}
-              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'memory' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
-                <MemorySection projectId={projectId} />
-              </div>
-
-              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'rules' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
-                <RulesSection projectId={projectId} />
-              </div>
-
-              <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'system' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
-                <SystemPromptsSection projectId={projectId} />
-              </div>
-
               <div className={cn("absolute inset-0 overflow-auto transition-opacity duration-200", activeSection === 'intelligence' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')}>
                 <IntelligenceSection projectId={projectId} />
               </div>

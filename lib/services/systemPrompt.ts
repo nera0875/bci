@@ -1,9 +1,104 @@
-// Prompt système minimal par défaut si Settings > System Prompt est vide
-export const DEFAULT_MINIMAL_PROMPT = `Tu es un assistant IA. Réponds de manière claire et précise aux demandes de l'utilisateur.`
+// Prompt système minimal par défaut si AUCUN System Prompt n'est coché dans le panel
+export const DEFAULT_MINIMAL_PROMPT = `Tu es un assistant IA spécialisé en pentesting et bug bounty. Réponds de manière claire et précise.`
 
-// DEPRECATED: BASE_SYSTEM_PROMPT n'est plus utilisé
-// Settings > System Prompt est maintenant la SEULE source de vérité
-export const BASE_SYSTEM_PROMPT = `DEPRECATED - Use project.system_prompt instead
+// ✅ MEMORY_ACTION INSTRUCTIONS (Actif)
+export const MEMORY_ACTION_INSTRUCTIONS = `
+## 💾 MODIFICATION DE LA MÉMOIRE
+
+Quand l'utilisateur te demande de **ranger**, **sauvegarder**, **créer**, **modifier** ou **supprimer** quelque chose dans ta mémoire, utilise ce format :
+
+<!--MEMORY_ACTION
+{
+  "operation": "create|update|append|delete",
+  "data": {
+    "name": "nom_du_document.md",
+    "type": "document|folder",
+    "content": "contenu ici",
+    "parent_name": "nom_du_dossier_parent"
+  }
+}
+-->
+
+**Opérations disponibles :**
+
+**1. CREATE** - Créer un document ou dossier
+
+<!--MEMORY_ACTION
+{
+  "operation": "create",
+  "data": {
+    "name": "test_idor.md",
+    "type": "document",
+    "content": "# Test IDOR - Endpoint: /api/users/{id} - Résultat: Success",
+    "parent_name": "Success"
+  }
+}
+-->
+
+**2. UPDATE** - Remplacer le contenu
+
+<!--MEMORY_ACTION
+{
+  "operation": "update",
+  "data": {
+    "name": "test_idor.md",
+    "content": "# Test IDOR (Updated) - Nouveau contenu"
+  }
+}
+-->
+
+**3. APPEND** - Ajouter du texte à la fin
+
+<!--MEMORY_ACTION
+{
+  "operation": "append",
+  "data": {
+    "name": "test_idor.md",
+    "content": "Nouvelle découverte - Contenu ajouté"
+  }
+}
+-->
+
+**4. DELETE** - Supprimer
+
+<!--MEMORY_ACTION
+{
+  "operation": "delete",
+  "data": {
+    "name": "test_idor.md"
+  }
+}
+-->
+
+**Règles CRITIQUES :**
+- Le bloc <!--MEMORY_ACTION--> est INVISIBLE pour l'utilisateur
+- Il verra seulement ton texte normal
+- L'utilisateur DOIT valider avant toute modification
+- Utilise UNIQUEMENT quand l'utilisateur demande explicitement
+
+**Exemple :**
+User: "Range ce test dans Success"
+
+Toi: Je propose de ranger ce test dans Success/IDOR.
+
+<!--MEMORY_ACTION
+{
+  "operation": "create",
+  "data": {
+    "name": "test_api_users.md",
+    "type": "document",
+    "content": "# Test IDOR - Endpoint: /api/users/123 - Résultat: Success",
+    "parent_name": "Success"
+  }
+}
+-->
+`
+
+// ❌ SUPPRIMÉ: BASE_SYSTEM_PROMPT (418 lignes cachées)
+// Raison: Tout doit être visible et contrôlable via le panel System Prompts
+// Ancien code conservé en commentaire pour référence historique
+/*
+export const BASE_SYSTEM_PROMPT_DEPRECATED = `DEPRECATED - Use System Prompts Panel instead
 
 Tu es un expert pentester qui aide à identifier des failles de sécurité pour du bug bounty.
 
@@ -324,94 +419,20 @@ Je range le test dans le dossier Success.
 \`\`\`
 
 **IMPORTANT** : Le bloc <!--MEMORY_ACTION--> sera invisible pour l'utilisateur. Il verra seulement ton texte normal.
-`
+*/
+
+// ❌ SUPPRIMÉ: buildFinalPrompt()
+// Raison: Injectait BASE_SYSTEM_PROMPT en cachette
+// Nouveau système: Injection transparente dans route.ts avec System Prompts Panel + Rules + Memory
 
 /**
- * Construit le prompt final en combinant le prompt de base
- * et le prompt expert spécifique au contexte
+ * NOUVELLE LOGIQUE D'INJECTION (route.ts):
+ * 1. System Prompts Panel (localStorage, cochés actifs, par priorité)
+ * 2. Rules actives (Supabase, cochées enabled=true)
+ * 3. Memory RAG (similarity search sur memory_facts)
+ * 4. Contexte technique (projet, MEMORY_ACTION, formatting)
  */
-export function buildFinalPrompt(
-  expertPrompt: string,
-  memoryContext?: string,
-  learningPredictions?: string
-): string {
-  let finalPrompt = BASE_SYSTEM_PROMPT + '\n\n---\n\n' + expertPrompt
 
-  // Ajouter le contexte mémoire si disponible
-  if (memoryContext) {
-    finalPrompt += '\n\n## 📚 CONTEXTE MÉMOIRE\n\n'
-    finalPrompt += 'Voici les patterns similaires que tu as en mémoire :\n\n'
-    finalPrompt += memoryContext
-  }
-
-  // Ajouter les prédictions du learning si disponibles
-  if (learningPredictions) {
-    finalPrompt += '\n\n## 📊 TECHNIQUES EFFICACES\n\n'
-    finalPrompt += 'Basé sur ton apprentissage, voici les techniques avec le meilleur taux de réussite :\n\n'
-    finalPrompt += learningPredictions
-  }
-
-  return finalPrompt
-}
-
-/**
- * Formate le contexte mémoire pour l'inclure dans le prompt
- */
-export function formatMemoryContext(memory: {
-  successes: Array<{ content: string; importance: number }>
-  failures: Array<{ content: string; importance: number }>
-}): string {
-  let formatted = ''
-
-  if (memory.successes.length > 0) {
-    formatted += '### ✅ Succès Passés :\n\n'
-    memory.successes.forEach((item, index) => {
-      const preview = item.content.substring(0, 150)
-      formatted += `${index + 1}. ${preview}... (importance: ${Math.round(item.importance * 100)}%)\n`
-    })
-    formatted += '\n'
-  }
-
-  if (memory.failures.length > 0) {
-    formatted += '### ❌ Échecs Passés (à éviter) :\n\n'
-    memory.failures.forEach((item, index) => {
-      const preview = item.content.substring(0, 150)
-      formatted += `${index + 1}. ${preview}... (importance: ${Math.round(item.importance * 100)}%)\n`
-    })
-    formatted += '\n'
-  }
-
-  return formatted
-}
-
-/**
- * Formate les prédictions du learning system pour l'inclure dans le prompt
- */
-export function formatLearningPredictions(predictions: Array<{
-  technique: string
-  confidence: number
-  success_history?: number
-  alternatives?: string[]
-}>): string {
-  if (predictions.length === 0) {
-    return 'Aucune prédiction disponible pour le moment.'
-  }
-
-  let formatted = ''
-  predictions.forEach((pred, index) => {
-    const percentage = Math.round(pred.confidence * 100)
-    formatted += `${index + 1}. **${pred.technique}** : ${percentage}% de succès`
-    
-    if (pred.success_history) {
-      formatted += ` (testé ${pred.success_history} fois)`
-    }
-    
-    if (pred.alternatives && pred.alternatives.length > 0) {
-      formatted += `\n   Alternatives : ${pred.alternatives.join(', ')}`
-    }
-    
-    formatted += '\n'
-  })
-
-  return formatted
-}
+// ❌ SUPPRIMÉ: formatMemoryContext() et formatLearningPredictions()
+// Raison: Ancien système de mémoire (Success/Failed folders)
+// Nouveau système: memory_facts avec RAG similarity search (déjà géré dans route.ts)

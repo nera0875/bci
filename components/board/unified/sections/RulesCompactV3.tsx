@@ -3,14 +3,17 @@
 import { useState, useEffect } from 'react'
 import {
   Shield, Plus, Trash2, Edit2, Copy, ChevronRight, ChevronDown,
-  FileText, GripVertical, Check, X, Search
+  FileText, GripVertical, Check, X, Search, Settings,
+  CheckSquare, Square
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { PlaybookBuilderV2 } from '@/components/rules/PlaybookBuilderV2'
+import { CategoryManager } from '@/components/rules/CategoryManager'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -20,12 +23,15 @@ interface Rule {
   name: string
   description?: string
   enabled: boolean
+  icon?: string
   category?: string
   trigger_type?: string
   trigger_config?: any
-  target_folders?: string[]
+  target_categories?: string[]
+  target_tags?: string[]
   action_type?: string
   action_config?: any
+  action_instructions?: string
   priority?: number
   created_at: string
 }
@@ -54,9 +60,11 @@ function DroppableCategory({ category, children }: { category: string; children:
 }
 
 // Sortable rule item
-function SortableRule({ rule, onToggle, onEdit, onDelete, onDuplicate }: {
+function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, onDuplicate }: {
   rule: Rule
+  isChecked: boolean
   onToggle: (id: string) => void
+  onCheck: (e: React.MouseEvent) => void
   onEdit: (rule: Rule) => void
   onDelete: (id: string) => void
   onDuplicate: (rule: Rule) => void
@@ -83,9 +91,22 @@ function SortableRule({ rule, onToggle, onEdit, onDelete, onDuplicate }: {
       className={cn(
         "group flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800",
         "hover:border-blue-300 dark:hover:border-blue-600 transition-all",
-        rule.enabled && "border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+        rule.enabled && "border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-950/20",
+        isChecked && "bg-purple-50 dark:bg-purple-900/20"
       )}
     >
+      {/* Selection Checkbox */}
+      <div
+        onClick={onCheck}
+        className="cursor-pointer p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-all flex-shrink-0"
+      >
+        {isChecked ? (
+          <CheckSquare size={18} className="text-purple-600 dark:text-purple-400" />
+        ) : (
+          <Square size={18} className="text-gray-400 group-hover:text-purple-500 transition-colors" />
+        )}
+      </div>
+
       {/* Drag handle */}
       <div
         {...attributes}
@@ -95,7 +116,7 @@ function SortableRule({ rule, onToggle, onEdit, onDelete, onDuplicate }: {
         <GripVertical size={16} className="text-gray-400" />
       </div>
 
-      {/* Checkbox */}
+      {/* Enabled Checkbox */}
       <button
         onClick={() => onToggle(rule.id)}
         className={cn(
@@ -113,32 +134,50 @@ function SortableRule({ rule, onToggle, onEdit, onDelete, onDuplicate }: {
         {rule.priority || 0}
       </div>
 
-      {/* Name & WHEN/THEN preview */}
+      {/* Icon + Name & Instructions preview */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <Shield size={14} className="text-gray-400 flex-shrink-0" />
+          <span className="text-lg">{rule.icon || '🎯'}</span>
           <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
             {rule.name}
           </span>
         </div>
-        <div className="text-xs space-y-0.5">
-          <div className="flex items-start gap-2">
-            <span className="font-bold text-blue-600 dark:text-blue-400 uppercase min-w-[45px]">WHEN</span>
-            <span className="text-gray-600 dark:text-gray-400 truncate">
-              {rule.trigger_type === 'context' && `Message contains: ${rule.trigger_config?.keywords?.join(', ') || 'keywords'}`}
-              {rule.trigger_type === 'endpoint' && `Endpoint: ${rule.trigger_config?.url_pattern || 'pattern'}`}
-              {!rule.trigger_type && <span className="italic">Not configured</span>}
-            </span>
+
+        {/* Affichage selon le type de rule */}
+        {rule.trigger_type === 'always' && rule.action_instructions ? (
+          // Pour les rules "always": afficher un extrait des instructions
+          <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+            {rule.action_instructions
+              .replace(/^#+\s*/gm, '') // Enlever les markdown headers
+              .replace(/\*\*/g, '') // Enlever le bold
+              .split('\n')
+              .filter(line => line.trim().length > 20) // Garder que les lignes avec du contenu
+              .slice(0, 2) // Prendre les 2 premières lignes
+              .join(' ')
+              .substring(0, 150)}...
           </div>
-          <div className="flex items-start gap-2">
-            <span className="font-bold text-green-600 dark:text-green-400 uppercase min-w-[45px]">THEN</span>
-            <span className="text-gray-600 dark:text-gray-400 truncate">
-              {rule.action_type === 'store' && 'Store result'}
-              {rule.action_type === 'extract' && `Extract ${rule.action_config?.parameter || 'data'}`}
-              {!rule.action_type && <span className="italic">Not configured</span>}
-            </span>
+        ) : (
+          // Pour les rules conditionnelles: afficher WHEN/THEN classique
+          <div className="text-xs space-y-0.5">
+            <div className="flex items-start gap-2">
+              <span className="font-bold text-blue-600 dark:text-blue-400 uppercase min-w-[45px]">WHEN</span>
+              <span className="text-gray-600 dark:text-gray-400 truncate">
+                {rule.trigger_type === 'context' && `Message contains: ${rule.trigger_config?.keywords?.join(', ') || 'keywords'}`}
+                {rule.trigger_type === 'endpoint' && `Endpoint: ${rule.trigger_config?.url_pattern || 'pattern'}`}
+                {!rule.trigger_type && <span className="italic">Not configured</span>}
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-bold text-green-600 dark:text-green-400 uppercase min-w-[45px]">THEN</span>
+              <span className="text-gray-600 dark:text-gray-400 truncate">
+                {rule.action_type === 'test' && `Test ${rule.action_config?.test_type || 'auto'}`}
+                {rule.action_type === 'store' && 'Store in memory_facts'}
+                {rule.action_instructions && rule.action_instructions.split('\n').filter(l => l.trim().length > 10)[0]?.substring(0, 80)}
+                {!rule.action_type && !rule.action_instructions && <span className="italic">Not configured</span>}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -169,13 +208,25 @@ function SortableRule({ rule, onToggle, onEdit, onDelete, onDuplicate }: {
   )
 }
 
+// Default categories (harmonisées avec factExtractor + memory_facts)
+const DEFAULT_CATEGORIES = [
+  { value: 'auth', label: 'Authentication', icon: '🔐', color: 'blue' },
+  { value: 'api', label: 'API Security', icon: '🔌', color: 'green' },
+  { value: 'business_logic', label: 'Business Logic', icon: '🧠', color: 'purple' },
+  { value: 'info_disclosure', label: 'Info Disclosure', icon: '📢', color: 'orange' },
+  { value: 'general', label: 'General', icon: '⚙️', color: 'gray' }
+]
+
 export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
   const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [showBuilder, setShowBuilder] = useState(false)
   const [editingRule, setEditingRule] = useState<Rule | null>(null)
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['all']))
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const [showCategoryManager, setShowCategoryManager] = useState(false)
+  const [categories, setCategories] = useState<Array<{ value: string; label: string; icon: string; color: string }>>(DEFAULT_CATEGORIES)
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set())
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -185,13 +236,44 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
     })
   )
 
-  const categories = [
-    { value: 'authentication', label: 'Authentication', icon: '🔐', color: 'blue' },
-    { value: 'api', label: 'API', icon: '🔌', color: 'green' },
-    { value: 'business-logic', label: 'Business Logic', icon: '🧠', color: 'purple' },
-    { value: 'vulnerabilities', label: 'Vulnerabilities', icon: '🐛', color: 'red' },
-    { value: 'custom', label: 'Custom', icon: '⚙️', color: 'gray' }
-  ]
+  // Load categories from Supabase (rule_categories table)
+  useEffect(() => {
+    loadCategories()
+  }, [projectId])
+
+  const loadCategories = async () => {
+    try {
+      const response = await fetch(`/api/rules/categories?projectId=${projectId}`)
+      const { categories: supabaseCategories } = await response.json()
+
+      if (supabaseCategories && supabaseCategories.length > 0) {
+        // Convert Supabase format to component format (include id for deletion)
+        const formatted = supabaseCategories.map((cat: any) => ({
+          id: cat.id,  // UUID for API calls
+          value: cat.key,
+          label: cat.label,
+          icon: cat.icon || '📁',
+          color: 'gray' // Default color (can be extended later)
+        }))
+        setCategories(formatted)
+      }
+    } catch (error) {
+      console.error('Error loading rule categories:', error)
+    }
+  }
+
+  const handleSaveCategories = async (newCategories: typeof categories) => {
+    try {
+      // ℹ️ CategoryManager fait déjà les appels API individuels (POST/PUT/DELETE)
+      // Ici on recharge juste depuis la DB pour synchroniser
+      setShowCategoryManager(false)
+      await loadCategories() // Reload from DB
+      toast.success('Catégories sauvegardées !')
+    } catch (error) {
+      console.error('Error reloading categories:', error)
+      toast.error('Erreur lors du rechargement')
+    }
+  }
 
   useEffect(() => {
     loadRules()
@@ -261,10 +343,12 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           project_id: projectId,
           name: `${rule.name} (copy)`,
           description: rule.description,
+          icon: rule.icon,
           category: rule.category,
           trigger_type: rule.trigger_type,
           trigger_config: rule.trigger_config,
-          target_folders: rule.target_folders,
+          target_categories: rule.target_categories,
+          target_tags: rule.target_tags,
           action_type: rule.action_type,
           action_config: rule.action_config,
           enabled: false,
@@ -280,6 +364,57 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
     }
   }
 
+  // Multi-selection functions
+  const toggleRuleSelection = (ruleId: string) => {
+    const newSelection = new Set(selectedRuleIds)
+    if (newSelection.has(ruleId)) {
+      newSelection.delete(ruleId)
+    } else {
+      newSelection.add(ruleId)
+    }
+    setSelectedRuleIds(newSelection)
+  }
+
+  const selectAllInCategory = (category: string) => {
+    const categoryRules = filteredRules.filter(r => r.category === category)
+    const newSelection = new Set(selectedRuleIds)
+    const allSelected = categoryRules.every(r => newSelection.has(r.id))
+
+    if (allSelected) {
+      categoryRules.forEach(r => newSelection.delete(r.id))
+    } else {
+      categoryRules.forEach(r => newSelection.add(r.id))
+    }
+    setSelectedRuleIds(newSelection)
+  }
+
+  const clearSelection = () => {
+    setSelectedRuleIds(new Set())
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedRuleIds.size === 0) return
+    if (!confirm(`Supprimer ${selectedRuleIds.size} rule(s) sélectionnée(s) ?`)) return
+
+    try {
+      const idsToDelete = Array.from(selectedRuleIds)
+
+      const { error } = await supabase
+        .from('rules')
+        .delete()
+        .in('id', idsToDelete)
+
+      if (error) throw error
+
+      setRules(rules.filter(r => !selectedRuleIds.has(r.id)))
+      setSelectedRuleIds(new Set())
+      toast.success(`${idsToDelete.length} rule(s) supprimée(s)`)
+    } catch (error: any) {
+      console.error('Error deleting rules:', error)
+      toast.error('Erreur suppression rules')
+    }
+  }
+
   const handleSaveRule = async (ruleData: any) => {
     try {
       if (editingRule?.id) {
@@ -288,12 +423,17 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           .update({
             name: ruleData.name,
             description: ruleData.description,
+            icon: ruleData.icon,
             category: ruleData.category,
+            trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
+            action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
             trigger_type: ruleData.trigger_type,
             trigger_config: ruleData.trigger_config,
-            target_folders: ruleData.target_folders,
+            target_categories: ruleData.target_categories,
+            target_tags: ruleData.target_tags,
             action_type: ruleData.action_type,
             action_config: ruleData.action_config,
+            action_instructions: ruleData.action_instructions,
             enabled: ruleData.enabled
           })
           .eq('id', editingRule.id)
@@ -307,12 +447,17 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             project_id: projectId,
             name: ruleData.name,
             description: ruleData.description,
+            icon: ruleData.icon || '🎯',
             category: ruleData.category,
+            trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
+            action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
             trigger_type: ruleData.trigger_type,
             trigger_config: ruleData.trigger_config,
-            target_folders: ruleData.target_folders,
+            target_categories: ruleData.target_categories,
+            target_tags: ruleData.target_tags,
             action_type: ruleData.action_type,
             action_config: ruleData.action_config,
+            action_instructions: ruleData.action_instructions,
             enabled: false,
             priority: rules.length + 1
           })
@@ -324,9 +469,10 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
       setShowBuilder(false)
       setEditingRule(null)
       await loadRules()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving rule:', error)
-      toast.error('Erreur sauvegarde rule')
+      console.error('Error details:', error.message, error.details, error.hint)
+      toast.error(`Erreur sauvegarde: ${error.message || 'Unknown'}`)
     }
   }
 
@@ -417,13 +563,22 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
               </p>
             </div>
 
-            <Button
-              onClick={() => { setEditingRule(null); setShowBuilder(true); }}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Plus size={16} className="mr-2" />
-              New Rule
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowCategoryManager(true)}
+                variant="outline"
+                title="Gérer les catégories"
+              >
+                <Settings size={16} />
+              </Button>
+              <Button
+                onClick={() => { setEditingRule(null); setShowBuilder(true); }}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Plus size={16} className="mr-2" />
+                New Rule
+              </Button>
+            </div>
           </div>
 
           {/* Search */}
@@ -436,6 +591,30 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
               className="pl-10"
             />
           </div>
+
+          {/* Bulk Actions Toolbar */}
+          {selectedRuleIds.size > 0 && (
+            <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Badge className="bg-purple-600 text-white">
+                  {selectedRuleIds.size} selected
+                </Badge>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  {selectedRuleIds.size} rule{selectedRuleIds.size !== 1 ? 's' : ''} sélectionnée{selectedRuleIds.size !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={clearSelection}>
+                  <X className="w-4 h-4 mr-2" />
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Categories with rules */}
@@ -443,28 +622,42 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           {categories.map(category => {
             const categoryRules = rulesByCategory[category.value] || []
             const isExpanded = expandedCategories.has(category.value)
+            const allSelected = categoryRules.length > 0 && categoryRules.every(r => selectedRuleIds.has(r.id))
 
             return (
               <DroppableCategory key={category.value} category={category.value}>
                 <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                   {/* Category Header */}
-                  <button
-                    onClick={() => toggleCategory(category.value)}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      <span className="text-2xl">{category.icon}</span>
-                      <div className="text-left">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {category.label}
-                        </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {categoryRules.length} rule{categoryRules.length > 1 ? 's' : ''} • {categoryRules.filter(r => r.enabled).length} active
-                        </p>
+                  <div className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
+                    <button
+                      onClick={() => toggleCategory(category.value)}
+                      className="flex items-center gap-3 flex-1 hover:opacity-80 transition-opacity"
+                    >
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        <span className="text-2xl">{category.icon}</span>
+                        <div className="text-left">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">
+                            {category.label}
+                          </h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {categoryRules.length} rule{categoryRules.length > 1 ? 's' : ''} • {categoryRules.filter(r => r.enabled).length} active
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    {categoryRules.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          selectAllInCategory(category.value)
+                        }}
+                        className="text-xs text-purple-600 dark:text-purple-400 hover:underline px-2 py-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                      >
+                        {allSelected ? 'Deselect All' : 'Select All'}
+                      </button>
+                    )}
+                  </div>
 
                   {/* Category Rules */}
                   {isExpanded && (
@@ -479,7 +672,12 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                             <SortableRule
                               key={rule.id}
                               rule={rule}
+                              isChecked={selectedRuleIds.has(rule.id)}
                               onToggle={handleToggleEnabled}
+                              onCheck={(e) => {
+                                e.stopPropagation()
+                                toggleRuleSelection(rule.id)
+                              }}
                               onEdit={(r) => { setEditingRule(r); setShowBuilder(true); }}
                               onDelete={handleDeleteRule}
                               onDuplicate={handleDuplicateRule}
@@ -502,6 +700,16 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             initialData={editingRule || undefined}
             onSave={handleSaveRule}
             onCancel={() => { setShowBuilder(false); setEditingRule(null); }}
+          />
+        )}
+
+        {/* Category Manager Modal */}
+        {showCategoryManager && (
+          <CategoryManager
+            categories={categories}
+            onSave={handleSaveCategories}
+            onCancel={() => setShowCategoryManager(false)}
+            projectId={projectId}
           />
         )}
       </div>

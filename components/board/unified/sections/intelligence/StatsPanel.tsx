@@ -49,9 +49,9 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
     try {
       setLoading(true)
 
-      // Memory items count
+      // ✅ Memory items count (NEW: memory_facts instead of memory_nodes)
       const { count: memCount } = await supabase
-        .from('memory_nodes')
+        .from('memory_facts')
         .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId)
 
@@ -62,41 +62,48 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
         .eq('project_id', projectId)
         .eq('enabled', true)
 
-      // Suggestions accepted/rejected
-      const { count: acceptedCount } = await supabase
-        .from('suggestions_queue')
-        .select('*', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .eq('status', 'accepted')
-
-      const { count: rejectedCount } = await supabase
-        .from('suggestions_queue')
-        .select('*', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .eq('status', 'rejected')
-
-      // Cache hit rate (from message_cache)
-      const { data: cacheData } = await supabase
-        .from('message_cache')
+      // ✅ Suggestions accepted/rejected (NEW: using chat_messages metadata)
+      // Count MEMORY_ACTION blocks validated/rejected from chat
+      const { data: chatMessages } = await supabase
+        .from('chat_messages')
         .select('metadata')
         .eq('project_id', projectId)
+        .eq('role', 'assistant')
+
+      let acceptedCount = 0
+      let rejectedCount = 0
+
+      if (chatMessages) {
+        chatMessages.forEach((msg: any) => {
+          if (msg.metadata?.memory_actions_validated) acceptedCount++
+          if (msg.metadata?.memory_actions_rejected) rejectedCount++
+        })
+      }
+
+      // ✅ Cache hit rate (NEW: from chat_messages token usage)
+      const { data: messagesWithTokens } = await supabase
+        .from('chat_messages')
+        .select('token_usage')
+        .eq('project_id', projectId)
+        .eq('role', 'assistant')
+        .not('token_usage', 'is', null)
 
       let totalRequests = 0
       let cachedRequests = 0
+      let totalCost = 0
 
-      if (cacheData) {
-        totalRequests = cacheData.length
-        cachedRequests = cacheData.filter((item: any) =>
-          item.metadata?.cached === true || item.metadata?.hit_count > 0
-        ).length
+      if (messagesWithTokens) {
+        totalRequests = messagesWithTokens.length
+        messagesWithTokens.forEach((msg: any) => {
+          if (msg.token_usage?.cached) cachedRequests++
+          if (msg.token_usage?.cost) totalCost += msg.token_usage.cost
+        })
       }
 
       const hitRate = totalRequests > 0 ? (cachedRequests / totalRequests) * 100 : 0
 
-      // Total cost saved (rough estimate based on cache hits)
-      // Assuming average cost per request: $0.005
-      const avgCostPerRequest = 0.005
-      const costSaved = cachedRequests * avgCostPerRequest
+      // Total cost saved (based on cache hits - 75% savings on cached requests)
+      const costSaved = cachedRequests > 0 ? (totalCost / totalRequests) * cachedRequests * 0.75 : 0
 
       // Patterns count and avg confidence
       const { data: patterns } = await supabase
@@ -112,8 +119,8 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
       setMetrics({
         memoryItems: memCount || 0,
         activeRules: rulesCount || 0,
-        suggestionsAccepted: acceptedCount || 0,
-        suggestionsRejected: rejectedCount || 0,
+        suggestionsAccepted: acceptedCount,
+        suggestionsRejected: rejectedCount,
         cacheHitRate: hitRate,
         totalCostSaved: costSaved,
         totalPatterns: patternCount,
@@ -128,22 +135,50 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
 
   const loadActivities = async () => {
     try {
-      // Get recent user decisions as activities
-      const { data: decisions } = await supabase
-        .from('user_decisions')
-        .select('*')
+      // ✅ Get recent chat messages as activities (NEW: using chat_messages)
+      const { data: messages } = await supabase
+        .from('chat_messages')
+        .select('id, role, content, created_at, metadata')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(20)
 
-      if (decisions) {
-        const formattedActivities = decisions.map((d: any) => ({
-          id: d.id,
-          type: d.decision_type,
-          description: `${d.decision_type === 'accept' ? '✅ Accepté' : '❌ Rejeté'} suggestion`,
-          timestamp: d.created_at
-        }))
-        setActivities(formattedActivities)
+      if (messages) {
+        const formattedActivities: ActivityItem[] = []
+
+        messages.forEach((msg: any) => {
+          // User messages
+          if (msg.role === 'user') {
+            formattedActivities.push({
+              id: msg.id,
+              type: 'user_message',
+              description: `💬 ${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}`,
+              timestamp: msg.created_at
+            })
+          }
+
+          // Memory actions validated
+          if (msg.metadata?.memory_actions_validated) {
+            formattedActivities.push({
+              id: `${msg.id}_validated`,
+              type: 'accept',
+              description: '✅ Memory action validated',
+              timestamp: msg.created_at
+            })
+          }
+
+          // Memory actions rejected
+          if (msg.metadata?.memory_actions_rejected) {
+            formattedActivities.push({
+              id: `${msg.id}_rejected`,
+              type: 'reject',
+              description: '❌ Memory action rejected',
+              timestamp: msg.created_at
+            })
+          }
+        })
+
+        setActivities(formattedActivities.slice(0, 10))
       }
     } catch (error) {
       console.error('Error loading activities:', error)
@@ -288,9 +323,11 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
                   <span className={`text-xs px-2 py-1 rounded ${
                     activity.type === 'accept'
                       ? 'bg-green-100 text-green-700 border border-green-200'
-                      : 'bg-red-100 text-red-700 border border-red-200'
+                      : activity.type === 'reject'
+                      ? 'bg-red-100 text-red-700 border border-red-200'
+                      : 'bg-blue-100 text-blue-700 border border-blue-200'
                   }`}>
-                    {activity.type}
+                    {activity.type === 'user_message' ? 'message' : activity.type}
                   </span>
                 </div>
               ))}

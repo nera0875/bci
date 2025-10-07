@@ -234,7 +234,9 @@ export default function PatternsPanel({ projectId }: PatternsPanelProps) {
 
                   <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs">
                     <pre className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap overflow-x-auto">
-                      {JSON.stringify(pattern.pattern_data, null, 2).substring(0, 150)}...
+                      {pattern.pattern_data
+                        ? JSON.stringify(pattern.pattern_data, null, 2).substring(0, 150) + '...'
+                        : 'No pattern data available'}
                     </pre>
                   </div>
 

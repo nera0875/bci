@@ -119,17 +119,22 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         setAiTextAssistantSettings(data.settings.aiTextAssistant)
       }
 
-      // Charger les templates depuis localStorage
-      const savedTemplates = localStorage.getItem(`templates_${projectId}`)
-      if (savedTemplates) {
-        const templates = JSON.parse(savedTemplates)
-        const styles = templates.map((t: any) => ({
-          id: t.id,
-          label: t.name,
-          description: t.category,
-          systemPrompt: t.prompt,
+      // ✅ Charger les templates depuis Supabase system_prompts
+      const { data: systemPrompts } = await (supabase as any)
+        .from('system_prompts')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true })
+
+      if (systemPrompts && systemPrompts.length > 0) {
+        const styles = systemPrompts.map((p: any) => ({
+          id: p.id,
+          label: p.name,
+          description: p.description || p.category || 'Custom',
+          systemPrompt: p.content,
           custom: true,
-          category: t.category
+          category: p.category,
+          icon: p.icon || '✨'
         }))
         setCustomStyles(styles)
 
@@ -140,6 +145,8 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
           // Par défaut, utiliser le premier template
           setPromptStyle(styles[0].id)
         }
+
+        console.log('✅ Loaded', styles.length, 'system prompts from Supabase')
       }
     } catch (error) {
       console.error('Error loading project:', error)
@@ -454,19 +461,6 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         {/* Message Input */}
         <div className="bg-[#FFFFFF] p-4 border-t border-[#E5E5E7]">
           <div className="max-w-4xl mx-auto">
-            {/* Style actif affiché */}
-            {promptStyle && customStyles.length > 0 && (
-              <div className="flex items-center gap-2 mb-2 px-1">
-                <span className="text-xs text-gray-500">Template actif:</span>
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">
-                  <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
-                  <span className="text-xs font-medium text-blue-900">
-                    {customStyles.find(s => s.id === promptStyle)?.label || 'Aucun'}
-                  </span>
-                </div>
-              </div>
-            )}
-
             <div className="flex gap-2 items-end">
               {/* Settings Button */}
               <div className="pb-3">

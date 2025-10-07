@@ -30,6 +30,11 @@ interface SystemPrompt {
   enabled: boolean
   priority: number
   createdAt: string
+  // Supabase fields (aligned with DB schema)
+  is_active?: boolean
+  sort_order?: number
+  icon?: string
+  description?: string
 }
 
 // Composant droppable pour une catégorie
@@ -177,60 +182,51 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
     loadPrompts()
   }, [projectId])
 
-  const loadPrompts = () => {
-    const saved = localStorage.getItem(`system_prompts_${projectId}`)
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      setPrompts(parsed)
+  const loadPrompts = async () => {
+    try {
+      // ✅ Load from Supabase API instead of localStorage
+      const response = await fetch(`/api/system-prompts?projectId=${projectId}`)
+      const { prompts: data } = await response.json()
 
-      // Extract categories
-      const cats = parsed.reduce((acc: Record<string, boolean>, p: SystemPrompt) => {
-        acc[p.category] = true
-        return acc
-      }, {})
-      setExpandedCategories(cats)
-    } else {
-      // Default prompts
-      const defaults: SystemPrompt[] = [
-        {
-          id: '1',
-          name: 'Bug Bounty Expert',
-          content: `Tu es un expert en bug bounty spécialisé sur HackerOne.
+      if (data && data.length > 0) {
+        // Map Supabase schema to component interface
+        const mapped: SystemPrompt[] = data.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          content: p.content,
+          category: p.category || 'Uncategorized',
+          enabled: p.is_active ?? false,
+          priority: p.sort_order ?? 0,
+          createdAt: p.created_at,
+          icon: p.icon,
+          description: p.description
+        }))
 
-Focus: Trouver des vulnérabilités avec impact critique.
-Priorité: RCE, SQLi, Account Takeover, Business Logic.
-Format rapport: Impact business clair, POC détaillé, remediation.`,
-          category: 'Security',
-          enabled: true,
-          priority: 1,
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '2',
-          name: 'API Security Specialist',
-          content: `Tu es spécialisé en sécurité API REST/GraphQL.
+        setPrompts(mapped)
 
-Focus: Auth, rate limiting, injection, data exposure.
-Tests: Fuzzing, JWT manipulation, versioning issues.
-Méthodologie OWASP API Security Top 10.`,
-          category: 'Security',
-          enabled: true,
-          priority: 2,
-          createdAt: new Date().toISOString()
-        }
-      ]
-      setPrompts(defaults)
-      setExpandedCategories({ 'Security': true })
-      savePrompts(defaults)
+        // Extract categories
+        const cats = mapped.reduce((acc: Record<string, boolean>, p: SystemPrompt) => {
+          acc[p.category] = true
+          return acc
+        }, {})
+        setExpandedCategories(cats)
+      } else {
+        // If no prompts in Supabase, start with empty list
+        setPrompts([])
+      }
+    } catch (error) {
+      console.error('Failed to load prompts from Supabase:', error)
+      toast.error('Failed to load prompts')
     }
   }
 
   const savePrompts = (newPrompts: SystemPrompt[]) => {
-    localStorage.setItem(`system_prompts_${projectId}`, JSON.stringify(newPrompts))
+    // ✅ Update local state immediately (optimistic update)
     setPrompts(newPrompts)
+    // Note: Individual CRUD operations will handle Supabase sync
   }
 
-  const handleDragEnd = (event: any) => {
+  const handleDragEnd = async (event: any) => {
     const { active, over } = event
 
     if (!over) return
@@ -241,43 +237,103 @@ Méthodologie OWASP API Security Top 10.`,
       const draggedPrompt = prompts.find(p => p.id === active.id)
 
       if (draggedPrompt && draggedPrompt.category !== targetCategory) {
-        const updated = prompts.map(p =>
-          p.id === active.id ? { ...p, category: targetCategory } : p
-        )
-        savePrompts(updated)
-        toast.success(`Moved to "${targetCategory}"!`)
+        try {
+          // ✅ Update category in Supabase
+          const response = await fetch('/api/system-prompts', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: active.id,
+              category: targetCategory
+            })
+          })
+
+          if (!response.ok) throw new Error('Update failed')
+
+          // Update local state
+          const updated = prompts.map(p =>
+            p.id === active.id ? { ...p, category: targetCategory } : p
+          )
+          setPrompts(updated)
+          toast.success(`Moved to "${targetCategory}"!`)
+        } catch (error) {
+          console.error('Failed to move prompt:', error)
+          toast.error('Failed to move prompt')
+        }
       }
       return
     }
 
     // Reordering within same list
     if (active.id !== over.id) {
-      setPrompts((items) => {
-        const oldIndex = items.findIndex(i => i.id === active.id)
-        const newIndex = items.findIndex(i => i.id === over.id)
+      const oldIndex = prompts.findIndex(i => i.id === active.id)
+      const newIndex = prompts.findIndex(i => i.id === over.id)
 
-        const reordered = arrayMove(items, oldIndex, newIndex)
+      const reordered = arrayMove(prompts, oldIndex, newIndex)
 
-        // Update priorities
-        const updated = reordered.map((item, index) => ({
-          ...item,
-          priority: index + 1
-        }))
+      // Update priorities
+      const updated = reordered.map((item, index) => ({
+        ...item,
+        priority: index + 1
+      }))
 
-        savePrompts(updated)
-        return updated
-      })
+      // Update local state immediately
+      setPrompts(updated)
 
-      toast.success('Order updated!')
+      // ✅ Batch update sort_order in Supabase
+      try {
+        await Promise.all(
+          updated.map(item =>
+            fetch('/api/system-prompts', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: item.id,
+                sort_order: item.priority
+              })
+            })
+          )
+        )
+
+        toast.success('Order updated!')
+      } catch (error) {
+        console.error('Failed to update order:', error)
+        toast.error('Failed to update order')
+        // Reload to revert optimistic update
+        loadPrompts()
+      }
     }
   }
 
-  const handleToggle = (id: string) => {
-    const updated = prompts.map(p =>
-      p.id === id ? { ...p, enabled: !p.enabled } : p
-    )
-    savePrompts(updated)
-    toast.success(updated.find(p => p.id === id)?.enabled ? 'Activated' : 'Deactivated')
+  const handleToggle = async (id: string) => {
+    const prompt = prompts.find(p => p.id === id)
+    if (!prompt) return
+
+    const newStatus = !prompt.enabled
+
+    try {
+      // ✅ Update in Supabase
+      const response = await fetch('/api/system-prompts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          is_active: newStatus
+        })
+      })
+
+      if (!response.ok) throw new Error('Update failed')
+
+      // Update local state
+      const updated = prompts.map(p =>
+        p.id === id ? { ...p, enabled: newStatus } : p
+      )
+      setPrompts(updated)
+      toast.success(newStatus ? 'Activated' : 'Deactivated')
+    } catch (error) {
+      console.error('Failed to toggle prompt:', error)
+      toast.error('Failed to update prompt')
+    }
   }
 
   const handleCreate = () => {
@@ -293,41 +349,134 @@ Méthodologie OWASP API Security Top 10.`,
     setShowEditor(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingPrompt) return
 
     const exists = prompts.find(p => p.id === editingPrompt.id)
-    const updated = exists
-      ? prompts.map(p => p.id === editingPrompt.id ? editingPrompt : p)
-      : [...prompts, editingPrompt]
 
-    savePrompts(updated)
-    setShowEditor(false)
-    setEditingPrompt(null)
-    toast.success('Prompt saved!')
+    try {
+      if (exists) {
+        // ✅ UPDATE existing prompt
+        const response = await fetch('/api/system-prompts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingPrompt.id,
+            name: editingPrompt.name,
+            content: editingPrompt.content,
+            category: editingPrompt.category,
+            icon: editingPrompt.icon || '✨',
+            is_active: editingPrompt.enabled,
+            sort_order: editingPrompt.priority
+          })
+        })
+
+        if (!response.ok) throw new Error('Update failed')
+
+        const { prompt: updated } = await response.json()
+
+        // Update local state
+        setPrompts(prompts.map(p => p.id === editingPrompt.id ? {
+          ...editingPrompt,
+          id: updated.id,
+          createdAt: updated.created_at
+        } : p))
+      } else {
+        // ✅ CREATE new prompt
+        const response = await fetch('/api/system-prompts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            name: editingPrompt.name,
+            content: editingPrompt.content,
+            category: editingPrompt.category,
+            icon: editingPrompt.icon || '✨',
+            is_active: editingPrompt.enabled,
+            sort_order: editingPrompt.priority
+          })
+        })
+
+        if (!response.ok) throw new Error('Create failed')
+
+        const { prompt: created } = await response.json()
+
+        // Add to local state with Supabase ID
+        setPrompts([...prompts, {
+          ...editingPrompt,
+          id: created.id,
+          createdAt: created.created_at
+        }])
+      }
+
+      setShowEditor(false)
+      setEditingPrompt(null)
+      toast.success('Prompt saved!')
+    } catch (error) {
+      console.error('Failed to save prompt:', error)
+      toast.error('Failed to save prompt')
+    }
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Delete this prompt?')) return
 
-    const updated = prompts.filter(p => p.id !== id).map((p, idx) => ({
-      ...p,
-      priority: idx + 1
-    }))
-    savePrompts(updated)
-    toast.success('Prompt deleted!')
+    try {
+      // ✅ Delete from Supabase
+      const response = await fetch(`/api/system-prompts?id=${id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) throw new Error('Delete failed')
+
+      // Update local state
+      const updated = prompts.filter(p => p.id !== id)
+      setPrompts(updated)
+      toast.success('Prompt deleted!')
+    } catch (error) {
+      console.error('Failed to delete prompt:', error)
+      toast.error('Failed to delete prompt')
+    }
   }
 
-  const handleDuplicate = (prompt: SystemPrompt) => {
-    const duplicate: SystemPrompt = {
-      ...prompt,
-      id: `prompt_${Date.now()}`,
-      name: `${prompt.name} (Copy)`,
-      priority: prompts.length + 1,
-      enabled: false
+  const handleDuplicate = async (prompt: SystemPrompt) => {
+    try {
+      // ✅ Create duplicate in Supabase
+      const response = await fetch('/api/system-prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          name: `${prompt.name} (Copy)`,
+          content: prompt.content,
+          category: prompt.category,
+          icon: prompt.icon || '✨',
+          is_active: false,
+          sort_order: prompts.length + 1
+        })
+      })
+
+      if (!response.ok) throw new Error('Duplicate failed')
+
+      const { prompt: created } = await response.json()
+
+      // Add to local state
+      setPrompts([...prompts, {
+        id: created.id,
+        name: created.name,
+        content: created.content,
+        category: created.category,
+        enabled: created.is_active,
+        priority: created.sort_order,
+        createdAt: created.created_at,
+        icon: created.icon
+      }])
+
+      toast.success('Prompt duplicated!')
+    } catch (error) {
+      console.error('Failed to duplicate prompt:', error)
+      toast.error('Failed to duplicate prompt')
     }
-    savePrompts([...prompts, duplicate])
-    toast.success('Prompt duplicated!')
   }
 
   const handleRenameCategory = (oldName: string, newName: string) => {

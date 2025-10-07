@@ -2,26 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
-// Import our new prompt system
-import {
-  detectContext,
-  selectPrompt,
-  extractTechnique,
-  extractEndpoint,
-  detectSuccess
-} from '@/lib/services/promptSystem'
-import {
-  parseNaturalCommand,
-  commandToApiCall,
-  generateCommandResponse
-} from '@/lib/services/commandParser'
-import { DEFAULT_MINIMAL_PROMPT } from '@/lib/services/systemPrompt'
-import { buildSystemPromptsText } from '@/lib/services/systemPromptsLoader'
-import { FORMATTING_INSTRUCTIONS } from '@/lib/services/formattingInstructions'
-import { LearningSystem } from '@/lib/services/learningSystem'
+// ✅ SYSTÈME ROBUSTE: System Prompts + Rules (always + conditional) + Memory Facts
+import { buildSystemPromptsTextAsync } from '@/lib/services/systemPromptsLoader'
 import { createEmbedding } from '@/lib/services/embeddings'
-import { parseHttpRequests, predictVulnerabilities, analyzeRequestSet } from '@/lib/services/httpParser'
-import { ConversationManager } from '@/lib/services/conversation'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -34,7 +17,7 @@ export async function POST(request: NextRequest) {
     console.log('🚀 Chat API called with new prompt system')
 
     const body = await request.json()
-    const { messages, projectId, stylePrompt } = body
+    const { messages, projectId, stylePrompt, currentTemplateId } = body
 
     console.log('📦 Request body:', {
       hasMessages: !!messages,
@@ -56,83 +39,8 @@ export async function POST(request: NextRequest) {
 
     console.log('📝 Last user message:', lastUserMessage.substring(0, 100))
 
-    // 0. CHECK FOR NATURAL COMMANDS FIRST
-    const parsedCommand = parseNaturalCommand(lastUserMessage)
-    if (parsedCommand.confidence > 0.7) {
-      console.log('🎯 Natural command detected:', parsedCommand.type, parsedCommand.action)
-      
-      // Exécuter la commande si possible
-      const apiCall = commandToApiCall(parsedCommand)
-      if (apiCall) {
-        // Envoyer une réponse immédiate pour la commande
-        const commandResponse = generateCommandResponse(parsedCommand)
-        
-        const encoder = new TextEncoder()
-        const stream = new ReadableStream({
-          async start(controller) {
-            // Envoyer la réponse de confirmation
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-              type: 'content',
-              text: commandResponse
-            })}\n\n`))
-            
-            // Marquer comme terminé
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-              type: 'done',
-              command_executed: true
-            })}\n\n`))
-            
-            controller.close()
-          }
-        })
-        
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-          },
-        })
-      }
-    }
-
-    // Initialize learning system
-    const learningSystem = new LearningSystem(projectId)
-
-    // 1. DETECT CONTEXT
-    const context = detectContext(lastUserMessage)
-    console.log('🎯 Context detected:', context)
-
-    // 1.5 DETECT AND PARSE HTTP REQUESTS
-    let httpAnalysis = null
-    if (lastUserMessage.includes('GET ') || lastUserMessage.includes('POST ') ||
-        lastUserMessage.includes('PUT ') || lastUserMessage.includes('DELETE ') ||
-        lastUserMessage.includes('HTTP/')) {
-
-      console.log('🌐 HTTP requests detected, parsing...')
-      const parsedRequests = parseHttpRequests(lastUserMessage)
-
-      if (parsedRequests.length > 0) {
-        httpAnalysis = analyzeRequestSet(parsedRequests)
-        console.log('🔍 Analyzed', parsedRequests.length, 'requests')
-        console.log('🎯 Found', httpAnalysis.predictions.length, 'vulnerability predictions')
-
-        // Store predictions in learning system for future improvement
-        // TODO: Implement storePattern method in LearningSystem
-        // for (const pred of httpAnalysis.predictions) {
-        //   await learningSystem.storePattern({
-        //     type: pred.type,
-        //     confidence: pred.probability,
-        //     context: 'http_request_analysis',
-        //     suggestion: pred.suggestedTest
-        //   })
-        // }
-      }
-    }
-
-    // 2. SELECT EXPERT PROMPT
-    const promptTemplate = selectPrompt(context)
-    console.log('👨‍💻 Using expert prompt:', promptTemplate.name)
+    // ✅ SYSTÈME SIMPLIFIÉ: Pas de détection de contexte, pas de commandes naturelles
+    // L'IA répond UNIQUEMENT selon: System Prompts + Rules + Memory Facts
 
     // PHASE 1.2: RAG SIMILARITY SEARCH - Charger facts + documents pertinents
     let memoryContextFormatted = ''
@@ -145,7 +53,7 @@ export async function POST(request: NextRequest) {
         const { data: memoryFacts } = await supabase.rpc('search_memory_facts', {
           query_embedding: embedding,
           filter_project_id: projectId,
-          match_threshold: 0.7,
+          match_threshold: 0.5,
           match_count: 15
         })
 
@@ -184,11 +92,11 @@ ${memoryFacts.map((fact: any) => {
           memoryContextFormatted = `
 ## 📁 MÉMOIRE DU PROJET
 
-Aucune mémoire similaire trouvée (threshold 70%).
+Aucune mémoire similaire trouvée (threshold 50%).
 
 ---
 `
-          console.log('⚠️ No similar memory found (threshold 0.7)')
+          console.log('⚠️ No similar memory found (threshold 0.5)')
         }
       } else {
         console.warn('⚠️ Embedding creation failed, fallback to recent memory')
@@ -244,29 +152,70 @@ ${categories.map(cat => `- **${cat.icon} ${cat.label}** (key: \`${cat.key}\`)`).
     }
 
     // PHASE 1.3: GET ACTIVE RULES FROM PROJECT (Structured)
-    let rulesContextFormatted = ''
+    // Séparer rules "always" (instructions permanentes) VS rules "conditional" (déclenchées par contexte)
+    let rulesAlwaysFormatted = ''
+    let rulesConditionalFormatted = ''
     let focusedRules: any[] = []
     try {
       const { data: activeRules } = await supabase
         .from('rules')
-        .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, target_categories, target_tags, enabled')
+        .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, action_instructions, target_categories, target_tags, enabled, sort_order')
         .eq('project_id', projectId)
         .eq('enabled', true)
+        .order('sort_order', { ascending: true })
         .limit(50)
 
       if (activeRules && activeRules.length > 0) {
         focusedRules = activeRules
 
-        rulesContextFormatted = `
-## ⚙️ RÈGLES ACTIVES DU PROJET (${focusedRules.length} playbooks)
+        // ✅ AUTO-LOAD RULES LINKED TO CURRENT TEMPLATE
+        if (currentTemplateId) {
+          console.log('🎨 Loading rules linked to template:', currentTemplateId)
+          const { data: linkedRules } = await supabase
+            .from('rules')
+            .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, action_instructions, target_categories, target_tags, enabled, sort_order')
+            .eq('project_id', projectId)
+            .eq('linked_template_id', currentTemplateId)
+            .eq('enabled', true)
+            .order('sort_order', { ascending: true })
+
+          if (linkedRules && linkedRules.length > 0) {
+            // Merge avec les rules déjà chargées (éviter doublons)
+            const existingIds = new Set(focusedRules.map(r => r.id))
+            const newRules = linkedRules.filter(r => !existingIds.has(r.id))
+            focusedRules = [...focusedRules, ...newRules]
+            console.log(`✅ Added ${newRules.length} rules from template (total: ${focusedRules.length})`)
+          }
+        }
+
+        // ✅ SÉPARER : Rules "always" (instructions permanentes) VS Rules "conditional"
+        const rulesAlways = focusedRules.filter(r => r.trigger_type === 'always')
+        const rulesConditional = focusedRules.filter(r => r.trigger_type !== 'always')
+
+        // Format rules "always" (instructions permanentes - injectées AVANT la mémoire)
+        if (rulesAlways.length > 0) {
+          rulesAlwaysFormatted = `
+## 📋 INSTRUCTIONS SYSTÈME (${rulesAlways.length} directives permanentes)
+
+${rulesAlways.map(rule => {
+  return rule.action_instructions || 'Instruction non définie'
+}).join('\n\n---\n\n')}
+`
+          console.log(`📋 ${rulesAlways.length} rules "always" loaded (system instructions)`)
+        }
+
+        // Format rules "conditional" (déclenchées par contexte)
+        if (rulesConditional.length > 0) {
+          rulesConditionalFormatted = `
+## ⚙️ RÈGLES CONDITIONNELLES (${rulesConditional.length} playbooks)
 
 **⚠️ IMPORTANT - CIBLAGE DES RÈGLES:**
 Certaines règles ont un CIBLAGE (target categories/tags). Tu dois RESPECTER ce ciblage strictement :
-- Si une règle cible `category='success'`, elle ne s'applique QU'AUX facts avec `metadata.category='success'`
-- Si une règle cible `tags=['idor']`, elle ne s'applique QU'AUX facts avec `metadata.tags` contenant 'idor'
+- Si une règle cible 'category=success', elle ne s'applique QU'AUX facts avec 'metadata.category=success'
+- Si une règle cible 'tags=[idor]', elle ne s'applique QU'AUX facts avec 'metadata.tags' contenant 'idor'
 - Si pas de ciblage (🎯 absent), la règle s'applique à TOUS les facts
 
-${focusedRules.map(rule => {
+${rulesConditional.map(rule => {
   const ruleIcon = rule.icon || '🎯'
 
   let triggerDesc = 'Non défini'
@@ -279,8 +228,11 @@ ${focusedRules.map(rule => {
       : 'Aucun mot-clé défini'
   }
 
+  // Utiliser action_instructions si disponible, sinon fallback sur action_type
   let actionDesc = 'Non défini'
-  if (rule.action_type === 'test') {
+  if (rule.action_instructions) {
+    actionDesc = rule.action_instructions
+  } else if (rule.action_type === 'test') {
     const testType = rule.action_config?.test_type || 'N/A'
     const instructions = rule.action_config?.instructions || ''
     actionDesc = `Test ${testType}${instructions ? ` - ${instructions}` : ''}`
@@ -319,7 +271,10 @@ ${focusedRules.map(rule => {
 
 ---
 `
-        console.log('⚙️ Active rules loaded:', activeRules.length, 'rules')
+          console.log(`⚙️ ${rulesConditional.length} rules "conditional" loaded`)
+        }
+
+        console.log(`✅ Rules loaded: ${rulesAlways.length} always + ${rulesConditional.length} conditional = ${focusedRules.length} total`)
       } else {
         console.log('⚠️ No active rules for this project')
       }
@@ -360,24 +315,6 @@ ${focusedRules.map(rule => {
 
       // Si rules matchées, créer un prompt renforcé
       if (matchingRules.length > 0) {
-        // Load folder names for matched rules
-        const matchedFolderIds = matchingRules
-          .flatMap(r => r.target_folders || [])
-          .filter((id, index, self) => id && self.indexOf(id) === index)
-
-        let matchedFolderNamesMap: Record<string, string> = {}
-        if (matchedFolderIds.length > 0) {
-          const { data: folders } = await supabase
-            .from('memory_nodes')
-            .select('id, name')
-            .in('id', matchedFolderIds)
-            .eq('type', 'folder')
-
-          if (folders) {
-            matchedFolderNamesMap = folders.reduce((acc, f) => ({ ...acc, [f.id]: f.name }), {})
-          }
-        }
-
         matchedRulesPrompt = `
 
 🚨 **ALERTE : ${matchingRules.length} RÈGLE(S) DÉTECTÉE(S) AUTOMATIQUEMENT POUR CE MESSAGE** 🚨
@@ -385,7 +322,7 @@ ${focusedRules.map(rule => {
 ${matchingRules.map(rule => {
   let actionDesc = ''
   if (rule.action_type === 'store') {
-    actionDesc = 'RANGER le résultat dans Memory'
+    actionDesc = 'RANGER le résultat dans Memory Facts'
   } else if (rule.action_type === 'analyze') {
     actionDesc = 'ANALYSER la réponse en détail'
   } else if (rule.action_type === 'extract') {
@@ -394,24 +331,15 @@ ${matchingRules.map(rule => {
     actionDesc = `TESTER: ${rule.action_config?.test_type || 'sécurité'}`
   }
 
-  let folderInstruction = ''
-  if (rule.target_folders && rule.target_folders.length > 0) {
-    const folderNames = rule.target_folders
-      .map(id => matchedFolderNamesMap[id] || 'Unknown')
-      .join(', ')
-    folderInstruction = `\n📁 **DOSSIER OBLIGATOIRE**: "${folderNames}" - NE PAS créer de nouveau dossier, utiliser celui-ci UNIQUEMENT`
-  }
-
   return `
 🔴 **RÈGLE ACTIVE : "${rule.name}"**
-- ✅ ACTION REQUISE : ${actionDesc}${folderInstruction}
+- ✅ ACTION REQUISE : ${actionDesc}
 - 📝 Description : ${rule.description || 'N/A'}
 `
 }).join('\n')}
 
 ⚠️ **INSTRUCTIONS IMPÉRATIVES** :
 - Tu DOIS appliquer ${matchingRules.length === 1 ? 'cette règle' : 'ces règles'} MAINTENANT
-- Si un dossier est spécifié → Range UNIQUEMENT dedans, ne crée PAS de nouveau dossier
 - Si plusieurs règles matchent → Applique-les dans l'ordre ci-dessus
 
 ---
@@ -433,90 +361,30 @@ ${matchingRules.map(rule => {
     // Use env var as fallback if no API key in DB
     const apiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
 
-    // PHASE 1.1: BUILD PROJECT CONTEXT (Isolation) + BIZLOGIC AWARENESS
-    // Load discovered endpoints from memory_facts
-    const { data: discoveredEndpoints } = await supabase
-      .from('memory_facts')
-      .select('metadata')
-      .eq('project_id', projectId)
-      .not('metadata->endpoint', 'is', null)
-      .limit(50)
-
-    const uniqueEndpoints = new Set(
-      discoveredEndpoints?.map(f => f.metadata?.endpoint).filter(Boolean) || []
-    )
-
-    const { data: testedCategories } = await supabase
-      .from('memory_facts')
-      .select('metadata')
-      .eq('project_id', projectId)
-      .not('metadata->category', 'is', null)
-      .limit(100)
-
-    const categoryCounts: Record<string, number> = {}
-    testedCategories?.forEach(f => {
-      const cat = f.metadata?.category
-      if (cat) categoryCounts[cat] = (categoryCounts[cat] || 0) + 1
-    })
-
+    // ✅ CONTEXTE PROJET MINIMALISTE
     const projectContext = `
-# CONTEXTE PROJET ACTUEL
+# CONTEXTE PROJET
 
-**PROJET**: ${project?.name || 'Sans nom'}
-**ID**: ${projectId}
-**OBJECTIF**: ${project?.goal || 'Non défini'}
-**TYPE**: Business Logic Pentesting (Burp Suite)
-
-## 🎯 ENDPOINTS DÉCOUVERTS (${uniqueEndpoints.size} endpoints)
-
-${uniqueEndpoints.size > 0
-  ? Array.from(uniqueEndpoints).map(e => `- ${e}`).join('\n')
-  : '(Aucun endpoint testé pour le moment)'}
-
-## 📊 TESTS EFFECTUÉS PAR CATÉGORIE
-
-${Object.keys(categoryCounts).length > 0
-  ? Object.entries(categoryCounts)
-      .sort(([, a], [, b]) => b - a)
-      .map(([cat, count]) => `- **${cat}**: ${count} test${count > 1 ? 's' : ''}`)
-      .join('\n')
-  : '(Aucun test enregistré)'}
-
-⚠️ **RÈGLE CRITIQUE**: Tu travailles UNIQUEMENT sur ce projet "${project?.name}".
-- JAMAIS inventer d'autres noms de projets ou de contexte fictif
-- Si aucune donnée n'existe, DIS-LE clairement au lieu d'inventer
-- Focus BizLogic: payment_manipulation, workflow_bypass, race_condition, privilege_escalation
+**Nom**: ${project?.name || 'Sans nom'}
+**Objectif**: ${project?.goal || 'Non défini'}
 
 ---
 `
 
-    // 5. LOAD SYSTEM PROMPTS FROM PANEL (localStorage)
-    // Charge les prompts cochés actifs, triés par priorité
-    const systemPromptsFromPanel = buildSystemPromptsText(projectId)
-    console.log('📋 System Prompts Panel loaded:', systemPromptsFromPanel ? 'YES' : 'NO (using fallback)')
+    // 5. LOAD SYSTEM PROMPTS FROM SUPABASE
+    // Charge les prompts actifs depuis Supabase, triés par sort_order
+    const systemPromptsFromDB = await buildSystemPromptsTextAsync(projectId)
+    console.log('📋 System Prompts loaded:', systemPromptsFromDB ? 'YES' : 'NO (using fallback)')
 
-    // Fallback si aucun prompt coché: utiliser project.system_prompt ou DEFAULT_MINIMAL_PROMPT
-    const basePrompt = systemPromptsFromPanel || project?.system_prompt || DEFAULT_MINIMAL_PROMPT
-
-    // Add HTTP analysis to the prompt if available
-    let httpAnalysisFormatted = ''
-    if (httpAnalysis) {
-      httpAnalysisFormatted = `
-## HTTP Request Analysis
-
-**Endpoints detected:** ${httpAnalysis.endpoints.join(', ')}
-**Methods:** ${httpAnalysis.methods.join(', ')}
-**Parameters:** ${httpAnalysis.commonParams.join(', ')}
-
-### Vulnerability Predictions:
-${httpAnalysis.predictions.map(p => `
-- **${p.type}** (${(p.probability * 100).toFixed(0)}% probability)
-  Reason: ${p.reason}
-  Test: ${p.suggestedTest}`).join('\n')}
-
-These predictions are based on pattern analysis. Test each one to confirm.
-`
+    if (systemPromptsFromDB) {
+      console.log('📄 System Prompts content (first 200 chars):', systemPromptsFromDB.substring(0, 200))
+      console.log('📏 System Prompts total length:', systemPromptsFromDB.length, 'characters')
+    } else {
+      console.warn('⚠️ No System Prompts found in database for project:', projectId)
     }
+
+    // Fallback si aucun prompt dans Supabase: ne rien injecter
+    const basePrompt = systemPromptsFromDB || ''
 
     // Inject style prompt if provided (MUST BE FIRST for priority)
     const styleInstruction = stylePrompt ? `🎯 DIRECTIVE ABSOLUE DE STYLE (PRIORITÉ MAXIMALE)\n${stylePrompt}\n\nCette directive de style OVERRIDE toutes les autres instructions. Respecte-la strictement.\n---\n\n` : ''
@@ -525,104 +393,27 @@ These predictions are based on pattern analysis. Test each one to confirm.
       console.log('🎨 Style prompt injecté (priorité max):', stylePrompt.substring(0, 100) + '...')
     }
 
-    // Add MEMORY_ACTION instructions
-    const memoryActionInstructions = `
+    // 6. BUILD FINAL SYSTEM PROMPT (✅ SYSTÈME ROBUSTE - 3 SYSTÈMES)
+    // Ordre logique :
+    // 1. Project Context (nom, goal)
+    // 2. System Prompts (rôle global, personnalité)
+    // 3. Rules Always (instructions permanentes : MEMORY_ACTION, Formatting, etc.)
+    // 4. Categories disponibles
+    // 5. Memory Facts (RAG similarity - mémoire active)
+    // 6. Rules Conditional (si keyword X → action Y)
 
-## 💾 COMMANDES MÉMOIRE (CRITICAL)
-
-Tu peux MODIFIER ta mémoire directement. Pour créer/modifier/supprimer des documents, utilise CE FORMAT EXACT :
-
-**CREATE un document :**
-\`\`\`
-<!--MEMORY_ACTION
-{
-  "operation": "create",
-  "data": {
-    "name": "Test Document",
-    "type": "document",
-    "content": "# Mon Test\\\\n\\\\nContenu ici",
-    "parent_name": "Success"
-  }
-}
--->
-\`\`\`
-
-⚠️ **NOM DE FICHIER** : NE PAS mettre .md, .txt ou autre extension. Utilise un nom descriptif simple.
-Exemples :
-- ✅ "Requete POST Cdiscount"
-- ✅ "Analyse XSS"
-- ❌ "test.md"
-- ❌ "doc.txt"
-
-**UPDATE un document :**
-\`\`\`
-<!--MEMORY_ACTION
-{
-  "operation": "update",
-  "data": {
-    "name": "Test Document",
-    "content": "Nouveau contenu"
-  }
-}
--->
-\`\`\`
-
-**APPEND du texte :**
-\`\`\`
-<!--MEMORY_ACTION
-{
-  "operation": "append",
-  "data": {
-    "name": "Test Document",
-    "content": "\\\\n\\\\nTexte ajouté"
-  }
-}
--->
-\`\`\`
-
-**DELETE un document :**
-\`\`\`
-<!--MEMORY_ACTION
-{
-  "operation": "delete",
-  "data": {
-    "name": "Test Document"
-  }
-}
--->
-\`\`\`
-
-⚠️ RÈGLES :
-- Format JSON valide obligatoire
-- Échapper les \\\\n avec \\\\\\\\n dans le JSON
-- Le bloc sera invisible pour l'utilisateur
-- Utilise-le quand tu dois "ranger", "stocker", "créer" un document
-
-`
-
-    // 6. BUILD FINAL SYSTEM PROMPT (NOUVEAU SYSTÈME PROPRE ET TRANSPARENT)
-    // Ordre strict: System Prompts → Rules → Memory → Contexte technique
     const finalSystemPrompt =
-      // PARTIE 1: PROMPTS DE BASE (priorité utilisateur)
-      styleInstruction +                    // Style temporaire (si présent)
-      projectContext +                       // Contexte projet (endpoints, tests)
-      basePrompt +                           // System Prompts Panel (cochés actifs)
-
-      // PARTIE 2: RULES (playbooks structurés)
+      projectContext +                       // 1. Contexte projet
       '\n\n---\n\n' +
-      matchedRulesPrompt +                   // Rules auto-détectées (priorité haute)
-      rulesContextFormatted +                // Toutes les rules actives
-
-      // PARTIE 3: MEMORY (RAG similarity + Categories)
+      basePrompt +                           // 2. System Prompts (rôle, personnalité)
       '\n\n---\n\n' +
-      categoriesContextFormatted +           // Catégories disponibles (Supabase)
-      memoryContextFormatted +               // Facts + Docs similaires (RAG)
-      httpAnalysisFormatted +                // HTTP analysis
-
-      // PARTIE 4: INSTRUCTIONS TECHNIQUES
+      rulesAlwaysFormatted +                 // 3. Rules "always" (instructions système permanentes)
       '\n\n---\n\n' +
-      memoryActionInstructions +             // Commandes MEMORY_ACTION
-      FORMATTING_INSTRUCTIONS                // Instructions formatage
+      categoriesContextFormatted +           // 4. Catégories memory disponibles
+      memoryContextFormatted +               // 5. Memory Facts (RAG similarity)
+      '\n\n---\n\n' +
+      matchedRulesPrompt +                   // 6a. Rules auto-détectées (priorité haute)
+      rulesConditionalFormatted              // 6b. Rules conditionnelles
 
     console.log('✅ Final prompt built, length:', finalSystemPrompt.length)
 
@@ -703,46 +494,7 @@ Exemples :
       )
     }
 
-    // PHASE 2.2: CACHE INTELLIGENT - Vérifier cache avant appel API
-    const conversationManager = new ConversationManager(projectId)
-    const cachedResponse = await conversationManager.checkCache(lastUserMessage, false)
-
-    if (cachedResponse) {
-      console.log('💰 CACHE HIT - Économie de 100% des tokens!')
-
-      // Retourner réponse en cache via stream
-      const encoder = new TextEncoder()
-      const cachedStream = new ReadableStream({
-        start(controller) {
-          // Envoyer contenu depuis cache
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            type: 'content',
-            text: cachedResponse
-          })}\n\n`))
-
-          // Envoyer métadonnées (coût = 0 car cache)
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-            type: 'usage',
-            model: customModel,
-            tokens: { input: 0, output: 0 },
-            cost: 0,
-            cached: true
-          })}\n\n`))
-
-          // Fin du stream
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
-          controller.close()
-        }
-      })
-
-      return new Response(cachedStream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      })
-    }
+    // ❌ SUPPRIMÉ: ConversationManager cache (ancien système)
 
     // Initialize Anthropic
     const anthropic = new Anthropic({
@@ -828,130 +580,24 @@ Exemples :
                 cached: false
               })}\n\n`))
 
-              // 6. AUTO-STORAGE AFTER COMPLETION
-              console.log('🎬 Stream completed, processing auto-storage...')
+              // ✅ SYSTÈME ROBUSTE: Validation temps réel via MEMORY_ACTION
+              console.log('🎬 Stream completed')
+
+              // ❌ DÉSACTIVÉ: factExtractor arrière-plan (système bugué, hors contrôle)
+              // ✅ NOUVEAU: L'IA génère <!--MEMORY_ACTION--> pendant sa réponse
+              // Le frontend (ChatStream) détecte ces blocs et affiche validation inline
 
               try {
-                // 🧠 Extract facts from AI response (Mem0-style)
-                const { extractFactsFromMessage } = await import('@/lib/services/factExtractor')
-                const factsCount = await extractFactsFromMessage(
-                  fullResponse,
-                  projectId,
-                  process.env.ANTHROPIC_API_KEY || ''
-                )
-                console.log(`🧠 Extracted ${factsCount} fact(s) from response`)
-
-                // Detect if success or failure
-                const isSuccess = detectSuccess(lastUserMessage + ' ' + fullResponse)
-                console.log('🔍 Success detected:', isSuccess)
-
-                if (isSuccess !== null) {
-                  // Extract technique
-                  const technique = extractTechnique(lastUserMessage)
-                  console.log('🔧 Technique extracted:', technique)
-
-                  // Note: Auto-storage handled by AI Actions (<!--MEMORY_ACTION-->)
-                  // Removed obsolete memory_chunks INSERT (table doesn't exist)
-
-                  // Update learning
-                  if (isSuccess) {
-                    await learningSystem.recordSuccess({
-                      technique,
-                      context,
-                      target: lastUserMessage,
-                      impact: 'Auto-detected from chat'
-                    })
-                    console.log('✅ Success recorded in learning system')
-                  } else {
-                    await learningSystem.recordFailure({
-                      technique,
-                      context,
-                      target: lastUserMessage,
-                      reason: 'Auto-detected from chat'
-                    })
-                    console.log('❌ Failure recorded in learning system')
-                  }
-
-                  console.log(`📦 Auto-stored in Memory/${isSuccess ? 'Success' : 'Failed'}/${context}`)
-
-                  // ❌ DÉSACTIVÉ: Ancien système memory_nodes Success/Failed
-                  // Remplacé par factExtractor.ts → memory_facts uniquement
-                  // Note: Learning system toujours actif (lignes 864-880)
-                }
-
-                // 🤖 PHASE 4: Auto-parse HTTP requests (Burp) + Detect vulnerabilities
-                try {
-                  const { OptimizationEngine } = await import('@/lib/services/optimizationEngine')
-                  const engine = new OptimizationEngine(projectId)
-
-                  // Parse HTTP requests from user message (Burp format)
-                  const httpSuggestions = await engine.analyzeHTTPRequests(lastUserMessage)
-
-                  if (httpSuggestions.length > 0) {
-                    console.log(`🔍 Parsed ${httpSuggestions.length} HTTP request(s) from Burp`)
-
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                      type: 'http_parsed',
-                      count: httpSuggestions.length,
-                      message: `🔍 ${httpSuggestions.length} HTTP request(s) captured and stored`
-                    })}\n\n`))
-                  }
-
-                  // Analyze AI response for vulnerability keywords
-                  const vulnSuggestions = await engine.analyzeAIResponse(fullResponse, lastUserMessage)
-
-                  if (vulnSuggestions.length > 0) {
-                    console.log(`🚨 Detected potential vulnerability in AI response`)
-
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                      type: 'vuln_detected',
-                      message: `🚨 Potential vulnerability detected - check Intelligence panel`
-                    })}\n\n`))
-                  }
-                } catch (optimizationError) {
-                  console.warn('⚠️ Optimization engine error (non-blocking):', optimizationError)
-                }
-
-                // 🤖 PHASE 5: Generate AI test suggestions after each message
-                try {
-                  const { generateNextTestSuggestions, saveSuggestionsToQueue } = await import('@/lib/services/generateNextTestSuggestions')
-
-                  // Build context from current conversation
-                  const testContext = {
-                    lastTestEndpoint: extractEndpoint(lastUserMessage),
-                    lastTestTechnique: extractTechnique(lastUserMessage),
-                    lastTestStatus: isSuccess ? 'success' as const : 'failed' as const,
-                  }
-
-                  console.log('🤖 Generating AI test suggestions with context:', testContext)
-
-                  const suggestions = await generateNextTestSuggestions(projectId, testContext)
-
-                  if (suggestions.length > 0) {
-                    await saveSuggestionsToQueue(projectId, suggestions)
-                    console.log(`🤖 Generated ${suggestions.length} AI suggestions`)
-
-                    // Send suggestion notification in stream
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                      type: 'ai_suggestions',
-                      count: suggestions.length,
-                      suggestions: suggestions.slice(0, 3), // Top 3 for preview
-                      message: `🤖 ${suggestions.length} new test suggestions generated`
-                    })}\n\n`))
-                  }
-                } catch (suggestionError) {
-                  console.warn('⚠️ AI suggestion generation error (non-blocking):', suggestionError)
-                }
+                // Note: pending_facts ne sont plus utilisés
+                // Toutes les modifications mémoire passent par MEMORY_ACTION + validation user
+                console.log('✅ Streaming done - awaiting user validation for any MEMORY_ACTION')
               } catch (storageError) {
-                console.error('⚠️ Auto-storage error (non-blocking):', storageError)
-                // Don't fail the response if storage fails
+                console.error('⚠️ Storage error (non-blocking):', storageError)
               }
 
               // Send completion signal
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-                type: 'done',
-                context: context,
-                autoStored: detectSuccess(lastUserMessage + ' ' + fullResponse) !== null
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                type: 'done'
               })}\n\n`))
               controller.close()
               console.log('✅ Stream completed successfully')

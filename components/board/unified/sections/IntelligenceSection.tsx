@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import SuggestionsPanel from './intelligence/SuggestionsPanel'
-import PatternsPanel from './intelligence/PatternsPanel'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import MemorySection from './MemorySection'
+import RulesCompactV3 from './RulesCompactV3'
+import SystemPromptsSection from './SystemPromptsSection'
+import SuggestionsPanelV2 from './intelligence/SuggestionsPanelV2'
 import StatsPanel from './intelligence/StatsPanel'
 
 interface IntelligenceSectionProps {
@@ -11,51 +13,51 @@ interface IntelligenceSectionProps {
 }
 
 export default function IntelligenceSection({ projectId }: IntelligenceSectionProps) {
-  const [activeTab, setActiveTab] = useState<'suggestions' | 'patterns' | 'stats'>('suggestions')
+  const [activeTab, setActiveTab] = useState('memory')
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              🧠 Intelligence System
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Suggestions automatiques, patterns détectés et métriques d'apprentissage
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs Navigation */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col">
-        <div className="px-6 pt-4 border-b border-gray-200 dark:border-gray-800 bg-white/30 dark:bg-gray-900/30">
-          <TabsList className="bg-gray-100 dark:bg-gray-800">
-            <TabsTrigger value="suggestions" className="gap-2">
-              📋 Suggestions
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-950">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        {/* Tabs navigation */}
+        <div className="px-6 pt-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+          <TabsList className="grid w-full max-w-4xl grid-cols-5">
+            <TabsTrigger value="memory" className="text-sm">
+              🧠 Memory
             </TabsTrigger>
-            <TabsTrigger value="patterns" className="gap-2">
-              🎯 Patterns
+            <TabsTrigger value="rules" className="text-sm">
+              🛡️ Rules
             </TabsTrigger>
-            <TabsTrigger value="stats" className="gap-2">
-              📈 Stats
+            <TabsTrigger value="prompts" className="text-sm">
+              ✨ Prompts
+            </TabsTrigger>
+            <TabsTrigger value="suggestions" className="text-sm">
+              💡 Suggestions
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="text-sm">
+              📊 Stats
             </TabsTrigger>
           </TabsList>
         </div>
 
-        {/* Tab Content */}
+        {/* Tab content */}
         <div className="flex-1 overflow-hidden">
-          <TabsContent value="suggestions" className="h-full m-0">
-            <SuggestionsPanel projectId={projectId} />
+          <TabsContent value="memory" className="h-full m-0 p-0">
+            <MemorySection projectId={projectId} />
           </TabsContent>
 
-          <TabsContent value="patterns" className="h-full m-0">
-            <PatternsPanel projectId={projectId} />
+          <TabsContent value="rules" className="h-full m-0 p-0">
+            <RulesCompactV3 projectId={projectId} />
           </TabsContent>
 
-          <TabsContent value="stats" className="h-full m-0">
+          <TabsContent value="prompts" className="h-full m-0 p-0">
+            <SystemPromptsSection projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="suggestions" className="h-full m-0 p-0">
+            <SuggestionsPanelV2 projectId={projectId} />
+          </TabsContent>
+
+          <TabsContent value="stats" className="h-full m-0 p-0">
             <StatsPanel projectId={projectId} />
           </TabsContent>
         </div>

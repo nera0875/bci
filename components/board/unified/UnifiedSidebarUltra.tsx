@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type Section = 'memory' | 'rules' | 'system' | 'intelligence' | 'costs' | 'settings'
+type Section = 'intelligence' | 'costs' | 'settings'
 
 interface UnifiedSidebarUltraProps {
   activeSection: Section
@@ -23,67 +23,19 @@ interface UnifiedSidebarUltraProps {
 
 const sections = [
   {
-    id: 'memory' as Section,
-    name: 'Memory',
-    shortName: 'Mem',
-    icon: Brain,
-    color: 'from-purple-500 to-purple-600',
-    bgColor: 'bg-purple-500/10',
-    borderColor: 'border-purple-500',
-    description: 'Knowledge storage & organization',
-    stats: { label: 'Items', value: 128 },
-    subItems: [
-      { name: 'Success', icon: Target, count: 42 },
-      { name: 'Failed', icon: Activity, count: 18 },
-      { name: 'Templates', icon: Layers, count: 68 }
-    ]
-  },
-  {
-    id: 'rules' as Section,
-    name: 'Rules',
-    shortName: 'Rules',
-    icon: FileText,
-    color: 'from-blue-500 to-blue-600',
-    bgColor: 'bg-blue-500/10',
-    borderColor: 'border-blue-500',
-    description: 'AI behavior configuration',
-    stats: { label: 'Active', value: 12 },
-    subItems: [
-      { name: 'Global', icon: Shield, count: 3 },
-      { name: 'Folder', icon: GitBranch, count: 9 }
-    ]
-  },
-  {
-    id: 'system' as Section,
-    name: 'System Prompts',
-    shortName: 'System',
+    id: 'intelligence' as Section,
+    name: 'Intelligence',
+    shortName: 'Intel',
     icon: Sparkles,
     color: 'from-indigo-500 to-purple-600',
     bgColor: 'bg-indigo-500/10',
     borderColor: 'border-indigo-500',
-    description: 'Foundation prompts & templates',
-    stats: { label: 'Active', value: 2 },
+    description: 'Memory, Rules, Prompts & Insights',
+    stats: { label: 'Active', value: 14 },
     subItems: [
-      { name: 'Templates', icon: Layers, count: 5 },
-      { name: 'Custom', icon: GitBranch, count: 2 }
-    ]
-  },
-  {
-    id: 'intelligence' as Section,
-    name: 'Intelligence',
-    shortName: 'Intel',
-    icon: Zap,
-    color: 'from-gradient-500 to-orange-500',
-    bgColor: 'bg-yellow-500/10',
-    borderColor: 'border-yellow-500',
-    description: 'Suggestions, patterns & stats',
-    stats: { label: 'Pending', value: 0 },
-    badge: 0,
-    pulse: true,
-    subItems: [
-      { name: 'Suggestions', icon: Lightbulb, count: 0 },
-      { name: 'Patterns', icon: TrendingUp, count: 0 },
-      { name: 'Stats', icon: BarChart3, count: 0 }
+      { name: 'Memory', icon: Brain, count: '—' },
+      { name: 'Rules', icon: Shield, count: 9 },
+      { name: 'Prompts', icon: Sparkles, count: 5 }
     ]
   },
   {

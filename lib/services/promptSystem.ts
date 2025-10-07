@@ -310,6 +310,39 @@ export function extractTechnique(message: string): string {
 }
 
 /**
+ * Extrait l'endpoint d'un message utilisateur
+ */
+export function extractEndpoint(message: string): string | undefined {
+  // Patterns pour détecter des endpoints dans le message
+  const patterns = [
+    // URL complètes
+    /https?:\/\/[^\s]+?\/([^\s?]+)/i,
+    // Chemins d'API
+    /\/api\/([^\s?]+)/i,
+    /\/v\d+\/([^\s?]+)/i,
+    // Patterns génériques
+    /endpoint[:\s]+([^\s]+)/i,
+    /route[:\s]+([^\s]+)/i,
+    /path[:\s]+([^\s]+)/i,
+    // GET/POST patterns
+    /(GET|POST|PUT|DELETE|PATCH)\s+([^\s?]+)/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern)
+    if (match) {
+      // Retourner le dernier groupe capturé (l'endpoint)
+      const endpoint = match[match.length - 1]
+      if (endpoint && endpoint.length > 1) {
+        return endpoint.trim()
+      }
+    }
+  }
+
+  return undefined
+}
+
+/**
  * Détecte si un message indique un succès ou un échec
  */
 export function detectSuccess(message: string): boolean | null {

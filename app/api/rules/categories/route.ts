@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('memory_categories')
+      .from('rule_categories')
       .select('*')
       .eq('project_id', projectId)
       .order('created_at', { ascending: true })
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ categories: data || [] })
   } catch (error: any) {
-    console.error('Error fetching categories:', error)
+    console.error('Error fetching rule categories:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Check if category with same key already exists
     const { data: existing } = await supabase
-      .from('memory_categories')
+      .from('rule_categories')
       .select('id')
       .eq('project_id', projectId)
       .eq('key', key)
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('memory_categories')
+      .from('rule_categories')
       .insert({
         project_id: projectId,
         key: key.toLowerCase().replace(/\s+/g, '_'),
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ category: data })
   } catch (error: any) {
-    console.error('Error creating category:', error)
+    console.error('Error creating rule category:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -94,7 +94,7 @@ export async function PUT(request: NextRequest) {
     if (description !== undefined) updates.description = description
 
     const { data, error } = await supabase
-      .from('memory_categories')
+      .from('rule_categories')
       .update(updates)
       .eq('id', id)
       .select()
@@ -104,7 +104,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ category: data })
   } catch (error: any) {
-    console.error('Error updating category:', error)
+    console.error('Error updating rule category:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
@@ -119,7 +119,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { error } = await supabase
-      .from('memory_categories')
+      .from('rule_categories')
       .delete()
       .eq('id', id)
 
@@ -127,7 +127,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Error deleting category:', error)
+    console.error('Error deleting rule category:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

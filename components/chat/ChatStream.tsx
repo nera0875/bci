@@ -9,14 +9,12 @@ import StreamingMarkdown from './StreamingMarkdown'
 import StreamingMarkdownBatched from './StreamingMarkdownBatched'
 import SmoothTypewriter from './SmoothTypewriter'
 import StreamingText from './StreamingText'
-import { MemoryActionButtons } from './MemoryActionButtons'
 import MemoryActionDisplay from './MemoryActionDisplay'
 import StorageNotification from './StorageNotification'
-import MemoryActionModal from './MemoryActionModal'
+import { PendingFactsToast } from './PendingFactsToast'
+import { MemoryActionPanel } from './MemoryActionPanel'
 import { useAppStore } from '@/lib/store/app-store'
 import toast from 'react-hot-toast'
-// import { intentAnalyzer } from '@/lib/memory/contextualIntentAnalyzer' // DÉSACTIVÉ
-import { ConversationManager } from '@/lib/services/conversation'
 import { generateUUID } from '@/lib/utils/uuid'
 import { OptimizationEngine } from '@/lib/services/optimizationEngine'
 import { AIActionDetector, DetectedAction } from '@/lib/services/aiActionDetector'
@@ -114,14 +112,14 @@ const SystemIcon = () => (
 // Memoized message component for performance
 const MessageComponent = React.memo(({
   message,
-  pendingAction,
-  onConfirmAction,
-  onRejectAction
+  memoryActions,
+  onValidateMemoryActions,
+  onRejectMemoryActions
 }: {
   message: ChatMessage
-  pendingAction?: { operation: string; data: any; confidence?: number }
-  onConfirmAction?: () => void
-  onRejectAction?: () => void
+  memoryActions?: any[]
+  onValidateMemoryActions?: (actions: any[]) => void
+  onRejectMemoryActions?: () => void
 }) => {
   const isSystem = message.role === 'system'
 
@@ -150,37 +148,19 @@ const MessageComponent = React.memo(({
         <div className="flex-1 min-w-0">
           {!isSystem && message.role === 'assistant' ? (
             (() => {
-              // Clean content: remove MEMORY_ACTION blocks + parse actions
-              let cleanContent = message.content
-              const memoryActions: any[] = []
-
-              // Extract all MEMORY_ACTION blocks
-              const regex = /<!--MEMORY_ACTION\s*([\s\S]*?)-->/g
-              let match
-              while ((match = regex.exec(message.content)) !== null) {
-                try {
-                  const jsonStr = match[1].trim()
-                  if (!jsonStr || jsonStr.length === 0) continue
-                  const action = JSON.parse(jsonStr)
-                  memoryActions.push(action)
-                } catch (e) {
-                  // Skip incomplete JSON during streaming
-                }
-              }
-
-              // Remove blocks from displayed text
-              cleanContent = cleanContent.replace(/<!--MEMORY_ACTION[\s\S]*?-->/g, '')
+              // Clean content: remove MEMORY_ACTION blocks (parsing fait dans le parent)
+              let cleanContent = message.content.replace(/<!--MEMORY_ACTION[\s\S]*?-->/g, '')
 
               return (
                 <>
-                  {/* Display memory actions as compact badges */}
-                  {memoryActions.length > 0 && (
+                  {/* Display memory actions as compact badges - DÉSACTIVÉ (cause duplication avec panel) */}
+                  {/* {memoryActions && memoryActions.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-3">
                       {memoryActions.map((action, idx) => (
                         <MemoryActionDisplay key={idx} action={action} />
                       ))}
                     </div>
-                  )}
+                  )} */}
 
                   {/* Display cleaned markdown content with streaming-optimized rendering */}
                   <StreamingMarkdownBatched content={cleanContent} isComplete={true} />
@@ -237,16 +217,13 @@ const MessageComponent = React.memo(({
             </div>
           )}
 
-          {/* Afficher les boutons d'action si c'est le dernier message assistant avec une action */}
-          {message.role === 'assistant' && pendingAction && (
-            <div className="mt-4">
-              <MemoryActionButtons
-                action={pendingAction}
-                onConfirm={onConfirmAction!}
-                onReject={onRejectAction!}
-                confidence={pendingAction.confidence}
-              />
-            </div>
+          {/* ✅ Panel validation MEMORY_ACTION inline */}
+          {message.role === 'assistant' && memoryActions && memoryActions.length > 0 && (
+            <MemoryActionPanel
+              actions={memoryActions}
+              onValidate={onValidateMemoryActions!}
+              onReject={onRejectMemoryActions!}
+            />
           )}
         </div>
       </div>
@@ -279,8 +256,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreamComplete, setIsStreamComplete] = useState(false)
-  const [pendingMemoryAction, setPendingMemoryAction] = useState<{ operation: string; data: any; confidence?: number } | null>(null)
-  const [pendingActions, setPendingActions] = useState<{ operation: string; data: any; confidence?: number }[]>([])
+  // ❌ REMOVED: pendingMemoryAction, pendingActions (old validation system)
   const [lastUserMessage, setLastUserMessage] = useState<string>('')
   const [storageNotifications, setStorageNotifications] = useState<Array<{
     icon: string
@@ -303,7 +279,6 @@ export default function ChatStream({ projectId, conversationId: propConversation
   const bufferRef = useRef<string>('')
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastMessageCountRef = useRef<number>(0)
-  const conversationManagerRef = useRef<ConversationManager | null>(null)
   const [conversationId, setConversationId] = useState<string | null>(propConversationId || null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const onStreamingChangeRef = useRef(onStreamingChange)
@@ -595,6 +570,20 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }, [propConversationId])
 
+  // ✅ FIX: Separate subscription useEffect (no dependencies on isStreaming)
+  useEffect(() => {
+    if (!projectId) return
+
+    console.log('🔌 Setting up ONE subscription for project:', projectId)
+    const unsubscribe = subscribeToMessages()
+
+    return () => {
+      console.log('🔌 Cleaning up subscription')
+      unsubscribe()
+    }
+  }, [projectId]) // Only re-subscribe if project changes
+
+  // ✅ Polling + message processing useEffect
   useEffect(() => {
     loadMessages()
     initializeConversation()
@@ -627,16 +616,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
           setMessages(data)
           // Store user message for context
           setLastUserMessage(lastMessage.content)
-          // Save user message to ConversationManager
-          if (conversationManagerRef.current) {
-            await conversationManagerRef.current.saveMessage({
-              role: 'user',
-              content: lastMessage.content
-            })
-          }
-          // intentAnalyzer.addToContext(lastMessage.content) // DÉSACTIVÉ
           // Trigger Claude response (ONLY here, not in subscription)
-          streamClaudeResponse(lastMessage.content)
+          streamClaudeResponse(lastMessage.content).catch(err => {
+            console.error('❌ streamClaudeResponse error:', err)
+          })
         } else if (data.length !== lastMessageCountRef.current && !isStreaming) {
           // Only update if count changed and not streaming
           lastMessageCountRef.current = data.length
@@ -645,12 +628,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
       }
     }, 1500) // Poll every 1.5 seconds
 
-    // Also set up subscription (may work intermittently)
-    const unsubscribe = subscribeToMessages()
-
     return () => {
       clearInterval(pollInterval)
-      unsubscribe()
       // Clean up RAF
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current)
@@ -659,7 +638,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
         clearTimeout(debouncedScrollRef.current)
       }
     }
-  }, [projectId, isStreaming, conversationId])
+  }, [projectId, conversationId]) // ✅ Removed isStreaming from dependencies
 
   // Smart scroll management without jumps using RAF
   const rafRef = useRef<number | undefined>()
@@ -751,16 +730,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }
 
   const initializeConversation = async () => {
-    // Initialize ConversationManager
-    conversationManagerRef.current = new ConversationManager(projectId)
-
-    // If we have a specific conversation ID, use it
     if (propConversationId) {
-      await conversationManagerRef.current.initConversation(propConversationId)
       setConversationId(propConversationId)
-    } else {
-      // Don't auto-create conversation here, wait for first message
-      setConversationId(null)
     }
   }
 
@@ -1012,60 +983,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
 
     try {
-      // Initialize ConversationManager if not done
-      if (!conversationManagerRef.current) {
-        conversationManagerRef.current = new ConversationManager(projectId)
-      }
-
-      // Create new conversation if needed
       let currentConvId = conversationId
-      if (!currentConvId) {
-        const conversation = await conversationManagerRef.current.initConversation()
-        if (conversation) {
-          currentConvId = conversation.id
-          setConversationId(conversation.id)
-          // Notify parent component about new conversation
-          if (onConversationCreated) {
-            onConversationCreated(conversation.id)
-          }
-        }
-      } else {
-        await conversationManagerRef.current.initConversation(currentConvId)
-      }
-
-      // Get optimized context from ConversationManager
-      let convContext
-      try {
-        convContext = await conversationManagerRef.current.getOptimizedContext(userMessage)
-      } catch (error) {
-        console.warn('⚠️ Conv context failed, using fallback:', error)
-        convContext = { cachedResponse: null, relevantMessages: [], contextSummary: '' }
-      }
-
-      // If we have a cached response, use it!
-      if (convContext.cachedResponse) {
-        console.log('💰 Using cached response - saving tokens!')
-        setStreamingContent(convContext.cachedResponse)
-        setIsStreamComplete(true)
-
-        // Save to database with conversation ID
-        await supabase
-          .from('chat_messages')
-          .insert({
-            project_id: projectId,
-            role: 'assistant' as const,
-            content: convContext.cachedResponse,
-            conversation_id: currentConvId,
-            streaming: null,
-            metadata: {}
-          })
-
-        // Auto-organize si applicable
-        await autoOrganizeContent(convContext.cachedResponse, userMessage)
-
-        setIsStreaming(false)
-        return
-      }
 
       // Get additional context - RÈGLES EN PRIORITÉ avec templates dynamiques
       const targetFolder = detectTargetFolder(userMessage)
@@ -1091,67 +1009,21 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
       console.log('🚀 Using contextual prompt for:', targetFolder)
 
-      // 🧠 AUTO-REINFORCEMENT: Analyze user message for auto-storage
-      try {
-        const analyzeResponse = await fetch('/api/chat/analyze-and-act', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId,
-            userMessage,
-            confidence: 0
-          })
-        })
+      // ✅ SIMPLIFIED: Build messages array directly from current conversation
+      // Get last 10 messages for context (no ConversationManager needed)
+      const recentMessages = messages.slice(-10).map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
 
-        if (analyzeResponse.ok) {
-          const analysisResult = await analyzeResponse.json()
-          console.log('🧠 Analysis result:', analysisResult)
-
-          // Show notification based on action
-          if (analysisResult.action === 'auto_stored') {
-            setStorageNotifications(prev => [...prev, {
-              icon: '✅',
-              message: analysisResult.message,
-              path: analysisResult.suggestedPath,
-              documentId: analysisResult.nodeId,
-              metadata: analysisResult
-            }])
-          } else if (analysisResult.action === 'needs_confirmation') {
-            toast(analysisResult.message, {
-              duration: 5000,
-              icon: '⚠️'
-            })
-          }
+      // Build API messages array
+      const apiMessages = [
+        ...recentMessages,
+        {
+          role: 'user' as const,
+          content: contextualPrompt
         }
-      } catch (error) {
-        console.error('Analysis failed:', error)
-      }
-
-      // Combine recent messages from ConversationManager with similar messages
-      const conversationHistory = [...convContext.recentMessages, ...convContext.similarMessages]
-
-      // Ajouter un message système avec le template si contexte spécifique
-      const messages = [
-        ...conversationHistory.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }))
       ]
-
-      // Si contexte spécifique détecté, ajouter le prompt système
-      if (targetFolder !== '*') {
-        const template = getPromptTemplate(targetFolder)
-        messages.push({
-          role: 'system' as const,
-          content: template.systemPrompt + (rulesContext ? `\n\nRÈGLES SPÉCIFIQUES:\n${rulesContext}` : '')
-        })
-      }
-
-
-      messages.push({
-        role: 'user',
-        content: contextualPrompt
-      })
 
       // Créer un nouvel AbortController pour cette requête
       abortControllerRef.current = new AbortController()
@@ -1165,13 +1037,14 @@ export default function ChatStream({ projectId, conversationId: propConversation
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            messages,                    // Full conversation history
-            projectId,                   // Project ID for Mem0
-            conversationId: currentConvId, // Conversation ID for tracking
-            useMemoryContext: true,      // Enable Mem0 memory injection
-            saveMemory: true,            // Auto-save responses to Mem0
-            enableAutoOrganization: true, // Flag pour activer auto-org côté serveur si implémenté
-            stylePrompt: getStyleSystemPrompt(promptStyle as any, customStyles) // Inject style system prompt
+            messages: apiMessages,       // ✅ FIXED: Use apiMessages instead of undefined messages
+            projectId,
+            conversationId: currentConvId,
+            useMemoryContext: true,
+            saveMemory: true,
+            enableAutoOrganization: true,
+            stylePrompt: getStyleSystemPrompt(promptStyle as any, customStyles),
+            currentTemplateId: promptStyle
           }),
           signal: abortControllerRef.current.signal
         })
@@ -1237,6 +1110,10 @@ export default function ChatStream({ projectId, conversationId: propConversation
                   console.log('💰 API Usage:', data)
                   // Stocker pour sauvegarde avec le message
                   window.sessionStorage.setItem('lastApiUsage', JSON.stringify(data))
+                } else if (data.type === 'facts_pending') {
+                  // ❌ DÉSACTIVÉ: Ancien système factExtractor (hors contrôle)
+                  // ✅ NOUVEAU: Validation via MEMORY_ACTION inline panels
+                  console.log('⚠️ facts_pending ignoré (système désactivé)')
                 } else if (data.type === 'ai_suggestion') {
                   // 🎯 DECISION TRACKING: AI a fait une suggestion
                   console.log('🤖 AI Suggestion detected:', data)
@@ -1278,19 +1155,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
           .replace(/\/memory_\w+\s+[^\n]+/g, '')
       }
 
-      // Save complete message to database and ConversationManager
+      // Save complete message to database
       if (fullContent) {
-        // Save assistant message to ConversationManager with caching
-        if (conversationManagerRef.current) {
-          await conversationManagerRef.current.saveMessage({
-            role: 'assistant',
-            content: fullContent
-          })
-
-          // Cache the response for future identical questions
-          await conversationManagerRef.current.cacheResponse(userMessage, fullContent)
-        }
-
         // Récupérer les métadonnées de tokens depuis sessionStorage
         const usageData = window.sessionStorage.getItem('lastApiUsage')
         const metadata = usageData ? JSON.parse(usageData) : {}
@@ -1333,14 +1199,16 @@ export default function ChatStream({ projectId, conversationId: propConversation
             console.log('⚠️ Memory action processing skipped:', error)
           }
 
-          // Auto-organize le contenu de la réponse
-          const organized = await autoOrganizeContent(fullContent, userMessage)
-          if (organized) {
-            console.log('✅ Auto-organization completed')
-          }
+          // DÉSACTIVÉ: Auto-organize (ancien système memory_nodes)
+          // const organized = await autoOrganizeContent(fullContent, userMessage)
+          // if (organized) {
+          //   console.log('✅ Auto-organization completed')
+          // }
 
-          // 🔍 AI ACTION DETECTION: Détecter les actions depuis le texte de l'IA
-          detectAndProposeActions(fullContent)
+          // DÉSACTIVÉ: AI ACTION DETECTION (ancien système memory_nodes - toasts "Rangé dans...")
+          // detectAndProposeActions(fullContent)
+
+          // ✅ NOUVEAU: Facts extraction activée dans route.ts:773-780
 
           // Analyse de patterns pour suggestions d'optimisation
           try {
@@ -1605,19 +1473,20 @@ export default function ChatStream({ projectId, conversationId: propConversation
         return ''
       }
 
-      // Filtrer les règles pertinentes (dossier spécifique + globales)
-      const relevantRules = data.filter(rule => 
-        rule.trigger === '*' || 
-        rule.trigger === targetFolder
+      // ✅ FIX: trigger_type au lieu de trigger
+      // Les rules "always" s'appliquent toujours (comme MEMORY_ACTION, Formatting)
+      const relevantRules = data.filter(rule =>
+        rule.trigger_type === 'always' ||
+        rule.trigger_type === 'context' // Toutes les rules context aussi
       )
 
       if (relevantRules.length === 0) {
         return ''
       }
 
-      // Formater les règles pour l'IA
+      // Formater les règles pour l'IA (utiliser action_instructions si disponible)
       return relevantRules.map(rule =>
-        `- ${rule.name}: ${rule.description || rule.action}`
+        `- ${rule.name}: ${rule.action_instructions || rule.description || rule.action || ''}`
       ).join('\n')
     } catch (error) {
       console.error('Erreur chargement règles:', error)
@@ -1754,7 +1623,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
     return cleanedText.trim() || text
   }
 
-  // Create memory node (Using Supabase only)
+  // ⚠️ LEGACY: Create memory node in memory_nodes table (obsolete, kept for backward compatibility)
+  // New system uses memory_facts with create_fact/update_fact/delete_fact
   const createMemoryNode = async (data: any) => {
     const { type, name, content, color = '#6E6E80', parent_id = null, parent_name } = data
 
@@ -1839,7 +1709,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
     }
   }
 
-  // Update memory node (Using Supabase only)
+  // ⚠️ LEGACY: Update memory node (obsolete, use update_fact instead)
   const updateMemoryNode = async (data: any) => {
     const { id, name, content: inputContent, append = false, new_name } = data
 
@@ -1966,7 +1836,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
     showToast(`Document "${new_name || nodePath.split('/').pop() || 'mémoire'}" mis à jour avec succès`, 'success')
   }
 
-  // Delete memory node (Using Supabase only)
+  // ⚠️ LEGACY: Delete memory node (obsolete, use delete_fact instead)
   const deleteMemoryNode = async (data: any) => {
     const { id, name } = data
 
@@ -2027,6 +1897,153 @@ export default function ChatStream({ projectId, conversationId: propConversation
     if (action.operation) {
       try {
         switch (action.operation) {
+          case 'create_fact':
+            // Nouveau système: créer un fact dans memory_facts
+            const factData = action.data
+            const { data: insertedFact, error: factError } = await supabase
+              .from('memory_facts')
+              .insert({
+                project_id: projectId,
+                fact: factData.fact,
+                metadata: {
+                  category: factData.category || 'general',
+                  tags: factData.tags || [],
+                  severity: factData.severity || 'low',
+                  technique: factData.technique || null,
+                  endpoint: factData.endpoint || null
+                }
+              })
+              .select()
+              .single()
+
+            if (factError) throw factError
+
+            showToast(`✅ Fact ajouté en mémoire: "${factData.fact.substring(0, 50)}..."`, 'success')
+            break
+
+          case 'update_fact':
+            // Mettre à jour un fact existant
+            const updateData = action.data
+            const { data: factsToUpdate, error: findError } = await supabase
+              .from('memory_facts')
+              .select('*')
+              .eq('project_id', projectId)
+              .ilike('fact', `%${updateData.find_by_fact_contains}%`)
+
+            if (findError) throw findError
+            if (!factsToUpdate || factsToUpdate.length === 0) {
+              showToast('❌ Aucun fact trouvé avec ce texte', 'error')
+              break
+            }
+
+            const factToUpdate = factsToUpdate[0]
+            const { error: updateError } = await supabase
+              .from('memory_facts')
+              .update({
+                fact: updateData.new_fact || factToUpdate.fact,
+                metadata: {
+                  ...factToUpdate.metadata,
+                  category: updateData.new_category || factToUpdate.metadata.category,
+                  severity: updateData.new_severity || factToUpdate.metadata.severity
+                }
+              })
+              .eq('id', factToUpdate.id)
+
+            if (updateError) throw updateError
+            showToast(`✅ Fact mis à jour`, 'success')
+            break
+
+          case 'delete_fact':
+            // Supprimer un fact
+            const deleteData = action.data
+            const { data: factsToDelete, error: findDeleteError } = await supabase
+              .from('memory_facts')
+              .select('*')
+              .eq('project_id', projectId)
+              .ilike('fact', `%${deleteData.find_by_fact_contains}%`)
+
+            if (findDeleteError) throw findDeleteError
+            if (!factsToDelete || factsToDelete.length === 0) {
+              showToast('❌ Aucun fact trouvé avec ce texte', 'error')
+              break
+            }
+
+            const { error: deleteError } = await supabase
+              .from('memory_facts')
+              .delete()
+              .eq('id', factsToDelete[0].id)
+
+            if (deleteError) throw deleteError
+            showToast(`✅ Fact supprimé`, 'success')
+            break
+
+          case 'add_tags':
+            // Ajouter des tags à un fact
+            const addTagsData = action.data
+            const { data: factsForTags, error: findTagsError } = await supabase
+              .from('memory_facts')
+              .select('*')
+              .eq('project_id', projectId)
+              .ilike('fact', `%${addTagsData.find_by_fact_contains}%`)
+
+            if (findTagsError) throw findTagsError
+            if (!factsForTags || factsForTags.length === 0) {
+              showToast('❌ Aucun fact trouvé avec ce texte', 'error')
+              break
+            }
+
+            const factForTags = factsForTags[0]
+            const currentTags = factForTags.metadata?.tags || []
+            const newTags = [...new Set([...currentTags, ...addTagsData.tags])]
+
+            const { error: addTagsError } = await supabase
+              .from('memory_facts')
+              .update({
+                metadata: {
+                  ...factForTags.metadata,
+                  tags: newTags
+                }
+              })
+              .eq('id', factForTags.id)
+
+            if (addTagsError) throw addTagsError
+            showToast(`✅ Tags ajoutés: ${addTagsData.tags.join(', ')}`, 'success')
+            break
+
+          case 'remove_tags':
+            // Retirer des tags d'un fact
+            const removeTagsData = action.data
+            const { data: factsForRemoveTags, error: findRemoveTagsError } = await supabase
+              .from('memory_facts')
+              .select('*')
+              .eq('project_id', projectId)
+              .ilike('fact', `%${removeTagsData.find_by_fact_contains}%`)
+
+            if (findRemoveTagsError) throw findRemoveTagsError
+            if (!factsForRemoveTags || factsForRemoveTags.length === 0) {
+              showToast('❌ Aucun fact trouvé avec ce texte', 'error')
+              break
+            }
+
+            const factForRemoveTags = factsForRemoveTags[0]
+            const tagsAfterRemoval = (factForRemoveTags.metadata?.tags || []).filter(
+              (tag: string) => !removeTagsData.tags.includes(tag)
+            )
+
+            const { error: removeTagsError } = await supabase
+              .from('memory_facts')
+              .update({
+                metadata: {
+                  ...factForRemoveTags.metadata,
+                  tags: tagsAfterRemoval
+                }
+              })
+              .eq('id', factForRemoveTags.id)
+
+            if (removeTagsError) throw removeTagsError
+            showToast(`✅ Tags supprimés: ${removeTagsData.tags.join(', ')}`, 'success')
+            break
+
           case 'create':
             await createMemoryNode(action.data)
             showToast(`Document "${action.data?.name}" créé avec succès`, 'success')
@@ -2087,56 +2104,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
     )
   }, [messages])
 
-  // Handlers pour la confirmation des actions
-  const handleConfirmAction = async () => {
-    if (!pendingMemoryAction) return
-
-    const { operation, data } = pendingMemoryAction
-
-    try {
-      // Exécuter l'action
-      switch (operation) {
-        case 'create':
-          await createMemoryNode(data)
-          break
-        case 'update':
-          await updateMemoryNode(data)
-          break
-        case 'append':
-          await updateMemoryNode({ ...data, append: true })
-          break
-        case 'delete':
-          await deleteMemoryNode(data)
-          break
-      }
-
-      console.log('✅ Action mémoire exécutée:', operation)
-    } catch (error) {
-      console.error('❌ Erreur lors de l\'exécution:', error)
-    }
-
-    // Passer à l'action suivante
-    setPendingMemoryAction(null)
-    setPendingActions(prev => {
-      const remaining = prev.slice(1)
-      if (remaining.length > 0) {
-        setPendingMemoryAction(remaining[0])
-      }
-      return remaining
-    })
-  }
-
-  const handleCancelAction = () => {
-    // Annuler l'action et passer à la suivante
-    setPendingMemoryAction(null)
-    setPendingActions(prev => {
-      const remaining = prev.slice(1)
-      if (remaining.length > 0) {
-        setPendingMemoryAction(remaining[0])
-      }
-      return remaining
-    })
-  }
+  // ❌ REMOVED: handleConfirmAction, handleCancelAction (old system with green/red buttons)
+  // New system uses MemoryActionPanel with checkboxes
 
   return (
     <>
@@ -2148,18 +2117,47 @@ export default function ChatStream({ projectId, conversationId: propConversation
       >
         <div className="max-w-4xl mx-auto space-y-6">
           {filteredMessages.map((message, index) => {
-            const isLastAssistantMessage =
-              index === filteredMessages.length - 1 &&
-              message.role === 'assistant' &&
-              !isStreaming
+            // Extract MEMORY_ACTION from message content
+            let memoryActions: any[] = []
+            if (message.role === 'assistant') {
+              const regex = /<!--MEMORY_ACTION\s*([\s\S]*?)-->/g
+              let match
+              while ((match = regex.exec(message.content)) !== null) {
+                try {
+                  const jsonStr = match[1].trim()
+                  if (jsonStr && jsonStr.length > 0) {
+                    const action = JSON.parse(jsonStr)
+                    memoryActions.push(action)
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
+            }
 
             return (
               <MessageComponent
                 key={message.id}
                 message={message}
-                pendingAction={isLastAssistantMessage ? pendingMemoryAction : undefined}
-                onConfirmAction={isLastAssistantMessage ? handleConfirmAction : undefined}
-                onRejectAction={isLastAssistantMessage ? handleCancelAction : undefined}
+                memoryActions={memoryActions}
+                onValidateMemoryActions={async (actions) => {
+                  for (const action of actions) {
+                    await handleClaudeAction({ operation: action.operation, data: action.data })
+                  }
+                  toast.success(`✅ ${actions.length} action(s) validée(s)`)
+
+                  // Remove MEMORY_ACTION blocks from message content after validation
+                  const updatedContent = message.content.replace(/<!--MEMORY_ACTION[\s\S]*?-->/g, '')
+                  await supabase
+                    .from('chat_messages')
+                    .update({ content: updatedContent })
+                    .eq('id', message.id)
+
+                  loadMessages() // Reload to show updated state
+                }}
+                onRejectMemoryActions={() => {
+                  toast('❌ Actions ignorées')
+                }}
               />
             )
           })}

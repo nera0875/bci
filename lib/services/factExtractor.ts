@@ -25,13 +25,94 @@ export interface ExtractedFact {
   params?: Record<string, any>
   result?: 'success' | 'failed' | null
   severity?: 'critical' | 'high' | 'medium' | 'low' | null
-  category?: 'auth' | 'api' | 'business_logic' | 'info_disclosure' | 'preference' | string | null
+  category: 'auth' | 'api' | 'business_logic' | 'info_disclosure' | 'general' | string  // REQUIRED, no null
   confidence: number
   relations?: Array<{
     to_fact_id: string
     type: 'relates_to' | 'caused_by' | 'implies' | 'contradicts'
     strength: number
   }>
+}
+
+/**
+ * Valide qu'un fact respecte le ciblage des rules actives
+ */
+async function validateFactAgainstRules(
+  fact: ExtractedFact,
+  projectId: string
+): Promise<{ valid: boolean; reason?: string }> {
+  try {
+    // Charger TOUTES les rules actives
+    const { data: allRules } = await supabase
+      .from('rules')
+      .select('id, name, target_categories, target_tags')
+      .eq('project_id', projectId)
+      .eq('enabled', true)
+
+    if (!allRules || allRules.length === 0) {
+      // Pas de rules → Accept tout
+      return { valid: true }
+    }
+
+    // Filtrer rules avec ciblage
+    const rulesWithTargeting = allRules.filter(rule =>
+      (rule.target_categories && rule.target_categories.length > 0) ||
+      (rule.target_tags && rule.target_tags.length > 0)
+    )
+
+    // Si AUCUNE rule avec ciblage → Accept tout
+    if (rulesWithTargeting.length === 0) {
+      return { valid: true }
+    }
+
+    // Vérifier si le fact match AU MOINS UNE rule avec ciblage
+    for (const rule of rulesWithTargeting) {
+      let categoryMatch = false
+      let tagsMatch = false
+      let hasCategoryTargeting = rule.target_categories && rule.target_categories.length > 0
+      let hasTagsTargeting = rule.target_tags && rule.target_tags.length > 0
+
+      // Vérifier categories
+      if (hasCategoryTargeting) {
+        categoryMatch = rule.target_categories.includes(fact.category)
+      }
+
+      // Vérifier tags
+      if (hasTagsTargeting) {
+        const factTags = fact.technique ? [fact.technique.toLowerCase()] : []
+        tagsMatch = rule.target_tags.some(tag =>
+          factTags.includes(tag.toLowerCase())
+        )
+      }
+
+      // Logique de match:
+      // - Si rule a SEULEMENT categories → categoryMatch suffit
+      // - Si rule a SEULEMENT tags → tagsMatch suffit
+      // - Si rule a LES DEUX → categoryMatch ET tagsMatch requis
+      const isMatch = (
+        (hasCategoryTargeting && !hasTagsTargeting && categoryMatch) ||
+        (!hasCategoryTargeting && hasTagsTargeting && tagsMatch) ||
+        (hasCategoryTargeting && hasTagsTargeting && categoryMatch && tagsMatch)
+      )
+
+      if (isMatch) {
+        console.log(`✅ Fact matches rule "${rule.name}"`)
+        return { valid: true }
+      }
+    }
+
+    // Aucune rule match → Reject
+    console.log(`❌ Fact rejected: no matching rule (category: ${fact.category}, technique: ${fact.technique})`)
+    return {
+      valid: false,
+      reason: `No matching rule for category="${fact.category}" and technique="${fact.technique}"`
+    }
+
+  } catch (error: any) {
+    console.error('❌ Error validating fact against rules:', error.message)
+    // En cas d'erreur, accepter le fact (fail-open)
+    return { valid: true }
+  }
 }
 
 /**
@@ -67,14 +148,16 @@ Format:
   "params": {"key": "value"} | {},
   "result": "success" | "failed" | null,
   "severity": "critical" | "high" | "medium" | "low" | null,
-  "category": "auth" | "api" | "business_logic" | "preference" | null,
+  "category": "auth" | "api" | "business_logic" | "info_disclosure" | "general",
   "confidence": 0.0-1.0
 }]
 
+IMPORTANT: category is REQUIRED, never use null. If unsure, use "general".
+
 Examples:
-- "Found IDOR in /api/users/123" → {fact: "IDOR vulnerability in /api/users/{id}", type: "vulnerability", technique: "IDOR", endpoint: "/api/users/{id}", result: "success", severity: "high", confidence: 0.95}
-- "Tested SQLi on /login, failed" → {fact: "SQLi test failed on /login endpoint", type: "test_result", technique: "SQLi", endpoint: "/login", result: "failed", confidence: 0.9}
-- "User prefers testing APIs over web apps" → {fact: "User preference: API testing", type: "note", category: "preference", confidence: 0.85}
+- "Found IDOR in /api/users/123" → {fact: "IDOR vulnerability in /api/users/{id}", type: "vulnerability", technique: "IDOR", endpoint: "/api/users/{id}", result: "success", severity: "high", category: "api", confidence: 0.95}
+- "Tested SQLi on /login, failed" → {fact: "SQLi test failed on /login endpoint", type: "test_result", technique: "SQLi", endpoint: "/login", result: "failed", category: "auth", confidence: 0.9}
+- "User prefers testing APIs over web apps" → {fact: "User preference: API testing", type: "note", category: "general", confidence: 0.85}
 - "API uses JWT in Authorization header" → {fact: "API authentication uses JWT tokens", type: "endpoint", category: "auth", confidence: 1.0}
 
 Rules:
@@ -118,21 +201,58 @@ Return only the JSON array, no other text.`
       return 0
     }
 
-    const facts: ExtractedFact[] = JSON.parse(jsonMatch[0])
+    let facts: ExtractedFact[] = JSON.parse(jsonMatch[0])
 
     if (!facts || facts.length === 0) {
       console.log('⚠️ No meaningful facts found')
       return 0
     }
 
+    // Limiter à 5 facts max (prendre ceux avec le meilleur confidence score)
+    if (facts.length > 5) {
+      facts = facts
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 5)
+      console.log(`⚠️ Extracted ${facts.length + (facts.length - 5)} facts, keeping top 5 by confidence`)
+    }
+
     console.log(`📝 Extracted ${facts.length} fact(s)`)
 
-    // 2. Generate embeddings + insert DB
+    // 2. Generate embeddings + insert DB (avec déduplication hash-based)
     let insertedCount = 0
 
     for (const fact of facts) {
       try {
-        // Generate embedding
+        // 1. VALIDATION: Vérifier ciblage rules
+        const validation = await validateFactAgainstRules(fact, projectId)
+        if (!validation.valid) {
+          console.log(`  ⚠️ Fact skipped (rule targeting): "${fact.fact.substring(0, 60)}..." - ${validation.reason}`)
+          continue
+        }
+
+        // 2. DEDUPLICATION: Generate content hash
+        const { data: hashData } = await supabase.rpc('generate_fact_hash', {
+          p_fact: fact.fact,
+          p_endpoint: fact.endpoint || null,
+          p_technique: fact.technique || null
+        })
+
+        const contentHash = hashData
+
+        // Check duplicate via content_hash (plus rapide que similarity)
+        const { data: existing } = await supabase
+          .from('memory_facts')
+          .select('id, fact')
+          .eq('project_id', projectId)
+          .eq('content_hash', contentHash)
+          .single()
+
+        if (existing) {
+          console.log(`  ⚠️ Duplicate skipped (hash match): "${fact.fact.substring(0, 60)}..."`)
+          continue
+        }
+
+        // 3. EMBEDDING: Generate for RAG
         const embeddingResponse = await openai.embeddings.create({
           model: 'text-embedding-3-small',
           input: fact.fact
@@ -140,21 +260,22 @@ Return only the JSON array, no other text.`
 
         const embedding = embeddingResponse.data[0].embedding
 
-        // Insert into memory_facts
+        // 4. INSERT: Into pending_facts for user validation
         const { error: insertError } = await supabase
-          .from('memory_facts')
+          .from('pending_facts')
           .insert({
             project_id: projectId,
             fact: fact.fact,
             metadata: fact,
-            embedding
+            confidence: fact.confidence,
+            status: 'pending'
           })
 
         if (insertError) {
-          console.error(`❌ Error inserting fact: ${insertError.message}`)
+          console.error(`❌ Error inserting pending fact: ${insertError.message}`)
         } else {
           insertedCount++
-          console.log(`  ✅ Inserted: "${fact.fact.substring(0, 60)}..."`)
+          console.log(`  ✅ Pending fact created: "${fact.fact.substring(0, 60)}..."`)
         }
 
         // Rate limiting (avoid hitting OpenAI limits)

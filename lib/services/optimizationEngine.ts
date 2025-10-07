@@ -8,7 +8,7 @@ interface Pattern {
 }
 
 interface OptimizationSuggestion {
-  type: 'storage' | 'rule' | 'improvement' | 'pattern'
+  type: 'storage' | 'rule' | 'improvement' | 'pattern' | 'test_bizlogic'
   confidence: number
   suggestion: {
     title: string
@@ -130,6 +130,57 @@ export class OptimizationEngine {
     }
 
     return suggestions
+  }
+
+  /**
+   * Parse HTTP request from raw text (Burp format)
+   */
+  private parseHTTPRequest(text: string): any {
+    const httpPattern = /(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+([^\s]+)\s+HTTP\/[\d.]+/
+    const match = text.match(httpPattern)
+
+    if (!match) return null
+
+    const method = match[1]
+    const url = match[2]
+
+    // Extract headers (between HTTP line and body)
+    const headersMatch = text.match(/HTTP.*?\n([\s\S]*?)\n\n/)
+    const headers: Record<string, string> = {}
+    if (headersMatch) {
+      headersMatch[1].split('\n').forEach(line => {
+        const colonIndex = line.indexOf(':')
+        if (colonIndex > 0) {
+          const key = line.substring(0, colonIndex).trim()
+          const value = line.substring(colonIndex + 1).trim()
+          if (key) headers[key] = value
+        }
+      })
+    }
+
+    // Extract body (after double newline)
+    const bodyMatch = text.match(/\n\n([\s\S]+)/)
+    const body = bodyMatch?.[1]?.trim() || ''
+
+    // Detect attack category from URL and body
+    let category = 'unknown'
+    const combined = `${url} ${body}`.toLowerCase()
+
+    if (url.match(/checkout|payment|cart|order/i)) category = 'payment_manipulation'
+    else if (body.match(/qty|quantity|price|amount/) && body.match(/-\d+|0\.\d+/)) category = 'payment_manipulation'
+    else if (url.match(/promo|coupon|discount/i)) category = 'workflow_bypass'
+    else if (body.match(/<script|javascript:|onerror=/i)) category = 'xss'
+    else if (body.match(/'\s*or|union\s+select|;drop/i)) category = 'sqli'
+    else if (url.match(/\/admin|\/user\/\d+/)) category = 'privilege_escalation'
+
+    return {
+      method,
+      url,
+      headers,
+      body,
+      category,
+      raw_request: text
+    }
   }
 
   /**
@@ -461,6 +512,9 @@ export class OptimizationEngine {
       case 'pattern':
         await this.recordPattern(suggestion.suggestion.data)
         break
+      case 'test_bizlogic':
+        await this.createMemoryFact(suggestion.suggestion.data)
+        break
     }
 
     // Update confidence thresholds based on success
@@ -649,6 +703,28 @@ export class OptimizationEngine {
     this.patterns.set(data.id, data.patterns)
   }
 
+  private async createMemoryFact(data: any): Promise<void> {
+    await supabase.from('memory_facts').insert({
+      project_id: this.projectId,
+      fact: `${data.test_type} test on ${data.endpoint}`,
+      metadata: {
+        type: 'test_result',
+        technique: data.test_type,
+        endpoint: data.endpoint,
+        method: data.method,
+        category: data.bizlogic_category,
+        severity: data.impact,
+        confidence: 1.0,
+        params: {
+          payload_suggestion: data.payload_suggestion,
+          expected_result: data.expected_result,
+          burp_tip: data.burp_tip
+        },
+        tags: [data.bizlogic_category, data.test_type]
+      }
+    })
+  }
+
   private async updateConfidenceModel(): Promise<void> {
     // Adjust confidence thresholds based on acceptance history
     const recentHistory = this.learningHistory.slice(-50)
@@ -675,5 +751,343 @@ export class OptimizationEngine {
       metadata: suggestion.metadata,
       status: 'pending'
     })
+  }
+
+  /**
+   * Analyze user message for HTTP requests (Burp format)
+   * Auto-queue parsed requests to suggestions_queue
+   */
+  async analyzeHTTPRequests(message: string): Promise<OptimizationSuggestion[]> {
+    const suggestions: OptimizationSuggestion[] = []
+
+    // Detect if message contains HTTP request(s)
+    const httpMatches = message.matchAll(/(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+[^\s]+\s+HTTP\/[\d.]+[\s\S]*?(?=\n(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)|$)/g)
+
+    for (const match of httpMatches) {
+      const httpText = match[0]
+      const parsed = this.parseHTTPRequest(httpText)
+
+      if (parsed) {
+        const suggestion: OptimizationSuggestion = {
+          type: 'pattern',
+          confidence: 1.0,
+          suggestion: {
+            title: `HTTP Request: ${parsed.method} ${parsed.url}`,
+            description: `Captured Burp request for analysis`,
+            category: parsed.category,
+            impact: parsed.category === 'payment_manipulation' ? 'high' : 'medium',
+            data: {
+              endpoint: parsed.url,
+              http_method: parsed.method,
+              http_headers: parsed.headers,
+              http_body: parsed.body,
+              detected_category: parsed.category,
+              raw_request: parsed.raw_request
+            }
+          },
+          metadata: {
+            source: 'burp_request_parser',
+            timestamp: new Date().toISOString()
+          }
+        }
+
+        suggestions.push(suggestion)
+        await this.queueSuggestion(suggestion)
+      }
+    }
+
+    return suggestions
+  }
+
+  /**
+   * Analyze AI response for vulnerability indicators
+   * Auto-queue detected vulnerabilities
+   */
+  async analyzeAIResponse(response: string, userMessage: string): Promise<OptimizationSuggestion[]> {
+    const suggestions: OptimizationSuggestion[] = []
+
+    // Detect vulnerability keywords
+    const vulnPatterns = [
+      { pattern: /vulnerable|vulnerability|exploit/i, severity: 'high' },
+      { pattern: /critical|severe|dangerous/i, severity: 'critical' },
+      { pattern: /potential.*issue|might.*work|could.*bypass/i, severity: 'medium' },
+      { pattern: /race condition|timing attack/i, severity: 'high' },
+      { pattern: /business logic|workflow.*bypass/i, severity: 'high' }
+    ]
+
+    for (const { pattern, severity } of vulnPatterns) {
+      if (response.match(pattern)) {
+        // Extract the relevant sentence
+        const sentences = response.split(/[.!?]\s+/)
+        const relevantSentence = sentences.find(s => pattern.test(s)) || ''
+
+        const suggestion: OptimizationSuggestion = {
+          type: 'pattern',
+          confidence: severity === 'critical' ? 0.95 : 0.85,
+          suggestion: {
+            title: `Potential Vulnerability Detected`,
+            description: relevantSentence.substring(0, 200),
+            category: 'vulnerability_detected',
+            impact: severity as any,
+            data: {
+              ai_analysis: relevantSentence,
+              user_context: userMessage.substring(0, 200),
+              severity
+            }
+          },
+          metadata: {
+            source: 'ai_response_analyzer',
+            timestamp: new Date().toISOString()
+          }
+        }
+
+        suggestions.push(suggestion)
+        await this.queueSuggestion(suggestion)
+        break // Only queue once per response
+      }
+    }
+
+    return suggestions
+  }
+
+  /**
+   * Suggest BizLogic tests based on HTTP request context
+   * This generates intelligent test suggestions based on detected patterns
+   */
+  async suggestBizLogicTests(httpRequest: any): Promise<OptimizationSuggestion[]> {
+    const suggestions: OptimizationSuggestion[] = []
+    const { method, url, body, category } = httpRequest
+
+    // Load existing memory_facts to avoid duplicate suggestions
+    const { data: existingFacts } = await supabase
+      .from('memory_facts')
+      .select('metadata')
+      .eq('project_id', this.projectId)
+      .limit(50)
+
+    const testedEndpoints = new Set(
+      existingFacts?.map(f => f.metadata?.endpoint).filter(Boolean) || []
+    )
+
+    // Payment Manipulation Tests
+    if (category === 'payment_manipulation' || url.match(/checkout|payment|cart|order/i)) {
+      // Suggest negative price test
+      if (body.match(/price|amount|total/i) && !testedEndpoints.has(`${url}:negative_price`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.9,
+          suggestion: {
+            title: '💰 Test Negative Price Manipulation',
+            description: `Try setting price/amount to negative values (-1, -999.99) on ${url}`,
+            category: 'payment_manipulation',
+            impact: 'high',
+            data: {
+              test_type: 'negative_price',
+              endpoint: url,
+              method,
+              payload_suggestion: body.replace(/("price":\s*)\d+/, '$1-999.99'),
+              expected_result: 'Server should reject negative prices',
+              bizlogic_category: 'payment_manipulation'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+
+      // Suggest race condition test
+      if (url.match(/checkout|purchase|confirm/i) && !testedEndpoints.has(`${url}:race_condition`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.85,
+          suggestion: {
+            title: '⏱️ Test Race Condition on Checkout',
+            description: `Send multiple simultaneous ${method} requests to ${url} to test for race conditions`,
+            category: 'race_condition',
+            impact: 'high',
+            data: {
+              test_type: 'race_condition',
+              endpoint: url,
+              method,
+              payload_suggestion: body,
+              expected_result: 'Only one transaction should succeed',
+              bizlogic_category: 'race_condition',
+              burp_tip: 'Use Burp Repeater → Send to Intruder → Null payloads × 20 → Attack type: Pitchfork'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+    }
+
+    // Workflow Bypass Tests
+    if (category === 'workflow_bypass' || url.match(/coupon|promo|discount/i)) {
+      // Suggest multiple coupon application
+      if ((url.match(/coupon|promo/i) || body.match(/coupon|promo/i)) && !testedEndpoints.has(`${url}:multiple_coupons`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.88,
+          suggestion: {
+            title: '🎟️ Test Multiple Coupon Application',
+            description: `Try applying the same coupon multiple times or stacking different coupons`,
+            category: 'workflow_bypass',
+            impact: 'high',
+            data: {
+              test_type: 'multiple_coupons',
+              endpoint: url,
+              method,
+              payload_suggestion: 'Add coupon parameter multiple times or send multiple requests',
+              expected_result: 'Coupon should only apply once',
+              bizlogic_category: 'workflow_bypass'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+
+      // Suggest workflow step bypass
+      if (url.match(/step|stage|confirm/i) && !testedEndpoints.has(`${url}:workflow_bypass`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.82,
+          suggestion: {
+            title: '⚙️ Test Workflow Step Bypass',
+            description: `Try skipping previous steps and directly accessing ${url}`,
+            category: 'workflow_bypass',
+            impact: 'medium',
+            data: {
+              test_type: 'workflow_bypass',
+              endpoint: url,
+              method,
+              payload_suggestion: 'Send request without completing previous steps',
+              expected_result: 'Server should enforce step order',
+              bizlogic_category: 'workflow_bypass'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+    }
+
+    // Privilege Escalation Tests
+    if (category === 'privilege_escalation' || url.match(/\/admin|\/user\/\d+|\/profile/i)) {
+      // Suggest IDOR test
+      if (url.match(/\/\d+/) && !testedEndpoints.has(`${url}:idor`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.9,
+          suggestion: {
+            title: '🔐 Test IDOR (Insecure Direct Object Reference)',
+            description: `Try changing user ID in ${url} to access other users' data`,
+            category: 'privilege_escalation',
+            impact: 'high',
+            data: {
+              test_type: 'idor',
+              endpoint: url,
+              method,
+              payload_suggestion: 'Replace user ID with: your_id-1, your_id+1, 1, 999',
+              expected_result: 'Should only access own resources',
+              bizlogic_category: 'privilege_escalation'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+
+      // Suggest privilege escalation via parameter
+      if (body.match(/role|admin|level|permission/i) && !testedEndpoints.has(`${url}:privilege_param`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.85,
+          suggestion: {
+            title: '🔓 Test Privilege Escalation via Parameter',
+            description: `Try modifying role/permission parameters to escalate privileges`,
+            category: 'privilege_escalation',
+            impact: 'critical',
+            data: {
+              test_type: 'privilege_escalation',
+              endpoint: url,
+              method,
+              payload_suggestion: body.replace(/("role":\s*")user(")/i, '$1admin$2'),
+              expected_result: 'Server should validate authorization',
+              bizlogic_category: 'privilege_escalation'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+    }
+
+    // Quantity/Resource Abuse Tests
+    if (body.match(/qty|quantity|amount/i)) {
+      if (!testedEndpoints.has(`${url}:negative_qty`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.87,
+          suggestion: {
+            title: '📦 Test Negative Quantity',
+            description: `Try negative quantity values to manipulate stock or pricing`,
+            category: 'resource_abuse',
+            impact: 'high',
+            data: {
+              test_type: 'negative_quantity',
+              endpoint: url,
+              method,
+              payload_suggestion: body.replace(/("qty":\s*)\d+/, '$1-10'),
+              expected_result: 'Server should reject negative quantities',
+              bizlogic_category: 'resource_abuse'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+
+      if (!testedEndpoints.has(`${url}:overflow_qty`)) {
+        suggestions.push({
+          type: 'test_bizlogic',
+          confidence: 0.8,
+          suggestion: {
+            title: '♾️ Test Integer Overflow on Quantity',
+            description: `Try extremely large quantity values (999999, 2147483647)`,
+            category: 'resource_abuse',
+            impact: 'medium',
+            data: {
+              test_type: 'integer_overflow',
+              endpoint: url,
+              method,
+              payload_suggestion: body.replace(/("qty":\s*)\d+/, '$12147483647'),
+              expected_result: 'Server should handle large numbers properly',
+              bizlogic_category: 'resource_abuse'
+            }
+          },
+          metadata: {
+            source: 'bizlogic_test_suggester',
+            timestamp: new Date().toISOString()
+          }
+        })
+      }
+    }
+
+    return suggestions
   }
 }

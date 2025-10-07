@@ -384,6 +384,42 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
         console.error('Failed to parse category order:', e)
       }
     }
+
+    // ✅ REALTIME SUBSCRIPTION - Auto-refresh facts when created/updated/deleted
+    console.log('🔌 Setting up Realtime subscription for memory_facts')
+    const channel = supabase
+      .channel(`memory_facts_${projectId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'memory_facts',
+          filter: `project_id=eq.${projectId}`
+        },
+        (payload) => {
+          console.log('🔔 Realtime update received:', payload.eventType)
+
+          if (payload.eventType === 'INSERT') {
+            console.log('➕ New fact created, reloading...')
+            loadFacts()
+            toast.success('✨ New fact added!', { duration: 2000 })
+          } else if (payload.eventType === 'UPDATE') {
+            console.log('✏️ Fact updated, reloading...')
+            loadFacts()
+          } else if (payload.eventType === 'DELETE') {
+            console.log('🗑️ Fact deleted, reloading...')
+            loadFacts()
+          }
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('🔌 Cleaning up Realtime subscription')
+      supabase.removeChannel(channel)
+    }
   }, [projectId])
 
   useEffect(() => {
@@ -534,11 +570,15 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
   const groupByCategory = () => {
     const groups: Record<string, Fact[]> = {}
+    const validCategories = getAllCategories()
 
     filteredFacts.forEach(fact => {
       const category = fact.metadata.category || null
       // Skip facts without category (they shouldn't exist anymore)
       if (!category) return
+      
+      // Skip facts whose category no longer exists (deleted from customCategories)
+      if (!validCategories[category]) return
 
       if (!groups[category]) groups[category] = []
       groups[category].push(fact)
@@ -654,12 +694,29 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
       // Check if it's a new fact (temp ID)
       if (selectedFact.id.startsWith('temp_')) {
+        // Generate embedding for new fact
+        let embedding = null
+        try {
+          const embeddingRes = await fetch('/api/openai/embeddings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: updatedFact.fact, projectId })
+          })
+          if (embeddingRes.ok) {
+            const embData = await embeddingRes.json()
+            embedding = embData.embedding
+          }
+        } catch (err) {
+          console.warn('Embedding generation failed, fact will be created without embedding:', err)
+        }
+
         const { data, error } = await supabase
           .from('memory_facts')
           .insert({
             project_id: projectId,
             fact: updatedFact.fact,
-            metadata: updatedFact.metadata
+            metadata: updatedFact.metadata,
+            embedding
           })
           .select()
           .single()
@@ -668,7 +725,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
         // Force reload to ensure tags are displayed
         await loadFacts()
-        toast.success('Fact created successfully')
+        toast.success('Fact created' + (embedding ? ' ✅' : ' (no embedding)'))
       } else {
         const { error } = await supabase
           .from('memory_facts')
@@ -1450,11 +1507,54 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               }
             }
 
-            // Delete removed categories
-            for (const existing of customCategories) {
-              const stillExists = formatted.find(c => c.key === existing.key)
-              if (!stillExists && (existing as any).id) {
-                await fetch(`/api/memory/categories?id=${(existing as any).id}`, {
+            // Delete removed categories (TOUTES: custom + factOnly)
+            // 1. Construire liste complète des catégories affichées AVANT save
+            const allFactCategories = new Set(facts.map(f => f.metadata.category).filter(Boolean))
+            const allExistingKeys = new Set([...customCategories.map(c => c.key), ...allFactCategories])
+            
+            // 2. Détecter celles qui ont disparu
+            for (const existingKey of allExistingKeys) {
+              const stillExists = formatted.find(c => c.key === existingKey)
+              if (stillExists) continue // Pas supprimée
+              
+              // Catégorie supprimée ! Supprimer facts en cascade
+              const factsWithCategory = facts.filter(f => f.metadata.category === existingKey)
+                
+              if (factsWithCategory.length > 0) {
+                const confirmed = confirm(
+                  `⚠️ Category "${existingKey}" contains ${factsWithCategory.length} fact(s).\n\n` +
+                  `Delete category and ALL its facts permanently?\n\n` +
+                  `This action CANNOT be undone!`
+                )
+                
+                if (!confirmed) {
+                  console.log(`User cancelled deletion of category "${existingKey}"`)
+                  continue
+                }
+                
+                // Supprimer tous les facts de cette catégorie
+                const factIds = factsWithCategory.map(f => f.id)
+                console.log(`🗑️ Deleting ${factIds.length} facts from category "${existingKey}"`)
+                
+                const { error: deleteError } = await supabase
+                  .from('memory_facts')
+                  .delete()
+                  .in('id', factIds)
+                
+                if (deleteError) {
+                  console.error('❌ Error deleting facts:', deleteError)
+                  toast.error(`Failed to delete facts: ${deleteError.message}`)
+                  continue
+                }
+                
+                console.log(`✅ ${factsWithCategory.length} facts deleted successfully`)
+                toast.success(`🗑️ ${factsWithCategory.length} facts deleted from "${existingKey}"`)
+              }
+              
+              // Supprimer de DB si elle y était
+              const dbCategory = customCategories.find(c => c.key === existingKey)
+              if (dbCategory && (dbCategory as any).id) {
+                await fetch(`/api/memory/categories?id=${(dbCategory as any).id}`, {
                   method: 'DELETE'
                 })
               }
@@ -1600,4 +1700,3 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     </div>
   )
 }
- 

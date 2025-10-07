@@ -3,131 +3,128 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_KEY!
 )
 
+// GET: Load system prompts for a project
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const projectId = searchParams.get('projectId')
+    const projectId = request.nextUrl.searchParams.get('projectId')
 
     if (!projectId) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 })
     }
 
     const { data, error } = await supabase
-      .from('memory_categories')
+      .from('system_prompts')
       .select('*')
       .eq('project_id', projectId)
-      .order('created_at', { ascending: true })
+      .order('sort_order', { ascending: true })
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    return NextResponse.json({ categories: data || [] })
+    return NextResponse.json({ prompts: data || [] })
   } catch (error: any) {
-    console.error('Error fetching categories:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
+// POST: Create system prompt
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, key, label, icon, description } = body
+    const { projectId, name, content, description, category, icon, is_active, sort_order } = body
 
-    if (!projectId || !key || !label) {
+    if (!projectId || !name || !content) {
       return NextResponse.json(
-        { error: 'projectId, key, and label are required' },
+        { error: 'projectId, name, and content required' },
         { status: 400 }
       )
     }
 
-    // Check if category with same key already exists
-    const { data: existing } = await supabase
-      .from('memory_categories')
-      .select('id')
-      .eq('project_id', projectId)
-      .eq('key', key)
-      .single()
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Category with this key already exists' },
-        { status: 409 }
-      )
-    }
-
     const { data, error } = await supabase
-      .from('memory_categories')
+      .from('system_prompts')
       .insert({
         project_id: projectId,
-        key: key.toLowerCase().replace(/\s+/g, '_'),
-        label,
-        icon: icon || '📁',
-        description: description || null
+        name,
+        content,
+        description: description || null,
+        category: category || null,
+        icon: icon || '✨',
+        is_active: is_active || false,
+        sort_order: sort_order || 0
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    return NextResponse.json({ category: data })
+    return NextResponse.json({ prompt: data })
   } catch (error: any) {
-    console.error('Error creating category:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
+// PUT: Update system prompt
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, key, label, icon, description } = body
+    const { id, name, content, description, category, icon, is_active, sort_order } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
     const updates: any = {}
-    if (key !== undefined) updates.key = key.toLowerCase().replace(/\s+/g, '_')
-    if (label !== undefined) updates.label = label
-    if (icon !== undefined) updates.icon = icon
+    if (name !== undefined) updates.name = name
+    if (content !== undefined) updates.content = content
     if (description !== undefined) updates.description = description
+    if (category !== undefined) updates.category = category
+    if (icon !== undefined) updates.icon = icon
+    if (is_active !== undefined) updates.is_active = is_active
+    if (sort_order !== undefined) updates.sort_order = sort_order
 
     const { data, error } = await supabase
-      .from('memory_categories')
+      .from('system_prompts')
       .update(updates)
       .eq('id', id)
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    return NextResponse.json({ category: data })
+    return NextResponse.json({ prompt: data })
   } catch (error: any) {
-    console.error('Error updating category:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
+// DELETE: Delete system prompt
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
+    const id = request.nextUrl.searchParams.get('id')
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
     const { error } = await supabase
-      .from('memory_categories')
+      .from('system_prompts')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Error deleting category:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
