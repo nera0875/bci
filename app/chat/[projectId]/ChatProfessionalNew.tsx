@@ -176,7 +176,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
     }
   }
 
-  const createNewConversation = async () => {
+  const createNewConversation = async (): Promise<string | null> => {
     try {
       const { data, error } = await (supabase as any)
         .from('conversations')
@@ -187,31 +187,37 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         })
         .select()
         .single()
-      
+
       if (!error && data) {
         setCurrentConversationId(data.id)
         setChatKey(prev => prev + 1)
         await loadConversations()
+        return data.id // ✅ Return ID directly to avoid race condition
       }
+      return null
     } catch (error) {
       console.error('Error creating conversation:', error)
+      return null
     }
   }
 
   const selectConversation = (conversationId: string) => {
+    // ✅ Stop any ongoing streaming before switching conversations
+    if (isStreaming && stopStreamingFn) {
+      stopStreamingFn()
+    }
     setCurrentConversationId(conversationId)
     setChatKey(prev => prev + 1)
   }
 
   const deleteConversation = async (conversationId: string) => {
     try {
-      // Supprimer tous les messages de la conversation
-      await (supabase as any)
-        .from('chat_messages')
-        .delete()
-        .eq('conversation_id', conversationId)
+      // ✅ Stop streaming if deleting active conversation
+      if (currentConversationId === conversationId && isStreaming && stopStreamingFn) {
+        stopStreamingFn()
+      }
 
-      // Supprimer la conversation
+      // ✅ CASCADE DELETE handles messages automatically - no need to manually delete
       await (supabase as any)
         .from('conversations')
         .delete()
@@ -262,11 +268,14 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
     const userMessage = message
     setMessage('')
 
-    // Créer conversation si nécessaire
+    // ✅ Fix race condition: get conversation ID directly instead of relying on state
     let conversationId = currentConversationId
     if (!conversationId) {
-      await createNewConversation()
-      conversationId = currentConversationId
+      conversationId = await createNewConversation()
+      if (!conversationId) {
+        console.error('Failed to create conversation')
+        return
+      }
     }
 
     // Sauvegarder le message
@@ -277,7 +286,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
           project_id: project.id,
           role: 'user',
           content: userMessage,
-          conversation_id: conversationId
+          conversation_id: conversationId // ✅ Now guaranteed to be non-null
         }])
     } catch (error) {
       console.error('Error saving message:', error)

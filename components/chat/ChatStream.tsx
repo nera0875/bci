@@ -309,6 +309,16 @@ export default function ChatStream({ projectId, conversationId: propConversation
     onStreamingChangeRef.current?.(isStreaming, isStreaming ? stopStreaming : undefined)
   }, [isStreaming, stopStreaming])
 
+  // ✅ Cleanup: abort ongoing streams when component unmounts or conversation changes
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+    }
+  }, [conversationId]) // Reset when conversation changes
+
   // 🎯 DECISION TRACKING FUNCTIONS
   const handleAISuggestion = (data: any) => {
     const decisionId = generateUUID()
@@ -774,6 +784,12 @@ export default function ChatStream({ projectId, conversationId: propConversation
           (payload) => {
             console.log('New message received via subscription:', payload)
             const newMessage = payload.new as ChatMessage
+
+            // ✅ Filter by conversation_id to prevent cross-conversation pollution
+            if (newMessage.conversation_id !== conversationId) {
+              console.log('⏭️ Message belongs to different conversation, ignoring')
+              return
+            }
 
             // Only update messages, don't trigger Claude here
             // Check if message already exists to avoid duplicates
@@ -1949,6 +1965,115 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }
 
 
+  // Process a single fact in background
+  const processFactCreation = async (factData: any) => {
+    try {
+      // ✅ Générer embedding
+      let embedding = null
+      try {
+        const embeddingRes = await fetch('/api/openai/embeddings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: factData.fact, projectId })
+        })
+        if (embeddingRes.ok) {
+          const embData = await embeddingRes.json()
+          embedding = embData.embedding
+        }
+      } catch (err) {
+        console.warn('Embedding generation failed, fact will be created without embedding:', err)
+      }
+
+      // Auto-créer les templates pour les nouveaux tags (support Category:tag format)
+      if (factData.tags && factData.tags.length > 0) {
+        const existingTemplatesRes = await fetch(`/api/tags/templates?projectId=${projectId}`)
+        if (existingTemplatesRes.ok) {
+          const existingTemplates = await existingTemplatesRes.json()
+          const existingTagNames = existingTemplates.map((t: any) => t.name)
+
+          // Créer templates pour nouveaux tags avec couleurs et catégories automatiques
+          const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'yellow', 'red', 'gray']
+          const categoryColors: Record<string, string> = {
+            'security': 'red',
+            'severity': 'orange',
+            'status': 'green',
+            'type': 'blue',
+            'general': 'gray'
+          }
+
+          const templatePromises = []
+          for (let i = 0; i < factData.tags.length; i++) {
+            const tagSpec = factData.tags[i]
+
+            // Parse format "Category:tagname" ou juste "tagname"
+            let category = 'general'
+            let tagName = tagSpec
+
+            if (tagSpec.includes(':')) {
+              const parts = tagSpec.split(':')
+              category = parts[0].toLowerCase()
+              tagName = parts[1]
+            }
+
+            if (!existingTagNames.includes(tagName)) {
+              // Couleur basée sur la catégorie ou rotation automatique
+              const color = categoryColors[category] || colors[i % colors.length]
+
+              // Créer le template (parallèle)
+              templatePromises.push(
+                fetch('/api/tags/templates', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    projectId,
+                    name: tagName,
+                    color,
+                    category,
+                    position: i
+                  })
+                })
+              )
+            }
+          }
+
+          // Attendre tous les templates en parallèle
+          if (templatePromises.length > 0) {
+            await Promise.all(templatePromises)
+          }
+        }
+      }
+
+      // Nettoyer les tags (enlever préfixe "Category:" si présent)
+      const cleanedTags = (factData.tags || []).map((tag: string) => {
+        return tag.includes(':') ? tag.split(':')[1] : tag
+      })
+
+      const { data: insertedFact, error: factError } = await supabase
+        .from('memory_facts')
+        .insert({
+          project_id: projectId,
+          fact: factData.fact,
+          embedding,
+          metadata: {
+            category: factData.category || 'general',
+            tags: cleanedTags,
+            severity: factData.severity || 'low',
+            technique: factData.technique || null,
+            endpoint: factData.endpoint || null
+          }
+        })
+        .select()
+        .single()
+
+      if (factError) throw factError
+
+      return { success: true, fact: insertedFact }
+    } catch (error) {
+      console.error('Error processing fact:', error)
+      return { success: false, error }
+    }
+  }
+
   const handleClaudeAction = async (action: any) => {
     if (!action) return
 
@@ -1959,101 +2084,22 @@ export default function ChatStream({ projectId, conversationId: propConversation
       try {
         switch (action.operation) {
           case 'create_fact':
-            // Nouveau système: créer un fact dans memory_facts
+            // Traitement asynchrone en arrière-plan
             const factData = action.data
 
-            // ✅ Générer embedding automatiquement (comme l'UI Memory Facts)
-            let embedding = null
-            try {
-              const embeddingRes = await fetch('/api/openai/embeddings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: factData.fact, projectId })
-              })
-              if (embeddingRes.ok) {
-                const embData = await embeddingRes.json()
-                embedding = embData.embedding
+            // Toast optimiste immédiat
+            showToast(`💾 Saving fact: "${factData.fact.substring(0, 40)}..."`, 'info')
+
+            // Process in background without blocking
+            processFactCreation(factData).then(result => {
+              if (result.success) {
+                showToast(`✅ Fact saved successfully!`, 'success')
+              } else {
+                showToast(`❌ Failed to save fact`, 'error')
               }
-            } catch (err) {
-              console.warn('Embedding generation failed, fact will be created without embedding:', err)
-            }
-
-            // Auto-créer les templates pour les nouveaux tags (support Category:tag format)
-            if (factData.tags && factData.tags.length > 0) {
-              const existingTemplatesRes = await fetch(`/api/tags/templates?projectId=${projectId}`)
-              if (existingTemplatesRes.ok) {
-                const existingTemplates = await existingTemplatesRes.json()
-                const existingTagNames = existingTemplates.map((t: any) => t.name)
-
-                // Créer templates pour nouveaux tags avec couleurs et catégories automatiques
-                const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'yellow', 'red', 'gray']
-                const categoryColors: Record<string, string> = {
-                  'security': 'red',
-                  'severity': 'orange',
-                  'status': 'green',
-                  'type': 'blue',
-                  'general': 'gray'
-                }
-
-                for (let i = 0; i < factData.tags.length; i++) {
-                  const tagSpec = factData.tags[i]
-
-                  // Parse format "Category:tagname" ou juste "tagname"
-                  let category = 'general'
-                  let tagName = tagSpec
-
-                  if (tagSpec.includes(':')) {
-                    const parts = tagSpec.split(':')
-                    category = parts[0].toLowerCase()
-                    tagName = parts[1]
-                  }
-
-                  if (!existingTagNames.includes(tagName)) {
-                    // Couleur basée sur la catégorie ou rotation automatique
-                    const color = categoryColors[category] || colors[i % colors.length]
-
-                    // Créer le template avec catégorie et couleur
-                    await fetch('/api/tags/templates', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        projectId,
-                        name: tagName,
-                        color,
-                        category,
-                        position: i
-                      })
-                    })
-                  }
-                }
-              }
-            }
-
-            // Nettoyer les tags (enlever préfixe "Category:" si présent)
-            const cleanedTags = (factData.tags || []).map((tag: string) => {
-              return tag.includes(':') ? tag.split(':')[1] : tag
             })
 
-            const { data: insertedFact, error: factError } = await supabase
-              .from('memory_facts')
-              .insert({
-                project_id: projectId,
-                fact: factData.fact,
-                embedding,
-                metadata: {
-                  category: factData.category || 'general',
-                  tags: cleanedTags,
-                  severity: factData.severity || 'low',
-                  technique: factData.technique || null,
-                  endpoint: factData.endpoint || null
-                }
-              })
-              .select()
-              .single()
-
-            if (factError) throw factError
-
-            showToast(`✅ Fact ajouté en mémoire: "${factData.fact.substring(0, 50)}..."` + (embedding ? ' (avec embedding)' : ''), 'success')
+            // Return immediately without blocking UI
             break
 
           case 'update_fact':
