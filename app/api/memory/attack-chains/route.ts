@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Group by chain ID
     const chainMap = new Map<string, any[]>()
 
-    facts?.forEach(fact => {
+    facts?.forEach((fact: any) => {
       const metadata = fact.metadata as any
       const chainId = metadata?.attack_chain?.id
       if (chainId) {
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       const updatedMetadata = {
-        ...(fact?.metadata as any || {}),
+        ...((fact as any)?.metadata as any || {}),
         attack_chain: {
           id: chainId,
           step: index + 1,
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return supabase
+      return (supabase as any)
         .from('memory_facts')
         .update({ metadata: updatedMetadata })
         .eq('id', factId)
@@ -224,10 +224,10 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Remove attack_chain from metadata
-    const updates = facts.map(fact => {
+    const updates = facts.map((fact: any) => {
       const metadata = (fact.metadata as any) || {}
       const { attack_chain, ...restMetadata } = metadata
-      return supabase
+      return (supabase as any)
         .from('memory_facts')
         .update({ metadata: restMetadata })
         .eq('id', fact.id)

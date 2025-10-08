@@ -60,7 +60,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
       }
 
       // Get the actual projects
-      const projectIds = memberships.map(m => m.project_id)
+      const projectIds = memberships.map((m: any) => m.project_id)
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
@@ -88,7 +88,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
 
   const loadInvitationsCount = async () => {
     try {
-      const { data, error } = await supabase.rpc('get_user_invitations')
+      const { data, error } = await (supabase as any).rpc('get_user_invitations')
       if (!error && data) {
         setInvitationsCount(data.length)
       }

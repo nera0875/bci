@@ -30,7 +30,7 @@ export default function InvitationsPage() {
 
   const loadInvitations = async () => {
     try {
-      const { data, error } = await supabase.rpc('get_user_invitations')
+      const { data, error } = await (supabase as any).rpc('get_user_invitations')
 
       if (error) throw error
 
@@ -46,7 +46,7 @@ export default function InvitationsPage() {
   const acceptInvitation = async (token: string, projectName: string) => {
     setProcessing(token)
     try {
-      const { data, error } = await supabase.rpc('accept_project_invitation', {
+      const { data, error } = await (supabase as any).rpc('accept_project_invitation', {
         invitation_token: token
       })
 

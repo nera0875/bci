@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
       if (embedding && embedding.length > 0) {
         // 🧠 Search memory_facts (atomic facts, rapide)
-        const { data: memoryFacts } = await supabase.rpc('search_memory_facts', {
+        const { data: memoryFacts } = await (supabase as any).rpc('search_memory_facts', {
           query_embedding: embedding,
           filter_project_id: projectId,
           match_threshold: 0.5,
@@ -134,7 +134,7 @@ ${recentFacts.map((f: any) => `• ${f.fact} [${f.metadata?.type || 'general'}]`
 
 **IMPORTANT**: Quand tu ranges un fact, utilise UNE de ces catégories existantes:
 
-${categories.map(cat => `- **${cat.icon} ${cat.label}** (key: \`${cat.key}\`)`).join('\n')}
+${categories.map((cat: any) => `- **${cat.icon} ${cat.label}** (key: \`${cat.key}\`)`).join('\n')}
 
 ⚠️ Si aucune catégorie ne correspond, laisse le champ category vide (pas de nouvelle catégorie auto).
 
@@ -176,16 +176,16 @@ ${categories.map(cat => `- **${cat.icon} ${cat.label}** (key: \`${cat.key}\`)`).
 
           if (linkedRules && linkedRules.length > 0) {
             // Merge avec les rules déjà chargées (éviter doublons)
-            const existingIds = new Set(focusedRules.map(r => r.id))
-            const newRules = linkedRules.filter(r => !existingIds.has(r.id))
+            const existingIds = new Set(focusedRules.map((r: any) => r.id))
+            const newRules = linkedRules.filter((r: any) => !existingIds.has(r.id))
             focusedRules = [...focusedRules, ...newRules]
             console.log(`✅ Added ${newRules.length} rules from template (total: ${focusedRules.length})`)
           }
         }
 
         // ✅ SÉPARER : Rules "always" (instructions permanentes) VS Rules "conditional"
-        const rulesAlways = focusedRules.filter(r => r.trigger_type === 'always')
-        const rulesConditional = focusedRules.filter(r => r.trigger_type !== 'always')
+        const rulesAlways = focusedRules.filter((r: any) => r.trigger_type === 'always')
+        const rulesConditional = focusedRules.filter((r: any) => r.trigger_type !== 'always')
 
         // Format rules "always" (instructions permanentes - injectées AVANT la mémoire)
         if (rulesAlways.length > 0) {
@@ -353,15 +353,19 @@ ${matchingRules.map(rule => {
       .eq('id', projectId)
       .single()
 
+    if (!project) {
+      return new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 })
+    }
+
     // Use env var as fallback if no API key in DB
-    const apiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
+    const apiKey = (project as any).api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
 
     // ✅ CONTEXTE PROJET MINIMALISTE
     const projectContext = `
 # CONTEXTE PROJET
 
-**Nom**: ${project?.name || 'Sans nom'}
-**Objectif**: ${project?.goal || 'Non défini'}
+**Nom**: ${(project as any).name || 'Sans nom'}
+**Objectif**: ${(project as any).goal || 'Non défini'}
 
 ---
 `
@@ -414,12 +418,12 @@ ${matchingRules.map(rule => {
 
     console.log('🔍 Project query result:', {
       found: !!project,
-      error: projectError?.message,
-      hasApiKeys: !!project?.api_keys,
-      hasSettings: !!project?.settings
+      error: (projectError as any)?.message,
+      hasApiKeys: !!(project as any)?.api_keys,
+      hasSettings: !!(project as any)?.settings
     })
 
-    const anthropicApiKey = project?.api_keys?.anthropic
+    const anthropicApiKey = (project as any)?.api_keys?.anthropic
 
     if (!anthropicApiKey) {
       return NextResponse.json(
@@ -428,7 +432,7 @@ ${matchingRules.map(rule => {
       )
     }
     // Correct model name format - handle various formats
-    let customModel = project?.settings?.aiModel || 'claude-sonnet-4-5'
+    let customModel = (project as any)?.settings?.aiModel || 'claude-sonnet-4-5'
 
     // Updated valid models list based on official Claude docs
     const validModels = [
@@ -480,7 +484,7 @@ ${matchingRules.map(rule => {
 
     console.log('🔑 API Configuration:', {
       hasAnthropicKey: !!anthropicApiKey,
-      fromProject: !!project?.api_keys?.anthropic,
+      fromProject: !!(project as any)?.api_keys?.anthropic,
       fromEnv: !!process.env.ANTHROPIC_API_KEY,
       model: customModel,
       keyLength: anthropicApiKey?.length

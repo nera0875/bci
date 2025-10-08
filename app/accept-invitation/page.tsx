@@ -36,7 +36,7 @@ function AcceptInvitationContent() {
       }
 
       // Accept invitation via RPC
-      const { data, error } = await supabase.rpc('accept_project_invitation', {
+      const { data, error } = await (supabase as any).rpc('accept_project_invitation', {
         invitation_token: token
       })
 

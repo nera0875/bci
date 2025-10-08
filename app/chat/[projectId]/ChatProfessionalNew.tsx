@@ -506,7 +506,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
                     // Sauvegarder le style dans les settings du projet
                     try {
-                      const { error } = await supabase
+                      const { error } = await (supabase as any)
                         .from('projects')
                         .update({
                           settings: {

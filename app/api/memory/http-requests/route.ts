@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform for easier consumption
-    const httpRequests = facts?.map(fact => {
+    const httpRequests = facts?.map((fact: any) => {
       const metadata = (fact.metadata as any) || {}
       return {
         id: fact.id,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const httpRequests = facts?.map(fact => {
+    const httpRequests = facts?.map((fact: any) => {
       const metadata = (fact.metadata as any) || {}
       return {
         id: fact.id,

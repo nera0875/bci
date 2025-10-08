@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     // 1. Group by endpoint
     const endpointGroups = new Map<string, any[]>()
-    facts.forEach(fact => {
+    facts.forEach((fact: any) => {
       const metadata = fact.metadata as any
       const endpoint = metadata?.http_request?.path || metadata?.endpoint
       if (endpoint) {
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Group by technique
     const techniqueGroups = new Map<string, any[]>()
-    facts.forEach(fact => {
+    facts.forEach((fact: any) => {
       const metadata = fact.metadata as any
       const technique = metadata?.technique
       if (technique) {
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
 
     // 3. Group by host (same host = same target)
     const hostGroups = new Map<string, any[]>()
-    facts.forEach(fact => {
+    facts.forEach((fact: any) => {
       const metadata = fact.metadata as any
       const host = metadata?.http_request?.host
       if (host) {
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     // 4. Detect attack chains (facts with attack_chain metadata)
     const chainGroups = new Map<string, any[]>()
-    facts.forEach(fact => {
+    facts.forEach((fact: any) => {
       const metadata = fact.metadata as any
       const chainId = metadata?.attack_chain?.id
       if (chainId) {
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
 
     // 5. Detect related facts
     const relatedClusters: any[] = []
-    facts.forEach(fact => {
+    facts.forEach((fact: any) => {
       const metadata = fact.metadata as any
       if (metadata?.related_to && metadata.related_to.length > 0) {
         relatedClusters.push({

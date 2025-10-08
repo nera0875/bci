@@ -76,7 +76,7 @@ export default function ProjectMembersDialog({
 
       // Get user emails from auth.users (not profiles)
       const userIds = (membersData || []).map(m => m.user_id)
-      const { data: usersData } = await supabase.rpc('get_user_emails', { user_ids: userIds })
+      const { data: usersData } = await (supabase as any).rpc('get_user_emails', { user_ids: userIds })
 
       // Merge emails
       const membersWithEmails = (membersData || []).map((m: any) => ({
@@ -147,7 +147,7 @@ export default function ProjectMembersDialog({
       const member = members.find(m => m.id === memberId)
       if (!member) return
 
-      const { error } = await supabase.rpc('remove_project_member', {
+      const { error } = await (supabase as any).rpc('remove_project_member', {
         p_project_id: projectId,
         p_user_id: member.user_id
       })
