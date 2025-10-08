@@ -313,23 +313,34 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
       {/* Sidebar Conversations (comme ChatGPT) */}
       <div className="w-80 bg-[#F7F7F8] border-r border-[#E5E5E7] flex flex-col">
         {/* Header Sidebar */}
-        <div className="p-4 border-b border-[#E5E5E7]">
-          <button
-            onClick={() => router.push('/projects')}
-            className="flex items-center gap-2 text-sm text-[#6E6E80] hover:text-[#202123] mb-3 transition-colors group"
-          >
-            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            Retour aux projets
-          </button>
+        <div className="p-4 border-b border-[#E5E5E7] space-y-3">
+          {/* Project Name Card */}
+          <div className="flex items-center gap-3 px-3 py-2.5 bg-gradient-to-r from-gray-50 to-white border border-gray-200/80 rounded-xl shadow-sm hover:shadow-md hover:border-gray-300/80 transition-all duration-200">
+            <div className="p-1.5 bg-white rounded-lg shadow-sm">
+              <Target className="w-4 h-4 text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-semibold text-gray-900 truncate">{project.name}</h2>
+              <p className="text-xs text-gray-500">Pentesting Project</p>
+            </div>
+          </div>
 
-          <h2 className="font-semibold text-[#202123] mb-3">{project.name}</h2>
-
+          {/* New Conversation Button */}
           <button
             onClick={createNewConversation}
-            className="w-full flex items-center gap-2 px-3 py-2 bg-[#202123] text-[#FFFFFF] rounded-lg hover:bg-[#202123]/90 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl hover:from-gray-800 hover:to-gray-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
           >
             <Plus className="w-4 h-4" />
             Nouvelle Conversation
+          </button>
+
+          {/* Back to Projects Button */}
+          <button
+            onClick={() => router.push('/projects')}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm transition-all duration-200 group"
+          >
+            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="text-sm font-medium">Retour aux projets</span>
           </button>
         </div>
 
