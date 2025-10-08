@@ -154,7 +154,7 @@ export default function FloatingAIButton({
             "relative p-3 rounded-full shadow-lg transition-all duration-300",
             "hover:scale-110 active:scale-95 cursor-grab active:cursor-grabbing",
             isActive
-              ? "bg-gradient-to-r from-violet-500 to-purple-600 text-white animate-pulse"
+              ? "bg-gradient-to-r from-gray-700 to-gray-900 text-white animate-pulse"
               : "bg-gray-800 text-gray-300 hover:bg-gray-700"
           )}
           title="AI Text Assistant - Drag to move, Click to open"
@@ -164,7 +164,7 @@ export default function FloatingAIButton({
           {/* Glow effect when active */}
           {isActive && (
             <motion.div
-              className="absolute inset-0 rounded-full bg-violet-400 opacity-50 blur-xl"
+              className="absolute inset-0 rounded-full bg-gray-400 opacity-50 blur-xl"
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             />

@@ -243,7 +243,7 @@ Renvoie UNIQUEMENT le prompt amélioré.`)
       onClick={onClick}
       className={cn(
         "p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors",
-        isActive && "bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400"
+        isActive && "bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400"
       )}
       title={label}
     >
@@ -418,7 +418,7 @@ Renvoie UNIQUEMENT le prompt amélioré.`)
               size="sm"
               onClick={handleImprove}
               disabled={improving}
-              className="gap-2 bg-indigo-500 hover:bg-indigo-600 text-white mr-2"
+              className="gap-2 bg-gray-700 hover:bg-gray-800 text-white mr-2"
             >
               {improving ? (
                 <RefreshCw size={14} className="animate-spin" />

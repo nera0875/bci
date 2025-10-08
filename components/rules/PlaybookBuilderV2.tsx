@@ -337,8 +337,8 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
             {/* TAB: Target Facts */}
             {activeTab === 'target' && (
               <div className="space-y-4">
-                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-                  <p className="text-sm text-purple-900 dark:text-purple-200">
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-900 dark:text-gray-200">
                     🎨 <strong>Target Facts</strong> cible où appliquer cette règle (optionnel). Si vide, la règle s'applique partout.
                   </p>
                 </div>

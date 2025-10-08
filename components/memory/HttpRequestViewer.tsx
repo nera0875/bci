@@ -57,7 +57,7 @@ export function HttpRequestViewer({ request, response, className = '' }: HttpReq
       case 'POST': return 'bg-green-500 text-white'
       case 'PUT': return 'bg-orange-500 text-white'
       case 'DELETE': return 'bg-red-500 text-white'
-      case 'PATCH': return 'bg-purple-500 text-white'
+      case 'PATCH': return 'bg-gray-700 text-white'
       default: return 'bg-gray-500 text-white'
     }
   }
@@ -128,7 +128,7 @@ export function HttpRequestViewer({ request, response, className = '' }: HttpReq
             {(sensitiveInfo.hasAuth || sensitiveInfo.hasSessionId || sensitiveInfo.hasApiKey || sensitiveInfo.hasPassword) && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {sensitiveInfo.hasAuth && (
-                  <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20">
+                  <Badge className="bg-gray-500/10 text-gray-700 dark:text-gray-300 border-gray-500/20">
                     <Lock className="w-3 h-3 mr-1" />
                     Auth Token
                   </Badge>
@@ -211,7 +211,7 @@ export function HttpRequestViewer({ request, response, className = '' }: HttpReq
             <div className="space-y-2">
               {Object.entries(request.headers).map(([key, value]) => (
                 <div key={key} className="flex gap-2 text-sm font-mono">
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold whitespace-nowrap">
+                  <span className="text-gray-700 dark:text-gray-400 font-semibold whitespace-nowrap">
                     {key}:
                   </span>
                   <span className="text-gray-700 dark:text-gray-300 break-all">

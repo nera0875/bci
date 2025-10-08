@@ -224,7 +224,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
               {/* AI Text Assistant */}
               <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="text-purple-500" size={20} />
+                  <Sparkles className="text-gray-700" size={20} />
                   <h3 className="text-lg font-semibold">AI Text Assistant</h3>
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -262,11 +262,11 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
 
                   {/* Usage Instructions */}
                   {aiTextAssistant.enabled && (
-                    <div className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-                      <p className="text-sm font-medium text-purple-900 dark:text-purple-100 mb-2">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                         💡 Comment l'utiliser :
                       </p>
-                      <ol className="text-xs text-purple-800 dark:text-purple-200 space-y-1 list-decimal list-inside">
+                      <ol className="text-xs text-gray-700 dark:text-gray-300 space-y-1 list-decimal list-inside">
                         <li>Sélectionnez du texte n'importe où sur la page</li>
                         <li>Cliquez sur le bouton flottant ✨ ou utilisez le raccourci</li>
                         <li>Modifiez et améliorez avec l'IA</li>
@@ -284,7 +284,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
           {activeTab === 'models' && (
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-4">
-                <Cpu className="text-purple-500" size={20} />
+                <Cpu className="text-gray-700" size={20} />
                 <h3 className="text-lg font-semibold">AI Model Selection</h3>
               </div>
               <RadioGroup value={aiModel} onValueChange={setAiModel}>
@@ -362,7 +362,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <Sparkles className="text-purple-500" size={20} />
+                      <Sparkles className="text-gray-700" size={20} />
                       <h3 className="text-lg font-semibold">OpenAI Embeddings</h3>
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">

@@ -95,7 +95,7 @@ export function FactRelationPicker({
       case 'enables': return 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20'
       case 'requires': return 'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20'
       case 'similar_to': return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20'
-      case 'mitigates': return 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20'
+      case 'mitigates': return 'bg-gray-500/10 text-gray-700 dark:text-gray-300 border-gray-500/20'
       case 'blocks': return 'bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/20'
     }
   }

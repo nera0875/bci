@@ -48,7 +48,7 @@ function DroppableCategory({ category, children }: { category: string; children:
       ref={setNodeRef}
       className={cn(
         "transition-all",
-        isOver && "bg-indigo-50 dark:bg-indigo-900/20 ring-2 ring-indigo-400 dark:ring-indigo-500 rounded"
+        isOver && "bg-gray-50 dark:bg-gray-900/20 ring-2 ring-gray-400 dark:ring-gray-500 rounded"
       )}
     >
       {children}
@@ -85,8 +85,8 @@ function SortablePrompt({ prompt, onToggle, onEdit, onDelete, onDuplicate }: {
       style={style}
       className={cn(
         "group flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800",
-        "hover:border-indigo-300 dark:hover:border-indigo-600 transition-all",
-        prompt.enabled && "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20"
+        "hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md transition-all duration-200",
+        prompt.enabled && "border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-950/20 shadow-sm"
       )}
     >
       {/* Drag handle */}
@@ -104,11 +104,11 @@ function SortablePrompt({ prompt, onToggle, onEdit, onDelete, onDuplicate }: {
         className={cn(
           "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
           prompt.enabled
-            ? "bg-indigo-500 border-indigo-500"
-            : "border-gray-300 dark:border-gray-600 hover:border-indigo-400"
+            ? "bg-gray-900 border-gray-900 dark:bg-gray-100 dark:border-gray-100"
+            : "border-gray-300 dark:border-gray-600 hover:border-gray-400"
         )}
       >
-        {prompt.enabled && <Check size={14} className="text-white" />}
+        {prompt.enabled && <Check size={14} className={cn(prompt.enabled && "text-white dark:text-gray-900")} />}
       </button>
 
       {/* Priority badge */}
@@ -616,18 +616,18 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
     : prompts
 
   return (
-    <div className="h-full flex bg-white dark:bg-gray-900">
+    <div className="h-full flex bg-gray-50 dark:bg-gray-950">
       {/* Sidebar - Categories */}
-      <div className="w-64 border-r border-gray-200 dark:border-gray-800 flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+      <div className="w-64 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-white dark:bg-gray-900">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
           <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="text-indigo-500" size={20} />
+            <Sparkles className="text-gray-700 dark:text-gray-400" size={20} />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               System Prompts
             </h3>
           </div>
           <div className="text-xs text-gray-500">
-            {enabledCount} of {prompts.length} active
+            <span className="font-semibold text-gray-700 dark:text-gray-300">{enabledCount}</span> of {prompts.length} active
           </div>
         </div>
 
@@ -638,11 +638,11 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
             className={cn(
               "w-full flex items-center gap-2 px-2 py-1.5 rounded text-left mb-2",
               !selectedCategory
-                ? "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400"
+                ? "bg-gray-100 dark:bg-gray-900/20 text-gray-700 dark:text-gray-400"
                 : "hover:bg-gray-100 dark:hover:bg-gray-800"
             )}
           >
-            <Sparkles size={14} className="text-indigo-500" />
+            <Sparkles size={14} className="text-gray-500" />
             <span className="text-sm font-medium">All Prompts</span>
             <span className="ml-auto text-xs text-gray-400">
               {enabledCount}/{prompts.length}
@@ -692,11 +692,11 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
                       className={cn(
                         "flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-left",
                         selectedCategory === category
-                          ? "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400"
+                          ? "bg-gray-100 dark:bg-gray-900/20 text-gray-700 dark:text-gray-400"
                           : "hover:bg-gray-100 dark:hover:bg-gray-800"
                       )}
                     >
-                      <FolderOpen size={14} className="text-indigo-500" />
+                      <FolderOpen size={14} className="text-gray-500" />
                       <span className="text-sm font-medium truncate flex-1">
                         {category}
                       </span>
@@ -733,22 +733,22 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
           {/* Add Category Button */}
           <button
             onClick={handleCreateCategory}
-            className="w-full flex items-center gap-2 px-2 py-1.5 mt-2 text-sm text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/10 rounded"
+            className="w-full flex items-center gap-2 px-2 py-1.5 mt-2 text-sm text-gray-500 hover:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-900/10 rounded"
           >
             <Plus size={14} />
             New Category
           </button>
         </div>
 
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
-          <Button onClick={handleCreate} className="w-full bg-indigo-500 hover:bg-indigo-600" size="sm">
+        <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2 bg-gray-50 dark:bg-gray-900">
+          <Button onClick={handleCreate} className="w-full bg-gray-900 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-300 dark:text-gray-900 shadow-sm" size="sm">
             <Plus size={14} className="mr-1" /> New Prompt
           </Button>
           <div className="flex gap-2">
-            <Button onClick={() => setShowImportModal(true)} variant="outline" size="sm" className="flex-1">
+            <Button onClick={() => setShowImportModal(true)} variant="outline" size="sm" className="flex-1 hover:bg-gray-100 dark:hover:bg-gray-800">
               <Upload size={14} />
             </Button>
-            <Button onClick={() => setShowExportModal(true)} variant="outline" size="sm" className="flex-1">
+            <Button onClick={() => setShowExportModal(true)} variant="outline" size="sm" className="flex-1 hover:bg-gray-100 dark:hover:bg-gray-800">
               <Download size={14} />
             </Button>
           </div>
@@ -756,14 +756,14 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 bg-white dark:bg-gray-900">
         <div className="max-w-4xl mx-auto space-y-4">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-800">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {selectedCategory ? `${selectedCategory} Prompts` : 'All System Prompts'}
               </h2>
-              <p className="text-sm text-gray-500 mt-1">Drag to reorder • Click checkbox to activate</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Drag to reorder • Click checkbox to activate</p>
             </div>
           </div>
 
@@ -816,7 +816,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
+              className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden shadow-2xl"
             >
               {/* Header */}
               <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -887,7 +887,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full"
+              className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full shadow-2xl border border-gray-200 dark:border-gray-800"
             >
               <h3 className="text-xl font-semibold mb-4">Export Prompts</h3>
               <p className="text-sm text-gray-500 mb-4">
@@ -898,10 +898,10 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
                 {/* Export All */}
                 <button
                   onClick={() => handleExport(null)}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all"
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-indigo-500" />
+                    <Sparkles size={16} className="text-gray-500" />
                     <span className="font-medium">All Prompts</span>
                   </div>
                   <span className="text-sm text-gray-500">{prompts.length} prompts</span>
@@ -912,10 +912,10 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
                   <button
                     key={category}
                     onClick={() => handleExport(category)}
-                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all"
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-sm transition-all"
                   >
                     <div className="flex items-center gap-2">
-                      <FolderOpen size={16} className="text-indigo-500" />
+                      <FolderOpen size={16} className="text-gray-500" />
                       <span className="font-medium">{category}</span>
                     </div>
                     <span className="text-sm text-gray-500">{categoryPrompts.length} prompts</span>
@@ -946,7 +946,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full"
+              className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full shadow-2xl border border-gray-200 dark:border-gray-800"
             >
               <h3 className="text-xl font-semibold mb-4">Import Prompts</h3>
               <p className="text-sm text-gray-500 mb-4">
@@ -972,7 +972,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
                 <Button onClick={() => setShowImportModal(false)} variant="outline" className="flex-1">
                   Cancel
                 </Button>
-                <Button onClick={() => handleImport()} className="flex-1 bg-indigo-500 hover:bg-indigo-600">
+                <Button onClick={() => handleImport()} className="flex-1 bg-gray-900 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-300 dark:text-gray-900 shadow-sm">
                   <Upload size={14} className="mr-2" />
                   Choose File
                 </Button>
