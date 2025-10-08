@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
 
@@ -15,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectId required' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('rule_categories')
       .select('*')
       .eq('project_id', projectId)
@@ -32,6 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const body = await request.json()
     const { projectId, key, label, icon, description } = body
 
@@ -43,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if category with same key already exists
-    const { data: existing } = await supabase
+    const { data: existing } = await (supabase as any)
       .from('rule_categories')
       .select('id')
       .eq('project_id', projectId)
@@ -57,7 +54,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('rule_categories')
       .insert({
         project_id: projectId,
@@ -80,6 +77,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const body = await request.json()
     const { id, key, label, icon, description } = body
 
@@ -93,7 +91,7 @@ export async function PUT(request: NextRequest) {
     if (icon !== undefined) updates.icon = icon
     if (description !== undefined) updates.description = description
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('rule_categories')
       .update(updates)
       .eq('id', id)
@@ -111,6 +109,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -118,7 +117,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('rule_categories')
       .delete()
       .eq('id', id)

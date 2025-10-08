@@ -13,7 +13,7 @@ import { PromptStyle } from '@/components/chat/PromptStyleSelector'
 import { QuickContextBar } from '@/components/chat/QuickContextBar'
 import FloatingAIButton from '@/components/ai/FloatingAIButton'
 import ProjectGoalHeader from '@/components/chat/ProjectGoalHeader'
-import PentestWorkspace from '@/components/pentesting/PentestWorkspace'
+import TaskManager from '@/components/pentesting/TaskManager'
 
 import { supabase } from '@/lib/supabase/client'
 
@@ -567,8 +567,8 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         </div>
       </div>
 
-      {/* Pentest Workspace */}
-      <PentestWorkspace
+      {/* Task Manager */}
+      <TaskManager
         projectId={project.id}
         open={showTaskFunnel}
         onOpenChange={setShowTaskFunnel}
