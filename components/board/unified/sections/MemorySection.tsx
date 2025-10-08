@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FileText, Search } from 'lucide-react'
 import FactsMemoryViewPro from '@/components/memory/FactsMemoryViewPro'
 import PatternsPanel from './intelligence/PatternsPanel'
 
@@ -18,11 +19,13 @@ export default function MemorySectionNew({ projectId }: MemorySectionProps) {
         {/* Tabs navigation */}
         <div className="px-6 pt-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
           <TabsList className="grid w-full max-w-2xl grid-cols-2">
-            <TabsTrigger value="facts" className="text-sm">
-              📄 Facts
+            <TabsTrigger value="facts" className="text-sm flex items-center gap-2">
+              <FileText size={16} />
+              Facts
             </TabsTrigger>
-            <TabsTrigger value="patterns" className="text-sm">
-              🔍 Patterns
+            <TabsTrigger value="patterns" className="text-sm flex items-center gap-2">
+              <Search size={16} />
+              Patterns
             </TabsTrigger>
           </TabsList>
         </div>

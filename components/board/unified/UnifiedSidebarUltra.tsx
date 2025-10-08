@@ -27,9 +27,9 @@ const sections = [
     name: 'Intelligence',
     shortName: 'Intel',
     icon: Sparkles,
-    color: 'from-indigo-500 to-purple-600',
-    bgColor: 'bg-indigo-500/10',
-    borderColor: 'border-indigo-500',
+    color: 'from-gray-700 to-gray-900',
+    bgColor: 'bg-gray-100 dark:bg-gray-800',
+    borderColor: 'border-gray-400',
     description: 'Memory, Rules, Prompts & Insights',
     stats: { label: 'Active', value: 14 },
     subItems: [
@@ -43,9 +43,9 @@ const sections = [
     name: 'Costs',
     shortName: 'Cost',
     icon: DollarSign,
-    color: 'from-emerald-500 to-green-600',
-    bgColor: 'bg-emerald-500/10',
-    borderColor: 'border-emerald-500',
+    color: 'from-gray-700 to-gray-900',
+    bgColor: 'bg-gray-100 dark:bg-gray-800',
+    borderColor: 'border-gray-400',
     description: 'API costs & savings',
     stats: { label: 'Saved', value: '$0' },
     subItems: []
@@ -55,9 +55,9 @@ const sections = [
     name: 'Settings',
     shortName: 'Set',
     icon: Settings,
-    color: 'from-gray-500 to-gray-600',
-    bgColor: 'bg-gray-500/10',
-    borderColor: 'border-gray-500',
+    color: 'from-gray-700 to-gray-900',
+    bgColor: 'bg-gray-100 dark:bg-gray-800',
+    borderColor: 'border-gray-400',
     description: 'Configuration & API keys',
     stats: { label: 'API', value: 'OK' },
     subItems: []
@@ -103,7 +103,7 @@ export default function UnifiedSidebarUltra({
     >
       {/* Animated background gradient */}
       <div className="absolute inset-0 opacity-5">
-        <div className="absolute inset-0 bg-gradient-to-b from-purple-500 via-blue-500 to-cyan-500 animate-pulse" />
+        <div className="absolute inset-0 bg-gradient-to-b from-gray-500 via-gray-600 to-gray-700 animate-pulse" />
       </div>
 
       {/* Header */}
@@ -117,7 +117,7 @@ export default function UnifiedSidebarUltra({
                 exit={{ opacity: 0, x: -20 }}
                 className="flex items-center gap-2"
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
                   <Database size={16} className="text-white" />
                 </div>
                 <span className="font-semibold text-gray-900 dark:text-gray-100">

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Brain, Shield, Sparkles, Lightbulb, BarChart3 } from 'lucide-react'
 import MemorySection from './MemorySection'
 import RulesCompactV3 from './RulesCompactV3'
 import SystemPromptsSection from './SystemPromptsSection'
@@ -21,20 +22,25 @@ export default function IntelligenceSection({ projectId }: IntelligenceSectionPr
         {/* Tabs navigation */}
         <div className="px-6 pt-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
           <TabsList className="grid w-full max-w-4xl grid-cols-5">
-            <TabsTrigger value="memory" className="text-sm">
-              🧠 Memory
+            <TabsTrigger value="memory" className="text-sm flex items-center gap-2">
+              <Brain size={16} />
+              Memory
             </TabsTrigger>
-            <TabsTrigger value="rules" className="text-sm">
-              🛡️ Rules
+            <TabsTrigger value="rules" className="text-sm flex items-center gap-2">
+              <Shield size={16} />
+              Rules
             </TabsTrigger>
-            <TabsTrigger value="prompts" className="text-sm">
-              ✨ Prompts
+            <TabsTrigger value="prompts" className="text-sm flex items-center gap-2">
+              <Sparkles size={16} />
+              Prompts
             </TabsTrigger>
-            <TabsTrigger value="suggestions" className="text-sm">
-              💡 Suggestions
+            <TabsTrigger value="suggestions" className="text-sm flex items-center gap-2">
+              <Lightbulb size={16} />
+              Suggestions
             </TabsTrigger>
-            <TabsTrigger value="stats" className="text-sm">
-              📊 Stats
+            <TabsTrigger value="stats" className="text-sm flex items-center gap-2">
+              <BarChart3 size={16} />
+              Stats
             </TabsTrigger>
           </TabsList>
         </div>

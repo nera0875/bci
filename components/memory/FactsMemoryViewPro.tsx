@@ -8,7 +8,8 @@ import {
   Plus, RefreshCw, Search, Trash2, X,
   ChevronDown, ChevronRight, Filter,
   Save, Calendar, Tag, Edit2, GripVertical,
-  CheckSquare, Square
+  CheckSquare, Square, Database, FileText, Folder,
+  FolderOpen, Globe
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -167,7 +168,7 @@ function SortableCategory({
                 e.stopPropagation()
                 onSelectAll()
               }}
-              className="text-xs text-purple-600 dark:text-purple-400 hover:underline px-3 py-2 mr-2 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors whitespace-nowrap"
+              className="text-xs text-gray-700 dark:text-gray-400 hover:underline px-3 py-2 mr-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
             >
               {allSelected ? 'Deselect All' : 'Select All'}
             </button>
@@ -244,7 +245,7 @@ function SortableFact({
         style={style}
         className={`group flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-all duration-150 ${
           isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : ''
-        } ${isDragging ? 'z-50' : ''} ${showInsertionIndicator ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''} ${isLastDropped && !isDragging ? 'bg-blue-100/30 dark:bg-blue-800/20' : ''} ${isChecked ? 'bg-purple-50 dark:bg-purple-900/20' : ''}`}
+        } ${isDragging ? 'z-50' : ''} ${showInsertionIndicator ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''} ${isLastDropped && !isDragging ? 'bg-blue-100/30 dark:bg-blue-800/20' : ''} ${isChecked ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
       >
         {/* Checkbox */}
         <div
@@ -252,9 +253,9 @@ function SortableFact({
           className="cursor-pointer p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-all flex-shrink-0"
         >
           {isChecked ? (
-            <CheckSquare size={18} className="text-purple-600 dark:text-purple-400" />
+            <CheckSquare size={18} className="text-gray-700 dark:text-gray-400" />
           ) : (
-            <Square size={18} className="text-gray-400 group-hover:text-purple-500 transition-colors" />
+            <Square size={18} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
           )}
         </div>
 
@@ -378,9 +379,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   const TAG_COLORS: Record<string, {bg: string, text: string, border: string}> = {
     blue: { bg: 'bg-blue-500/20 dark:bg-blue-500/30', text: 'text-blue-800 dark:text-blue-200 font-semibold', border: 'border-blue-500/40' },
     green: { bg: 'bg-green-500/20 dark:bg-green-500/30', text: 'text-green-800 dark:text-green-200 font-semibold', border: 'border-green-500/40' },
-    purple: { bg: 'bg-purple-500/20 dark:bg-purple-500/30', text: 'text-purple-800 dark:text-purple-200 font-semibold', border: 'border-purple-500/40' },
+    purple: { bg: 'bg-gray-500/20 dark:bg-gray-500/30', text: 'text-gray-800 dark:text-gray-200 font-semibold', border: 'border-gray-500/40' },
     orange: { bg: 'bg-orange-500/20 dark:bg-orange-500/30', text: 'text-orange-800 dark:text-orange-200 font-semibold', border: 'border-orange-500/40' },
-    pink: { bg: 'bg-pink-500/20 dark:bg-pink-500/30', text: 'text-pink-800 dark:text-pink-200 font-semibold', border: 'border-pink-500/40' },
+    pink: { bg: 'bg-gray-500/20 dark:bg-gray-500/30', text: 'text-gray-800 dark:text-gray-200 font-semibold', border: 'border-gray-500/40' },
     yellow: { bg: 'bg-yellow-500/20 dark:bg-yellow-500/30', text: 'text-yellow-900 dark:text-yellow-100 font-semibold', border: 'border-yellow-500/40' },
     red: { bg: 'bg-red-500/20 dark:bg-red-500/30', text: 'text-red-800 dark:text-red-200 font-semibold', border: 'border-red-500/40' },
     gray: { bg: 'bg-gray-500/20 dark:bg-gray-500/30', text: 'text-gray-800 dark:text-gray-200 font-semibold', border: 'border-gray-500/40' }
@@ -1129,7 +1130,8 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
           <div className="flex justify-between items-center mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                📊 Memory Facts
+                <Database size={24} className="text-gray-700 dark:text-gray-300" />
+                Memory Facts
                 <span className="text-sm font-normal text-gray-500">({filteredFacts.length})</span>
               </h1>
             </div>
@@ -1139,7 +1141,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Refresh
               </Button>
-              <Button size="sm" className="bg-gradient-to-r from-violet-500 to-purple-500" onClick={handleCreateNewFact}>
+              <Button size="sm" className="bg-gray-900 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-300 dark:text-gray-900" onClick={handleCreateNewFact}>
                 <Plus className="w-4 h-4 mr-2" />
                 New Fact
               </Button>
@@ -1156,7 +1158,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                   type="checkbox"
                   checked={showUncategorized}
                   onChange={(e) => setShowUncategorized(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  className="w-4 h-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500"
                 />
                 <span className="text-gray-700 dark:text-gray-300">Show uncategorized</span>
               </label>
@@ -1165,9 +1167,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
           {/* Bulk Actions Toolbar */}
           {selectedFactIds.size > 0 && (
-            <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center justify-between">
+            <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Badge className="bg-purple-600 text-white">
+                <Badge className="bg-gray-700 text-white">
                   {selectedFactIds.size} selected
                 </Badge>
                 <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -1373,7 +1375,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               onClick={() => setActiveTab('details')}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'details'
-                  ? 'text-purple-600 dark:text-purple-400 border-b-2 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-900/10'
+                  ? 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-700 dark:border-gray-400 bg-gray-100 dark:bg-gray-800'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
             >
@@ -1383,7 +1385,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               onClick={() => setActiveTab('http')}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'http'
-                  ? 'text-purple-600 dark:text-purple-400 border-b-2 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-900/10'
+                  ? 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-700 dark:border-gray-400 bg-gray-100 dark:bg-gray-800'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
               }`}
             >
