@@ -146,11 +146,11 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Submit Button */}
+            {/* Submit Button - NOIR */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-[#10A37F] hover:bg-[#0E9970] text-white text-[15px] font-medium rounded-[6px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+              className="w-full py-3 bg-[#2D333A] hover:bg-[#1C2128] text-white text-[15px] font-medium rounded-[6px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
             >
               {loading ? (
                 <>
@@ -166,9 +166,9 @@ export default function SignupPage() {
           {/* Terms */}
           <p className="mt-4 text-center text-[12px] text-[#6E6E80] leading-relaxed">
             En continuant, vous acceptez nos{' '}
-            <a href="#" className="underline hover:text-[#202123]">Conditions d'utilisation</a>
+            <a href="#" className="underline hover:text-[#2D333A] transition-all">Conditions d'utilisation</a>
             {' '}et notre{' '}
-            <a href="#" className="underline hover:text-[#202123]">Politique de confidentialité</a>
+            <a href="#" className="underline hover:text-[#2D333A] transition-all">Politique de confidentialité</a>
           </p>
 
           {/* Divider */}
@@ -218,7 +218,7 @@ export default function SignupPage() {
               Vous avez déjà un compte ?{' '}
               <Link
                 href="/login"
-                className="text-[#10A37F] hover:underline font-medium"
+                className="text-[#2D333A] hover:underline font-semibold transition-all"
               >
                 Se connecter
               </Link>
@@ -228,9 +228,9 @@ export default function SignupPage() {
 
         {/* Footer Links */}
         <div className="mt-6 flex items-center justify-center gap-4 text-[13px] text-[#6E6E80]">
-          <a href="#" className="hover:underline">Conditions</a>
+          <a href="#" className="hover:text-[#2D333A] hover:underline transition-all">Conditions</a>
           <span>•</span>
-          <a href="#" className="hover:underline">Confidentialité</a>
+          <a href="#" className="hover:text-[#2D333A] hover:underline transition-all">Confidentialité</a>
         </div>
       </div>
     </div>

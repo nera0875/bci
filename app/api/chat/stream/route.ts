@@ -426,7 +426,7 @@ ${matchingRules.map(rule => {
 
     const anthropicApiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
     // Correct model name format - handle various formats
-    let customModel = project?.settings?.aiModel || 'claude-3-5-sonnet-20241022'
+    let customModel = project?.settings?.aiModel || 'claude-sonnet-4-5'
 
     // Updated valid models list based on official Claude docs
     const validModels = [
@@ -458,9 +458,10 @@ ${matchingRules.map(rule => {
 
     // Model corrections for common mistakes
     const modelCorrections: { [key: string]: string } = {
-      'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-20241022',
-      'claude-3.5-sonnet': 'claude-3-5-sonnet-20241022',
-      'claude-35-sonnet': 'claude-3-5-sonnet-20241022'
+      'claude-3-5-sonnet-latest': 'claude-sonnet-4-5',
+      'claude-3.5-sonnet': 'claude-sonnet-4-5',
+      'claude-35-sonnet': 'claude-sonnet-4-5',
+      'claude-3-5-sonnet-20241022': 'claude-sonnet-4-5'
     }
 
     // Check if it's a known wrong format
@@ -561,7 +562,7 @@ ${matchingRules.map(rule => {
                 'claude-3-opus-20240229': { input: 15, output: 75 }
               }
 
-              const pricing = API_PRICING[customModel] || API_PRICING['claude-3-5-sonnet-20241022']
+              const pricing = API_PRICING[customModel] || API_PRICING['claude-sonnet-4-5']
               const costInDollars = (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000
 
               console.log('💰 API Cost:', {

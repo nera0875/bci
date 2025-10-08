@@ -72,7 +72,8 @@ export default function ProjectsClient({ userId }: { userId: string }) {
         setNewProjectName('')
         setNewProjectGoal('')
         setIsCreating(false)
-        router.push(`/chat/${data.id}`)
+        // Redirect to settings if API keys not configured
+        router.push(`/settings?projectId=${data.id}&setup=true`)
       }
     } catch (error) {
       console.error('Error creating project:', error)
@@ -220,7 +221,20 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  onClick={() => router.push(`/chat/${project.id}`)}
+                  onClick={async () => {
+                    // Check if API keys are configured
+                    const { data: proj } = await (supabase as any)
+                      .from('projects')
+                      .select('api_keys')
+                      .eq('id', project.id)
+                      .single()
+
+                    if (!proj?.api_keys?.anthropic) {
+                      router.push(`/settings?projectId=${project.id}&setup=true`)
+                    } else {
+                      router.push(`/chat/${project.id}`)
+                    }
+                  }}
                   className={`bg-white border border-gray-200 rounded-xl p-6 cursor-pointer hover:shadow-md transition-all group ${
                     deletingProject === project.id ? 'opacity-50' : ''
                   } ${viewMode === 'list' ? 'flex items-center justify-between' : ''}`}

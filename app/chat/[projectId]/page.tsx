@@ -19,7 +19,7 @@ export default async function ChatInterface({
 
   const { data: project, error } = await (supabase as any)
     .from('projects')
-    .select('id, user_id')
+    .select('id, user_id, api_keys')
     .eq('id', projectId)
     .eq('user_id', user.id)
     .single()
@@ -27,6 +27,11 @@ export default async function ChatInterface({
   // If project doesn't exist or user doesn't own it, redirect to projects
   if (error || !project) {
     redirect('/projects')
+  }
+
+  // If API keys not configured, redirect to settings
+  if (!project.api_keys?.anthropic) {
+    redirect(`/settings?projectId=${projectId}&setup=true`)
   }
 
   return <ChatProfessionalNew params={params} />

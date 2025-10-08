@@ -27,6 +27,7 @@ interface CostMetrics {
 
 // API Pricing (per 1M tokens)
 const API_PRICING = {
+  'claude-sonnet-4-5': { input: 3, output: 15 },
   'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
   'claude-3-opus-20240229': { input: 15, output: 75 },
   'gpt-4-turbo': { input: 10, output: 30 },
@@ -78,13 +79,13 @@ export default function CostsSection({ projectId }: CostsSectionProps) {
 
         messages.forEach(msg => {
           const metadata = (msg.metadata as any) || {}
-          const model = metadata.model || 'claude-3-5-sonnet-20241022'
+          const model = metadata.model || 'claude-sonnet-4-5'
           const tokens = metadata.tokens || { input: 0, output: 0 }
           const cached = metadata.cached || false
 
           if (!cached) {
             apiCalls++
-            const pricing = API_PRICING[model as keyof typeof API_PRICING] || API_PRICING['claude-3-5-sonnet-20241022']
+            const pricing = API_PRICING[model as keyof typeof API_PRICING] || API_PRICING['claude-sonnet-4-5']
             const cost = (tokens.input * pricing.input + tokens.output * pricing.output) / 1000000
 
             totalCost += cost
@@ -97,7 +98,7 @@ export default function CostsSection({ projectId }: CostsSectionProps) {
           } else {
             cacheHits++
             // Estimate saved cost (80% reduction for cached responses)
-            const pricing = API_PRICING[model as keyof typeof API_PRICING] || API_PRICING['claude-3-5-sonnet-20241022']
+            const pricing = API_PRICING[model as keyof typeof API_PRICING] || API_PRICING['claude-sonnet-4-5']
             const fullCost = (tokens.input * pricing.input + tokens.output * pricing.output) / 1000000
             const cachedCost = fullCost * 0.2 // 80% savings
 

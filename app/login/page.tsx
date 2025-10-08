@@ -8,7 +8,7 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const[email, setEmail] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -68,7 +68,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Adresse e-mail"
                 required
-                className="w-full px-4 py-[11px] bg-white border border-[#D0D7DE] rounded-xl text-[15px] text-[#2D333A] placeholder:text-[#6E7681] focus:outline-none focus:border-[#0969DA] focus:ring-[3px] focus:ring-[#0969DA]/10 transition-all duration-200"
+                className="w-full px-4 py-[11px] bg-white border border-[#D0D7DE] rounded-xl text-[15px] text-[#2D333A] placeholder:text-[#6E7681] focus:outline-none focus:border-[#2D333A] focus:ring-[3px] focus:ring-[#2D333A]/10 transition-all duration-200"
               />
             </div>
 
@@ -80,7 +80,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Mot de passe"
                 required
-                className="w-full px-4 py-[11px] bg-white border border-[#D0D7DE] rounded-xl text-[15px] text-[#2D333A] placeholder:text-[#6E7681] focus:outline-none focus:border-[#0969DA] focus:ring-[3px] focus:ring-[#0969DA]/10 transition-all duration-200 pr-11"
+                className="w-full px-4 py-[11px] bg-white border border-[#D0D7DE] rounded-xl text-[15px] text-[#2D333A] placeholder:text-[#6E7681] focus:outline-none focus:border-[#2D333A] focus:ring-[3px] focus:ring-[#2D333A]/10 transition-all duration-200 pr-11"
               />
               <button
                 type="button"
@@ -91,11 +91,11 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {/* Submit */}
+            {/* Submit - NOIR */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-[11px] bg-[#238636] hover:bg-[#2EA043] text-white text-[15px] font-medium rounded-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98]"
+              className="w-full py-[11px] bg-[#2D333A] hover:bg-[#1C2128] text-white text-[15px] font-medium rounded-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98]"
             >
               {loading ? (
                 <>
@@ -153,7 +153,7 @@ export default function LoginPage() {
           <div className="mt-8 text-center">
             <p className="text-[14px] text-[#6E7681]">
               Pas encore de compte ?{' '}
-              <Link href="/signup" className="text-[#0969DA] hover:underline font-medium transition-all">
+              <Link href="/signup" className="text-[#2D333A] hover:underline font-semibold transition-all">
                 Créer un compte
               </Link>
             </p>
@@ -162,9 +162,9 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="mt-8 flex items-center justify-center gap-3 text-[12px] text-[#6E7681]">
-          <a href="#" className="hover:text-[#0969DA] hover:underline transition-all">Conditions</a>
+          <a href="#" className="hover:text-[#2D333A] hover:underline transition-all">Conditions</a>
           <span>•</span>
-          <a href="#" className="hover:text-[#0969DA] hover:underline transition-all">Confidentialité</a>
+          <a href="#" className="hover:text-[#2D333A] hover:underline transition-all">Confidentialité</a>
         </div>
       </div>
     </div>

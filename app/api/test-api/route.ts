@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     const anthropicApiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
-    const customModel = project?.settings?.aiModel || 'claude-3-5-sonnet-20241022'
+    const customModel = project?.settings?.aiModel || 'claude-sonnet-4-5'
 
     console.log('API Key exists:', !!anthropicApiKey)
     console.log('Model:', customModel)
