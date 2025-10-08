@@ -219,9 +219,9 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
           confidence: suggestion.confidence,
           suggestion: variation,
           metadata: {
-            ...suggestion.metadata,
+            ...(suggestion as any).metadata,
             regenerated_from: suggestion.id,
-            generation_count: (suggestion.metadata?.generation_count || 0) + 1
+            generation_count: ((suggestion as any).metadata?.generation_count || 0) + 1
           },
           status: 'pending'
         })
@@ -526,7 +526,7 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
           </>
         )}
 
-        {editingSuggestion.type === 'storage' && (
+        {(editingSuggestion as any).type === 'storage' && (
           <div>
             <Label>Contenu</Label>
             <Textarea

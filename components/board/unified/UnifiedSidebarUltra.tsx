@@ -195,7 +195,7 @@ export default function UnifiedSidebarUltra({
                         size={20}
                         className={isActive ? "text-white" : "text-gray-600 dark:text-gray-400"}
                       />
-                      {section.pulse && section.badge > 0 && (
+                      {(section as any).pulse && section.badge > 0 && (
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                       )}
                     </div>

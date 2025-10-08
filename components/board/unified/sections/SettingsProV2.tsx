@@ -81,10 +81,10 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
     if (data) {
       setNewProjectName(data.name || projectName)
       setProjectGoal(data.goal || '')
-      setAiModel(data.settings?.aiModel || 'claude-sonnet-4-5-20250929')
-      setApiKeys(data.api_keys || { anthropic: '', openai: '' })
-      setAiTextAssistant(data.settings?.aiTextAssistant || { enabled: false, shortcut: 'Ctrl+Shift+P' })
-      setMemorySearch(data.settings?.memorySearch || {
+      setAiModel((data.settings as any)?.aiModel || 'claude-sonnet-4-5-20250929')
+      setApiKeys((data.api_keys as any) || { anthropic: '', openai: '' })
+      setAiTextAssistant((data.settings as any)?.aiTextAssistant || { enabled: false, shortcut: 'Ctrl+Shift+P' })
+      setMemorySearch((data.settings as any)?.memorySearch || {
         enabled: true,
         similarityThreshold: 0.7,
         maxResults: 5,

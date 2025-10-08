@@ -340,30 +340,30 @@ const MessageComponent = React.memo(({
           {/* Afficher métadonnées (tokens, coût) pour messages assistant */}
           {message.role === 'assistant' && message.metadata && (
             <div className="mt-3 flex items-center gap-4 text-xs text-[#6E6E80]">
-              {message.metadata.tokens && (
+              {(message.metadata as any).tokens && (
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded">
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
                     </svg>
-                    {message.metadata.tokens.input + message.metadata.tokens.output} tokens
+                    {(message.metadata as any).tokens.input + (message.metadata as any).tokens.output} tokens
                   </span>
-                  {message.metadata.cost !== undefined && (
+                  {(message.metadata as any).cost !== undefined && (
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded ${
-                      message.metadata.cached
+                      (message.metadata as any).cached
                         ? 'bg-green-50 text-green-700'
                         : 'bg-gray-100 text-gray-700'
                     }`}>
-                      {message.metadata.cached ? '💾' : '💰'}
-                      ${message.metadata.cost.toFixed(6)}
-                      {message.metadata.cached && ' (cached)'}
+                      {(message.metadata as any).cached ? '💾' : '💰'}
+                      ${(message.metadata as any).cost.toFixed(6)}
+                      {(message.metadata as any).cached && ' (cached)'}
                     </span>
                   )}
                 </div>
               )}
-              {message.metadata.model && (
+              {(message.metadata as any).model && (
                 <span className="text-[#6E6E80]">
-                  {message.metadata.model.replace('claude-', '')}
+                  {(message.metadata as any).model.replace('claude-', '')}
                 </span>
               )}
             </div>
@@ -564,7 +564,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
   const trackUserDecision = async (decision: any, userChoice: 'accept' | 'reject' | 'modify', modification: any) => {
     try {
-      const { error } = await supabase.from('user_decisions').insert({
+      const { error } = await (supabase as any).from('user_decisions').insert({
         project_id: projectId,
         decision_type: decision.type,
         context: decision.context,
@@ -775,7 +775,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
           console.log('New user message detected via polling:', lastMessage.content)
           lastProcessedMessageId.current = lastMessage.id
           lastMessageCountRef.current = data.length
-          setMessages(data)
+          setMessages(data as any)
           // Store user message for context
           setLastUserMessage(lastMessage.content)
           // Trigger Claude response (ONLY here, not in subscription)
@@ -785,7 +785,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
         } else if (data.length !== lastMessageCountRef.current && !isStreaming) {
           // Only update if count changed and not streaming
           lastMessageCountRef.current = data.length
-          setMessages(data)
+          setMessages(data as any)
         }
       }
     }, 1500) // Poll every 1.5 seconds
@@ -887,7 +887,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
       .order('created_at', { ascending: true })
 
     if (data && !error) {
-      setMessages(data)
+      setMessages(data as any)
     }
   }
 

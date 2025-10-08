@@ -260,7 +260,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
         .order('priority', { ascending: true })
 
       if (error) throw error
-      setRules(data || [])
+      setRules((data as any) || [])
     } catch (error) {
       console.error('Error loading rules:', error)
       toast.error('Erreur chargement rules')
@@ -316,7 +316,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           description: rule.description,
           icon: rule.icon,
           category: rule.category,
-          category_id: rule.category_id,
+          category_id: (rule as any).category_id,
           trigger_type: rule.trigger_type,
           trigger_config: rule.trigger_config,
           target_categories: rule.target_categories,
@@ -326,7 +326,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           action_instructions: rule.action_instructions,
           enabled: false,
           priority: (rule.priority || 0) + 1
-        })
+        } as any)
 
       if (error) throw error
       toast.success('Rule dupliquée !')
@@ -464,7 +464,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
         if (rule.category_id !== targetCategoryId) {
           supabase
             .from('rules')
-            .update({ category_id: targetCategoryId })
+            .update({ category_id: targetCategoryId } as any)
             .eq('id', rule.id)
             .then(() => {
               toast.success(`Rule déplacée vers ${targetCategory.label}`)
@@ -745,7 +745,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
         {showBuilder && (
           <PlaybookBuilderV2
             projectId={projectId}
-            initialData={editingRule || undefined}
+            initialData={(editingRule as any) || undefined}
             onSave={handleSaveRule}
             onCancel={() => { setShowBuilder(false); setEditingRule(null); }}
           />
