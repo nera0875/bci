@@ -98,7 +98,14 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
         confidence_score: pending.reduce((sum, p) => sum + p.confidence, 0) / pending.length
       })
 
-      toast.success(`✅ ${selected.size} fact(s) validé(s)`)
+      // 5. Incrémenter la progression du projet
+      await (supabase as any).rpc('increment_progress', {
+        p_project_id: projectId,
+        p_points: selected.size * 5, // 5 points par fact
+        p_facts_count: selected.size
+      })
+
+      toast.success(`✅ ${selected.size} fact(s) validé(s) • +${selected.size * 5} points`)
       onValidated()
     } catch (error: any) {
       console.error('Error validating facts:', error)
