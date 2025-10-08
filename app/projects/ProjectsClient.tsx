@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import {
   Plus, FolderOpen, Trash2,
-  Loader2, Search, Grid3x3, List, Clock, LogOut, Eye, EyeOff, CheckCircle, XCircle
+  Loader2, Search, Grid3x3, List, Clock, LogOut, Eye, EyeOff, CheckCircle, XCircle, Users, Crown, Edit, User, Mail
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import ProjectMembersDialog from '@/components/projects/ProjectMembersDialog'
 
 interface Project {
   id: string
@@ -15,6 +16,7 @@ interface Project {
   goal: string | null
   created_at: string
   user_id: string
+  role?: 'owner' | 'editor' | 'viewer'
 }
 
 export default function ProjectsClient({ userId }: { userId: string }) {
@@ -34,25 +36,64 @@ export default function ProjectsClient({ userId }: { userId: string }) {
   const [deletingProject, setDeletingProject] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [sharingProject, setSharingProject] = useState<Project | null>(null)
+  const [invitationsCount, setInvitationsCount] = useState(0)
 
   useEffect(() => {
     loadProjects()
+    loadInvitationsCount()
   }, [])
 
   const loadProjects = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      // Get user's project memberships
+      const { data: memberships, error: membersError } = await supabase
+        .from('project_members')
+        .select('project_id, role')
+        .eq('user_id', userId)
+
+      if (membersError) throw membersError
+
+      if (!memberships || memberships.length === 0) {
+        setProjects([])
+        return
+      }
+
+      // Get the actual projects
+      const projectIds = memberships.map(m => m.project_id)
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
-        .eq('user_id', userId)
+        .in('id', projectIds)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
-      setProjects(data || [])
+      if (projectsError) throw projectsError
+
+      // Merge role info
+      const projectsWithRole = (projectsData || []).map(project => {
+        const membership = memberships.find(m => m.project_id === project.id)
+        return {
+          ...project,
+          role: membership?.role || 'viewer'
+        }
+      })
+
+      setProjects(projectsWithRole)
     } catch (error) {
       console.error('Error loading projects:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadInvitationsCount = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_user_invitations')
+      if (!error && data) {
+        setInvitationsCount(data.length)
+      }
+    } catch (error) {
+      console.error('Error loading invitations count:', error)
     }
   }
 
@@ -194,6 +235,18 @@ export default function ProjectsClient({ userId }: { userId: string }) {
 
             <div className="flex items-center gap-3">
               <button
+                onClick={() => router.push('/invitations')}
+                className="relative px-4 py-2 text-[#6E6E80] hover:bg-[#F7F7F8] rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Mail className="w-5 h-5" />
+                Invitations
+                {invitationsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {invitationsCount}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={handleLogout}
                 className="px-4 py-2 text-[#6E6E80] hover:bg-[#F7F7F8] rounded-lg transition-colors flex items-center gap-2"
               >
@@ -271,16 +324,29 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   onClick={async () => {
-                    // Check if API keys are configured
-                    const { data: proj } = await (supabase as any)
-                      .from('projects')
-                      .select('api_keys')
-                      .eq('id', project.id)
-                      .single()
+                    try {
+                      // Check if API keys are configured
+                      const { data: proj, error } = await (supabase as any)
+                        .from('projects')
+                        .select('api_keys')
+                        .eq('id', project.id)
+                        .single()
 
-                    if (!proj?.api_keys?.anthropic) {
-                      router.push(`/settings?projectId=${project.id}&setup=true`)
-                    } else {
+                      if (error) {
+                        console.error('Error loading project:', error)
+                        // Navigate anyway if error (member without direct project access)
+                        router.push(`/chat/${project.id}`)
+                        return
+                      }
+
+                      if (!proj?.api_keys?.anthropic) {
+                        router.push(`/settings?projectId=${project.id}&setup=true`)
+                      } else {
+                        router.push(`/chat/${project.id}`)
+                      }
+                    } catch (err) {
+                      console.error('Navigation error:', err)
+                      // Navigate anyway on error
                       router.push(`/chat/${project.id}`)
                     }
                   }}
@@ -294,15 +360,31 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                         <div className="w-12 h-12 bg-[#F7F7F8] rounded-xl flex items-center justify-center">
                           <FolderOpen className="w-6 h-6 text-[#202123]" />
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteProject(project.id, project.name)
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {(project.role === 'owner' || project.role === 'editor') && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSharingProject(project)
+                              }}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                              title="Share project"
+                            >
+                              <Users className="w-4 h-4 text-gray-600" />
+                            </button>
+                          )}
+                          {project.role === 'owner' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteProject(project.id, project.name)
+                              }}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <h3 className="text-lg font-semibold text-[#202123] mb-2">
@@ -315,9 +397,24 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                         </p>
                       )}
 
-                      <div className="flex items-center text-xs text-[#6E6E80]">
-                        <Clock className="w-3.5 h-3.5 mr-1.5" />
-                        {new Date(project.created_at).toLocaleDateString('fr-FR')}
+                      <div className="flex items-center justify-between text-xs text-[#6E6E80]">
+                        <div className="flex items-center">
+                          <Clock className="w-3.5 h-3.5 mr-1.5" />
+                          {new Date(project.created_at).toLocaleDateString('fr-FR')}
+                        </div>
+                        {project.role && (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            project.role === 'owner' ? 'bg-gray-900 text-white' :
+                            project.role === 'editor' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {project.role === 'owner' && <Crown className="w-2.5 h-2.5 inline mr-1" />}
+                            {project.role === 'editor' && <Edit className="w-2.5 h-2.5 inline mr-1" />}
+                            {project.role === 'viewer' && <Eye className="w-2.5 h-2.5 inline mr-1" />}
+                            {project.role === 'owner' ? 'Propriétaire' :
+                             project.role === 'editor' ? 'Éditeur' : 'Lecteur'}
+                          </span>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -334,18 +431,45 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                         </p>
                       </div>
                       <div className="flex items-center gap-4">
+                        {project.role && (
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 ${
+                            project.role === 'owner' ? 'bg-gray-900 text-white' :
+                            project.role === 'editor' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {project.role === 'owner' && <Crown className="w-3 h-3" />}
+                            {project.role === 'editor' && <Edit className="w-3 h-3" />}
+                            {project.role === 'viewer' && <Eye className="w-3 h-3" />}
+                            {project.role === 'owner' ? 'Propriétaire' :
+                             project.role === 'editor' ? 'Éditeur' : 'Lecteur'}
+                          </span>
+                        )}
                         <span className="text-xs text-[#6E6E80]">
                           {new Date(project.created_at).toLocaleDateString('fr-FR')}
                         </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteProject(project.id, project.name)
-                          }}
-                          className="p-2 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
+                        {(project.role === 'owner' || project.role === 'editor') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSharingProject(project)
+                            }}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                            title="Share project"
+                          >
+                            <Users className="w-4 h-4 text-gray-600" />
+                          </button>
+                        )}
+                        {project.role === 'owner' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteProject(project.id, project.name)
+                            }}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -558,6 +682,17 @@ export default function ProjectsClient({ userId }: { userId: string }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Project Sharing Dialog */}
+      {sharingProject && (
+        <ProjectMembersDialog
+          projectId={sharingProject.id}
+          projectName={sharingProject.name}
+          open={!!sharingProject}
+          onOpenChange={(open) => !open && setSharingProject(null)}
+          userRole={sharingProject.role || 'viewer'}
+        />
+      )}
     </div>
   )
 }

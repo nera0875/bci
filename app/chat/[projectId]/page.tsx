@@ -13,24 +13,32 @@ export default async function ChatInterface({
     redirect('/login')
   }
 
-  // Verify user owns this project
+  // Verify user is a member of this project
   const { projectId } = await params
   const supabase = await createClient()
 
-  const { data: project, error } = await (supabase as any)
-    .from('projects')
-    .select('id, user_id, api_keys')
-    .eq('id', projectId)
+  // Check if user is a member of this project
+  const { data: membership, error: memberError } = await (supabase as any)
+    .from('project_members')
+    .select('role')
+    .eq('project_id', projectId)
     .eq('user_id', user.id)
     .single()
 
-  // If project doesn't exist or user doesn't own it, redirect to projects
-  if (error || !project) {
+  // If not a member, redirect to projects
+  if (memberError || !membership) {
     redirect('/projects')
   }
 
-  // If API keys not configured, redirect to settings
-  if (!project.api_keys?.anthropic) {
+  // Get project details
+  const { data: project } = await (supabase as any)
+    .from('projects')
+    .select('id, api_keys')
+    .eq('id', projectId)
+    .single()
+
+  // If API keys not configured, redirect to settings (only owners can configure)
+  if (!project?.api_keys?.anthropic && membership.role === 'owner') {
     redirect(`/settings?projectId=${projectId}&setup=true`)
   }
 
