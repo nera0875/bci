@@ -77,7 +77,7 @@ export default function UnifiedSidebarUltra({
   // Update intelligence badge
   const sectionsWithBadge = sections.map(section => ({
     ...section,
-    badge: section.id === 'intelligence' ? pendingSuggestions : section.badge,
+    badge: section.id === 'intelligence' ? pendingSuggestions : (section as any).badge,
     stats: section.id === 'intelligence'
       ? { ...section.stats, value: pendingSuggestions }
       : section.stats,
