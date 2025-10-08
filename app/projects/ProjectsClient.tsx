@@ -91,7 +91,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
   }
 
   const handleCreateProject = async () => {
-    if (!newProjectName.trim() || !anthropicValid) return
+    if (!newProjectName.trim() || !newProjectGoal.trim() || !anthropicValid || !openaiValid) return
 
     setCreatingProject(true)
     try {
@@ -532,7 +532,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                 </button>
                 <button
                   onClick={handleCreateProject}
-                  disabled={!newProjectName.trim() || !anthropicValid || creatingProject}
+                  disabled={!newProjectName.trim() || !newProjectGoal.trim() || !anthropicValid || !openaiValid || creatingProject}
                   className="px-5 py-2 bg-[#202123] hover:bg-[#2d2d30] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                 >
                   {creatingProject ? (
