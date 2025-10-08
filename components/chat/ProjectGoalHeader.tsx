@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { ChevronDown, ChevronUp, Target } from 'lucide-react'
+import { ChevronDown, ChevronUp, Target, Plus, Minus, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -10,6 +10,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { toast } from 'sonner'
 
 interface ProjectGoalHeaderProps {
   projectId: string
@@ -57,6 +58,39 @@ export default function ProjectGoalHeader({ projectId }: ProjectGoalHeaderProps)
       }
     } catch (error) {
       console.error('Error loading progress:', error)
+    }
+  }
+
+  const adjustProgress = async (pointsChange: number) => {
+    try {
+      await supabase.rpc('increment_progress', {
+        p_project_id: projectId,
+        p_points: pointsChange,
+        p_facts_count: 0
+      })
+      await loadProgress()
+      toast.success(`Progress ${pointsChange > 0 ? 'increased' : 'decreased'} by ${Math.abs(pointsChange)} points`)
+    } catch (error) {
+      console.error('Error adjusting progress:', error)
+      toast.error('Error adjusting progress')
+    }
+  }
+
+  const resetProgress = async () => {
+    if (!confirm('Reset progress to 0? This cannot be undone.')) return
+
+    try {
+      const { error } = await supabase
+        .from('project_progress')
+        .update({ total_points: 0, facts_validated: 0 })
+        .eq('project_id', projectId)
+
+      if (error) throw error
+      await loadProgress()
+      toast.success('Progress reset')
+    } catch (error) {
+      console.error('Error resetting progress:', error)
+      toast.error('Error resetting progress')
     }
   }
 
@@ -150,6 +184,47 @@ export default function ProjectGoalHeader({ projectId }: ProjectGoalHeaderProps)
                 {progress.target_points}
               </div>
             </div>
+          </div>
+
+          {/* Manual Controls */}
+          <div className="flex items-center gap-2 pt-2 border-t border-[#E5E5E7]">
+            <span className="text-xs text-[#6E6E80] font-medium">Adjust:</span>
+            <button
+              onClick={() => adjustProgress(5)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-[#202123] text-white rounded hover:bg-[#2d2d30] transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              +5
+            </button>
+            <button
+              onClick={() => adjustProgress(10)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-[#202123] text-white rounded hover:bg-[#2d2d30] transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              +10
+            </button>
+            <button
+              onClick={() => adjustProgress(-5)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-[#6E6E80] text-white rounded hover:bg-[#555560] transition-colors"
+            >
+              <Minus className="w-3 h-3" />
+              -5
+            </button>
+            <button
+              onClick={() => adjustProgress(-10)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-[#6E6E80] text-white rounded hover:bg-[#555560] transition-colors"
+            >
+              <Minus className="w-3 h-3" />
+              -10
+            </button>
+            <div className="flex-1" />
+            <button
+              onClick={resetProgress}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset
+            </button>
           </div>
         </div>
       </CollapsibleContent>

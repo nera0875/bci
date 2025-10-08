@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
 
 // ✅ SYSTÈME ROBUSTE: System Prompts + Rules (always + conditional) + Memory Facts
 import { buildSystemPromptsTextAsync } from '@/lib/services/systemPromptsLoader'
 import { createEmbedding } from '@/lib/services/embeddings'
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
     console.log('🚀 Chat API called with new prompt system')
 
     const body = await request.json()
