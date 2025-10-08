@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Brain, Shield, Sparkles, Lightbulb, BarChart3 } from 'lucide-react'
+import { Brain, Shield, Sparkles, Lightbulb, BarChart3, FileCode } from 'lucide-react'
 import MemorySection from './MemorySection'
 import RulesCompactV3 from './RulesCompactV3'
 import SystemPromptsSection from './SystemPromptsSection'
@@ -38,7 +38,7 @@ export default function IntelligenceSection({ projectId }: IntelligenceSectionPr
               Rules
             </TabsTrigger>
             <TabsTrigger value="prompts" className="text-sm flex items-center gap-2 data-[state=active]:shadow-sm">
-              <Sparkles size={16} />
+              <FileCode size={16} />
               Prompts
             </TabsTrigger>
             <TabsTrigger value="suggestions" className="text-sm flex items-center gap-2 data-[state=active]:shadow-sm">

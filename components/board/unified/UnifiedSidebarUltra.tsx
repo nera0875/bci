@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Menu, Search,
   Bell, Sparkles, Database, Shield, TrendingUp,
   Layers, GitBranch, Activity, Target, Lightbulb,
-  DollarSign, Cpu
+  DollarSign, Cpu, FileCode
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -35,14 +35,14 @@ const sections = [
     subItems: [
       { name: 'Memory', icon: Brain, count: '—' },
       { name: 'Rules', icon: Shield, count: 9 },
-      { name: 'Prompts', icon: Sparkles, count: 5 }
+      { name: 'Prompts', icon: FileCode, count: 5 }
     ]
   },
   {
     id: 'costs' as Section,
     name: 'Costs',
     shortName: 'Cost',
-    icon: DollarSign,
+    icon: TrendingUp,
     color: 'from-gray-700 to-gray-900',
     bgColor: 'bg-gray-100 dark:bg-gray-800',
     borderColor: 'border-gray-400',

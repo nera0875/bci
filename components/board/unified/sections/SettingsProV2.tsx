@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import {
   Settings, Save, Brain, Cpu, Key, Plus, Trash2,
   CheckCircle, Loader2, Edit2, Copy, Download, Upload,
-  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target, Eye, Sparkles, Database
+  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target, Eye, Sparkles, Database,
+  Wand2, BrainCircuit, Lightbulb
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -224,7 +225,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
               {/* AI Text Assistant */}
               <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="text-gray-700" size={20} />
+                  <Wand2 className="text-gray-700 dark:text-gray-400" size={20} />
                   <h3 className="text-lg font-semibold">AI Text Assistant</h3>
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -362,7 +363,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <Sparkles className="text-gray-700" size={20} />
+                      <BrainCircuit className="text-gray-700 dark:text-gray-400" size={20} />
                       <h3 className="text-lg font-semibold">OpenAI Embeddings</h3>
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -462,7 +463,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
               {/* Info Card */}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <div className="flex gap-3">
-                  <Sparkles className="text-blue-600 dark:text-blue-400 flex-shrink-0" size={20} />
+                  <Lightbulb className="text-blue-600 dark:text-blue-400 flex-shrink-0" size={20} />
                   <div className="text-sm text-blue-900 dark:text-blue-100">
                     <p className="font-semibold mb-2">💡 Conseils d'utilisation</p>
                     <ul className="space-y-1 text-xs">

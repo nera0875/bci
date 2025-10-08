@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   Sparkles, Plus, Trash2, Edit2, Copy, Download, Upload,
   ChevronRight, ChevronDown, FolderOpen, FileText, GripVertical,
-  Check, X, Eye
+  Check, X, Eye, FileCode
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -621,7 +621,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
       <div className="w-64 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-white dark:bg-gray-900">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
           <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="text-gray-700 dark:text-gray-400" size={20} />
+            <FileCode className="text-gray-700 dark:text-gray-400" size={20} />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               System Prompts
             </h3>
@@ -642,7 +642,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
                 : "hover:bg-gray-100 dark:hover:bg-gray-800"
             )}
           >
-            <Sparkles size={14} className="text-gray-500" />
+            <FileCode size={14} className="text-gray-500" />
             <span className="text-sm font-medium">All Prompts</span>
             <span className="ml-auto text-xs text-gray-400">
               {enabledCount}/{prompts.length}
@@ -901,7 +901,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
                   className="w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-gray-500" />
+                    <FileCode size={16} className="text-gray-500" />
                     <span className="font-medium">All Prompts</span>
                   </div>
                   <span className="text-sm text-gray-500">{prompts.length} prompts</span>
