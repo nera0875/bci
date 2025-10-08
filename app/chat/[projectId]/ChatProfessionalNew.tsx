@@ -3,7 +3,7 @@
 import { useState, useEffect, use, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus, BookOpen, Trash2, Square, Edit2
+  Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus, BookOpen, Trash2, Square, Edit2, Target
 } from 'lucide-react'
 import { isValidUUID } from '@/lib/utils/uuid'
 import ChatStream from '@/components/chat/ChatStream'
@@ -12,6 +12,8 @@ import UnifiedBoard from '@/components/board/unified/UnifiedBoardUltra'
 import { PromptStyle } from '@/components/chat/PromptStyleSelector'
 import { QuickContextBar } from '@/components/chat/QuickContextBar'
 import FloatingAIButton from '@/components/ai/FloatingAIButton'
+import ProjectGoalHeader from '@/components/chat/ProjectGoalHeader'
+import PentestWorkspace from '@/components/pentesting/PentestWorkspace'
 
 import { supabase } from '@/lib/supabase/client'
 
@@ -54,6 +56,9 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
   // Unified Board
   const [showUnifiedBoard, setShowUnifiedBoard] = useState(false)
+
+  // Task Funnel Panel
+  const [showTaskFunnel, setShowTaskFunnel] = useState(false)
 
   // Prompt Style
   const [promptStyle, setPromptStyle] = useState<PromptStyle | string>('')
@@ -421,15 +426,27 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-[#FFFFFF]">
+        {/* Project Goal Header */}
+        <ProjectGoalHeader projectId={projectId} />
+
         {/* Header avec boutons */}
         <div className="border-b border-[#E5E5E7] bg-[#FFFFFF] px-6 py-3">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-lg font-semibold text-[#202123]">{project.name}</h1>
               <p className="text-sm text-[#6E6E80]">AI Pentesting Session</p>
             </div>
             
             <div className="flex items-center gap-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowTaskFunnel(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#FFFFFF] text-[#202123] rounded-lg hover:bg-[#F7F7F8] border border-[#E5E5E7]"
+              >
+                <Target className="w-4 h-4" />
+                Tasks
+              </motion.button>
+
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -549,6 +566,13 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
           </div>
         </div>
       </div>
+
+      {/* Pentest Workspace */}
+      <PentestWorkspace
+        projectId={project.id}
+        open={showTaskFunnel}
+        onOpenChange={setShowTaskFunnel}
+      />
 
       {/* Unified Knowledge Management System */}
       <UnifiedBoard

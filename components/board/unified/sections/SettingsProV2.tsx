@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   Settings, Save, Brain, Cpu, Key, Plus, Trash2,
   CheckCircle, Loader2, Edit2, Copy, Download, Upload,
-  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target, Eye, Sparkles
+  FileText, X, FolderOpen, ChevronRight, ChevronDown, Target, Eye, Sparkles, Database
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
+import DataTransferPanel from '@/components/data-transfer/DataTransferPanel'
 
 interface SettingsProV2Props {
   projectId: string
@@ -44,7 +45,7 @@ const DEFAULT_AI_MODELS: AIModel[] = [
 ]
 
 export default function SettingsProV2({ projectId, projectName = 'Project' }: SettingsProV2Props) {
-  const [activeTab, setActiveTab] = useState<'general' | 'models' | 'api' | 'memory'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'models' | 'api' | 'memory' | 'data'>('general')
   const [projectGoal, setProjectGoal] = useState('')
   const [aiModel, setAiModel] = useState('claude-sonnet-4-5-20250929')
   const [apiKeys, setApiKeys] = useState({ anthropic: '', openai: '' })
@@ -128,7 +129,8 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
     { id: 'general' as const, label: 'General', icon: Settings },
     { id: 'models' as const, label: 'AI Models', icon: Cpu },
     { id: 'api' as const, label: 'API Keys', icon: Key },
-    { id: 'memory' as const, label: 'Memory Search', icon: Brain }
+    { id: 'memory' as const, label: 'Memory Search', icon: Brain },
+    { id: 'data' as const, label: 'Export / Import', icon: Database }
   ]
 
   return (
@@ -466,6 +468,13 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
           </div>
         </div>
       </div>
+
+      {/* Data Transfer Tab */}
+      {activeTab === 'data' && (
+        <div className="space-y-6">
+          <DataTransferPanel projectId={projectId} />
+        </div>
+      )}
 
     </div>
   )
