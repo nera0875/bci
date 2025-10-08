@@ -115,18 +115,18 @@ export default function ProjectGoalHeader({ projectId }: ProjectGoalHeaderProps)
           {/* Left: Project Name Card */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {/* Expand/Collapse Icon */}
-            <div className="p-2 rounded-lg bg-gray-100/80 group-hover:bg-gray-200 group-hover:shadow-sm transition-all duration-200">
+            <div className="p-2 rounded-lg bg-gray-900 group-hover:bg-gray-800 group-hover:shadow-sm transition-all duration-200">
               {isOpen ? (
-                <ChevronUp className="w-4 h-4 text-gray-700" />
+                <ChevronUp className="w-4 h-4 text-white" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-gray-700" />
+                <ChevronDown className="w-4 h-4 text-white" />
               )}
             </div>
 
             {/* Project Name Card */}
             <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-gray-50 to-gray-100/50 border border-gray-200/60 rounded-xl shadow-sm group-hover:shadow-md group-hover:border-gray-300/60 transition-all duration-200">
-              <div className="p-1.5 bg-white rounded-lg shadow-sm">
-                <Target className="w-4 h-4 text-blue-600" />
+              <div className="p-1.5 bg-gray-900 rounded-lg shadow-sm">
+                <Target className="w-4 h-4 text-white" />
               </div>
               <div className="flex flex-col items-start min-w-0">
                 <span className="text-sm font-semibold text-gray-900 truncate max-w-[300px]">
