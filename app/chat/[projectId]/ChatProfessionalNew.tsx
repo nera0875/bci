@@ -3,7 +3,7 @@
 import { useState, useEffect, use, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus, BookOpen, Trash2, Square, Edit2, Target
+  Send, Settings, ArrowLeft, DollarSign, Zap, MessageSquare, Plus, BookOpen, Trash2, Square, Edit2, Target, ChevronLeft
 } from 'lucide-react'
 import { isValidUUID } from '@/lib/utils/uuid'
 import ChatStream from '@/components/chat/ChatStream'
@@ -314,15 +314,19 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
       <div className="w-80 bg-[#F7F7F8] border-r border-[#E5E5E7] flex flex-col">
         {/* Header Sidebar */}
         <div className="p-4 border-b border-[#E5E5E7]">
-          <div className="flex items-center justify-between mb-4">
-            {/* Removed back button - single project mode */}
-          </div>
-          
-          <h2 className="font-semibold text-[#202123] mb-2">{project.name}</h2>
-          
+          <button
+            onClick={() => router.push('/projects')}
+            className="flex items-center gap-2 text-sm text-[#6E6E80] hover:text-[#202123] mb-3 transition-colors group"
+          >
+            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            Retour aux projets
+          </button>
+
+          <h2 className="font-semibold text-[#202123] mb-3">{project.name}</h2>
+
           <button
             onClick={createNewConversation}
-            className="w-full flex items-center gap-2 px-3 py-2 bg-[#202123] text-[#FFFFFF] rounded-lg hover:bg-[#202123]/90"
+            className="w-full flex items-center gap-2 px-3 py-2 bg-[#202123] text-[#FFFFFF] rounded-lg hover:bg-[#202123]/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Nouvelle Conversation
