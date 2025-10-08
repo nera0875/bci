@@ -63,6 +63,7 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
   // Memory Search Settings
   const [memorySearch, setMemorySearch] = useState({
     enabled: true,
+    embeddingsEnabled: false, // Feature flag for OpenAI embeddings
     similarityThreshold: 0.7, // 0.0 à 1.0
     maxResults: 5, // Nombre max de facts retournés
     minConfidence: 0.6 // Seuil minimum de confiance
@@ -354,6 +355,32 @@ export default function SettingsProV2({ projectId, projectName = 'Project' }: Se
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Active la recherche intelligente dans la mémoire en utilisant des embeddings vectoriels.
                 </p>
+              </div>
+
+              {/* Embeddings Toggle */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="text-purple-500" size={20} />
+                      <h3 className="text-lg font-semibold">OpenAI Embeddings</h3>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Génère des vecteurs sémantiques pour la recherche de similarité (requiert clé OpenAI)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={memorySearch.embeddingsEnabled}
+                    onCheckedChange={(checked) => setMemorySearch({ ...memorySearch, embeddingsEnabled: checked })}
+                  />
+                </div>
+                {!memorySearch.embeddingsEnabled && (
+                  <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-xs text-blue-800 dark:text-blue-200">
+                      ℹ️ Embeddings désactivés : Recherche basique uniquement. Activez pour améliorer la pertinence.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Similarity Threshold */}

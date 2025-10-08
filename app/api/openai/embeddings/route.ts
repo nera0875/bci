@@ -25,6 +25,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if embeddings are enabled globally via env
+    const globalEnabled = process.env.ENABLE_EMBEDDINGS === 'true'
+
+    // Check if embeddings are enabled for this project
+    let projectEnabled = false
+    if (projectId) {
+      const { data: project } = await (supabase as any)
+        .from('projects')
+        .select('settings')
+        .eq('id', projectId)
+        .single()
+
+      projectEnabled = project?.settings?.memorySearch?.embeddingsEnabled === true
+    }
+
+    const embeddingsEnabled = globalEnabled || projectEnabled
+
+    if (!embeddingsEnabled) {
+      console.log('⏭️ Embeddings disabled (global or project), returning null')
+      return NextResponse.json(
+        { embedding: null },
+        { headers: corsHeaders }
+      )
+    }
+
     // Get API key from project or environment
     let apiKey = process.env.OPENAI_API_KEY
 
