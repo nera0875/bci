@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, Edit2, FolderPlus, Sparkles, AlertCircle, ChevronRight } from 'lucide-react'
+import { Check, X, Edit2, FolderPlus, Lightbulb, AlertCircle, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -111,7 +111,7 @@ export default function AutoSuggestion({
   const renderRuleSuggestion = (s: RuleSuggestion) => (
     <>
       <div className="flex items-start gap-3">
-        <Sparkles size={20} className="text-gray-700 mt-0.5" />
+        <Lightbulb size={20} className="text-gray-700 dark:text-gray-400 mt-0.5" />
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-medium">Rule Suggestion</span>

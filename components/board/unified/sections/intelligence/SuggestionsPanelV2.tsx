@@ -5,9 +5,9 @@ import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import {
-  ChevronDown, ChevronRight, Edit2, Check, X, Sparkles,
+  ChevronDown, ChevronRight, Edit2, Check, X, Lightbulb,
   Shield, Database, TrendingUp, AlertTriangle, Info,
-  Zap, Target, Brain, FileText, Code, Eye, ChevronLeft
+  Zap, Target, Brain, FileText, Code, Eye, ChevronLeft, RefreshCw
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -363,9 +363,13 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
                 variant="outline"
                 onClick={() => handleRegenerate(suggestion)}
                 disabled={regenerating === suggestion.id}
-                className="text-purple-600 hover:text-purple-700"
+                className="text-gray-700 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
               >
-                <Sparkles className="w-4 h-4 mr-1" />
+                {regenerating === suggestion.id ? (
+                  <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                )}
                 {regenerating === suggestion.id ? 'Régénération...' : 'Régénérer'}
               </Button>
               <Button
@@ -561,7 +565,7 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
       <div className="px-6 py-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-purple-500" />
+            <Lightbulb className="w-5 h-5 text-gray-700 dark:text-gray-400" />
             Suggestions Intelligentes
           </h2>
           <div className="flex items-center gap-3">

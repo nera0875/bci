@@ -10,7 +10,7 @@ import { Highlight } from '@tiptap/extension-highlight'
 import {
   Bold, Italic, Strikethrough, Code, Heading1, Heading2, Heading3,
   List, ListOrdered, Quote, Undo, Redo, Palette, Highlighter,
-  Type, ChevronDown, Sparkles, RefreshCw, Settings2, Save, X
+  Type, ChevronDown, Wand2, RefreshCw, Settings2, Save, X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -423,7 +423,7 @@ Renvoie UNIQUEMENT le prompt amélioré.`)
               {improving ? (
                 <RefreshCw size={14} className="animate-spin" />
               ) : (
-                <Sparkles size={14} />
+                <Wand2 size={14} />
               )}
               {improving ? 'Amélioration...' : 'Améliorer avec IA'}
             </Button>

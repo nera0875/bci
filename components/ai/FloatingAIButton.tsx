@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Copy, X } from 'lucide-react'
+import { Wand2, Copy, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import MarkdownEditorPro from '@/components/editor/MarkdownEditorPro'
@@ -159,7 +159,7 @@ export default function FloatingAIButton({
           )}
           title="AI Text Assistant - Drag to move, Click to open"
         >
-          <Sparkles size={20} />
+          <Wand2 size={20} />
 
           {/* Glow effect when active */}
           {isActive && (
@@ -207,9 +207,12 @@ export default function FloatingAIButton({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      ✨ AI Text Assistant
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <Wand2 className="text-gray-700 dark:text-gray-400" size={20} />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        AI Text Assistant
+                      </h3>
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Améliorez votre texte sélectionné avec l'IA
                     </p>

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Bold, Italic, Code, List, ListOrdered, Heading1, Heading2,
-  Sparkles, RefreshCw, Eye, Edit3, Undo2, ChevronRight, X
+  Wand2, RefreshCw, Eye, Edit3, Undo2, ChevronRight, X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -245,7 +245,7 @@ Return ONLY the improved markdown content, nothing else.`
                   </>
                 ) : (
                   <>
-                    <Sparkles size={12} />
+                    <Wand2 size={12} />
                     <span>Sélection</span>
                   </>
                 )}
@@ -263,7 +263,7 @@ Return ONLY the improved markdown content, nothing else.`
                   </>
                 ) : (
                   <>
-                    <Sparkles size={12} />
+                    <Wand2 size={12} />
                     <span>Tout</span>
                   </>
                 )}
