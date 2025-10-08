@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Menu, Search,
   Bell, Sparkles, Database, Shield, TrendingUp,
   Layers, GitBranch, Activity, Target, Lightbulb,
-  DollarSign
+  DollarSign, Cpu
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -26,7 +26,7 @@ const sections = [
     id: 'intelligence' as Section,
     name: 'Intelligence',
     shortName: 'Intel',
-    icon: Sparkles,
+    icon: Cpu,
     color: 'from-gray-700 to-gray-900',
     bgColor: 'bg-gray-100 dark:bg-gray-800',
     borderColor: 'border-gray-400',
