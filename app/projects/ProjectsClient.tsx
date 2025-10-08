@@ -104,6 +104,15 @@ export default function ProjectsClient({ userId }: { userId: string }) {
           api_keys: {
             anthropic: anthropicKey,
             openai: openaiKey || null
+          },
+          settings: {
+            memorySearch: {
+              enabled: true,
+              embeddingsEnabled: false,
+              similarityThreshold: 0.7,
+              maxResults: 5,
+              minConfidence: 0.6
+            }
           }
         })
         .select()
