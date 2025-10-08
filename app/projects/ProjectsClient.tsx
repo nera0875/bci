@@ -374,7 +374,6 @@ export default function ProjectsClient({ userId }: { userId: string }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-6"
-            onClick={() => !creatingProject && setIsCreating(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -403,16 +402,17 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                   />
                 </div>
 
-                {/* Description */}
+                {/* Objectif (Goal) */}
                 <div>
                   <label className="block text-sm font-medium text-[#202123] mb-2">
-                    Description (optionnel)
+                    Objectif du projet *
                   </label>
                   <textarea
                     value={newProjectGoal}
                     onChange={(e) => setNewProjectGoal(e.target.value)}
-                    placeholder="Description courte..."
+                    placeholder="Ex: Trouver 10 vulnérabilités critiques dans l'application web..."
                     className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-[#202123] placeholder:text-[#6E6E80] focus:outline-none focus:ring-2 focus:ring-[#202123] focus:border-transparent resize-none h-20"
+                    required
                   />
                 </div>
 
@@ -470,7 +470,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                   {/* OpenAI API Key */}
                   <div>
                     <label className="block text-xs font-medium text-[#6E6E80] mb-2">
-                      Clé API OpenAI (optionnel)
+                      Clé API OpenAI (Embeddings) *
                     </label>
                     <div className="relative">
                       <input

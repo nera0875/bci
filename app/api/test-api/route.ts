@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       .eq('id', projectId)
       .single()
 
-    const anthropicApiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
+    const anthropicApiKey = project?.api_keys?.anthropic
     const customModel = project?.settings?.aiModel || 'claude-sonnet-4-5'
 
     console.log('API Key exists:', !!anthropicApiKey)
@@ -27,9 +27,7 @@ export async function POST(request: NextRequest) {
 
     if (!anthropicApiKey) {
       return NextResponse.json({
-        error: 'No API key found',
-        hasProjectKey: !!project?.api_keys?.anthropic,
-        hasEnvKey: !!process.env.ANTHROPIC_API_KEY
+        error: 'No Anthropic API key configured for this project'
       }, { status: 400 })
     }
 
