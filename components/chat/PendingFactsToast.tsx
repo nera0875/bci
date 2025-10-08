@@ -41,7 +41,7 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
 
     try {
       // 1. Récupérer pending_facts sélectionnés
-      const { data: pending } = await supabase
+      const { data: pending } = await (supabase as any)
         .from('pending_facts')
         .select('*')
         .in('id', Array.from(selected))
@@ -77,20 +77,20 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
       )
 
       // 3. Insert dans memory_facts avec embeddings
-      const { error: insertError } = await supabase
+      const { error: insertError } = await (supabase as any)
         .from('memory_facts')
         .insert(factsWithEmbeddings)
 
       if (insertError) throw insertError
 
       // 3. Update status pending_facts
-      await supabase
+      await (supabase as any)
         .from('pending_facts')
         .update({ status: 'approved', reviewed_at: new Date().toISOString() })
         .in('id', Array.from(selected))
 
       // 4. Track decision
-      await supabase.from('user_decisions').insert({
+      await (supabase as any).from('user_decisions').insert({
         project_id: projectId,
         decision_type: 'fact_validation',
         proposed_action: { facts: pending },
@@ -108,12 +108,12 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
 
   const handleRejectAll = async () => {
     try {
-      await supabase
+      await (supabase as any)
         .from('pending_facts')
         .update({ status: 'rejected', reviewed_at: new Date().toISOString() })
         .in('id', facts.map(f => f.id))
 
-      await supabase.from('user_decisions').insert({
+      await (supabase as any).from('user_decisions').insert({
         project_id: projectId,
         decision_type: 'fact_validation',
         proposed_action: { facts },

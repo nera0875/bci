@@ -43,13 +43,17 @@ export interface ChatMessage {
 export interface Project {
   id: string
   name: string
+  goal?: string
   description?: string
+  user_id?: string
   requests: HttpRequest[]
   tasks: Task[]
   vulnerabilities: VulnerabilityType[]
   chatHistory: ChatMessage[]
-  createdAt: string
-  updatedAt: string
+  created_at?: string
+  createdAt?: string
+  updated_at?: string
+  updatedAt?: string
 }
 
 export interface EmbeddingRule {

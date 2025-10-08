@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { ChevronDown, ChevronRight, Edit3, Settings } from 'lucide-react'
+import { ChevronDown, ChevronRight, Edit3, Settings, FileText } from 'lucide-react'
 
 interface TableDataItem {
   id: string
@@ -21,10 +21,16 @@ interface TableDataItem {
   [key: string]: unknown
 }
 
+interface SimpleRule {
+  id: string
+  name: string
+  [key: string]: unknown
+}
+
 interface TreeNode {
   id: string
   name: string
-  type: 'folder' | 'document'
+  type: 'folder' | 'document' | 'rule'
   section: string
   targetFolder?: string
   children?: TreeNode[]
@@ -33,6 +39,11 @@ interface TreeNode {
   color?: string
   position?: number
   parent_id?: string | null
+  metadata?: {
+    rules?: unknown[]
+    success_history?: number
+    [key: string]: unknown
+  }
 }
 
 interface TreeNodeComponentProps {
@@ -165,7 +176,7 @@ export function TreeNodeComponent({
               className="p-1 hover:bg-[#F7F7F8] rounded"
               title="Créer/Éditer Règle"
             >
-              <Rule className="w-3 h-3" />
+              <FileText className="w-3 h-3" />
             </button>
           ) : null}
         </div>

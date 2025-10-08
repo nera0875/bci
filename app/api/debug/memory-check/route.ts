@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     .eq('project_id', projectId)
 
   // Check pending_facts
-  const { data: pendingFacts, count: pendingCount } = await supabase
+  const { data: pendingFacts, count: pendingCount } = await (supabase as any)
     .from('pending_facts')
     .select('*', { count: 'exact' })
     .eq('project_id', projectId)

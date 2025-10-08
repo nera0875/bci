@@ -14,7 +14,7 @@ const StreamingMessage = React.memo(({ content, isComplete }: StreamingMessagePr
   const [displayedWords, setDisplayedWords] = useState<string[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const wordsRef = useRef<string[]>([])
-  const intervalRef = useRef<NodeJS.Timeout>()
+  const intervalRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   useEffect(() => {
     // Parse content into words

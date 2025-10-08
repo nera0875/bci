@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { createServerClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 // Add CORS headers for cross-origin requests
 const corsHeaders = {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     let apiKey = process.env.OPENAI_API_KEY
 
     if (projectId) {
-      const supabase = createServerClient()
+      // Use existing supabase client
       const { data: project } = await (supabase as any)
         .from('projects')
         .select('api_keys')

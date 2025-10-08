@@ -459,7 +459,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setFacts(data || [])
+      setFacts((data as any) || [])
     } catch (error: any) {
       console.error('Error loading facts:', error)
       toast.error('Failed to load facts')

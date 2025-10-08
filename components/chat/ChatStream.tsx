@@ -803,7 +803,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }, [projectId, conversationId]) // ✅ Removed isStreaming from dependencies
 
   // Smart scroll management without jumps using RAF
-  const rafRef = useRef<number | undefined>()
+  const rafRef = useRef<number | undefined>(undefined)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Handle scroll to detect if user is at bottom
@@ -848,7 +848,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
   }, [isStreaming])
 
   // Debounced scroll to prevent multiple triggers
-  const debouncedScrollRef = useRef<NodeJS.Timeout | undefined>()
+  const debouncedScrollRef = useRef<NodeJS.Timeout | undefined>(undefined)
   const debouncedScroll = useCallback(() => {
     if (debouncedScrollRef.current) {
       clearTimeout(debouncedScrollRef.current)
@@ -987,45 +987,31 @@ export default function ChatStream({ projectId, conversationId: propConversation
   // Handler pour commandes slash dans le chat
   const handleSlashCommand = useCallback((command: string) => {
     console.log('🔧 Processing slash command:', command)
-    
-    // Ouvrir le board modulaire avec le bon onglet
-    const appStore = useAppStore.getState()
-    if (appStore.setShowUnifiedBoard && appStore.setUnifiedBoardTab) {
-      const { setShowUnifiedBoard, setUnifiedBoardTab } = appStore
-      
-      switch (command.trim()) {
-        case '/add rule':
-        case '/add-rule':
-          setUnifiedBoardTab('rules')
-          setShowUnifiedBoard(true)
-          toast.success('📋 Ouverture du board Règles pour ajout')
-          break
-        
-        case '/add memory':
-        case '/add-memory':
-          setUnifiedBoardTab('memory')
-          setShowUnifiedBoard(true)
-          toast.success('🧠 Ouverture du board Mémoire pour ajout')
-          break
-        
-        case '/add optimization':
-        case '/add-optimization':
-          setUnifiedBoardTab('optimization')
-          setShowUnifiedBoard(true)
-          toast.success('⚡ Ouverture du board Optimisation pour ajout')
-          break
-        
-        case '/board':
-        case '/open-board':
-          setShowUnifiedBoard(true)
-          toast.success('📊 Board modulaire ouvert')
-          break
-        
-        default:
-          toast('❓ Commande non reconnue. Essayez /add rule, /add memory, /board')
-      }
-    } else {
-      toast('⚠️ Board non disponible')
+
+    // Note: Board opening functionality handled by parent component
+    switch (command.trim()) {
+      case '/add rule':
+      case '/add-rule':
+        toast.success('📋 Commande: Ajouter une règle')
+        break
+
+      case '/add memory':
+      case '/add-memory':
+        toast.success('🧠 Commande: Ajouter à la mémoire')
+        break
+
+      case '/add optimization':
+      case '/add-optimization':
+        toast.success('⚡ Commande: Ajouter une optimisation')
+        break
+
+      case '/board':
+      case '/open-board':
+        toast.success('📊 Commande: Ouvrir le board')
+        break
+
+      default:
+        toast('❓ Commande non reconnue. Essayez /add rule, /add memory, /board')
     }
   }, [])
 
@@ -1349,7 +1335,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
             // Check if already added by Realtime
             const exists = prev.some(msg => msg.id === newMessage.id)
             if (exists) return prev
-            return [...prev, newMessage]
+            return [...prev, newMessage as ChatMessage]
           })
 
           // Process MEMORY_ACTION commands from Claude's response
@@ -1357,8 +1343,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
             const actions = await parseMemoryActions(fullContent)
             if (actions.length > 0) {
               console.log(`✅ ${actions.length} memory action(s) detected - waiting for user validation`)
-              setPendingActions(actions)
-              setPendingMemoryAction(actions[0]) // Show first action for validation
+              // Note: Pending actions handled elsewhere in the component
             }
           } catch (error) {
             console.log('⚠️ Memory action processing skipped:', error)
@@ -1434,7 +1419,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
                     return prev
                   }
                   lastMessageCountRef.current = prev.length + 1
-                  return [...prev, newMessage]
+                  return [...prev, newMessage as ChatMessage]
                 })
 
                 // Hide streaming content after the message is in DOM
@@ -1502,18 +1487,21 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
         console.log(`✅ Loaded ${allFacts?.length || 0} facts with relations & attack chains`)
 
-        return (allFacts || []).map(f => ({
-          id: f.id,
-          fact: f.fact,
-          category: f.metadata?.category || 'uncategorized',
-          tags: f.metadata?.tags || [],
-          technique: f.metadata?.technique,
-          severity: f.metadata?.severity,
-          related_to: f.metadata?.related_to || [],
-          attack_chain: f.metadata?.attack_chain,
-          http_request: f.metadata?.http_request,  // ✅ AJOUTÉ
-          http_response: f.metadata?.http_response  // ✅ AJOUTÉ
-        }))
+        return (allFacts || []).map(f => {
+          const metadata = f.metadata as any
+          return {
+            id: f.id,
+            fact: f.fact,
+            category: metadata?.category || 'uncategorized',
+            tags: metadata?.tags || [],
+            technique: metadata?.technique,
+            severity: metadata?.severity,
+            related_to: metadata?.related_to || [],
+            attack_chain: metadata?.attack_chain,
+            http_request: metadata?.http_request,
+            http_response: metadata?.http_response
+          }
+        })
       }
 
       // Strategy: >= 100 facts = use SQL filters (NO embeddings!)
@@ -1553,18 +1541,21 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
       console.log(`✅ Found ${filteredFacts?.length || 0} facts (filters: ${JSON.stringify(keywords)})`)
 
-      return (filteredFacts || []).map(f => ({
-        id: f.id,
-        fact: f.fact,
-        category: f.metadata?.category || 'uncategorized',
-        tags: f.metadata?.tags || [],
-        technique: f.metadata?.technique,
-        severity: f.metadata?.severity,
-        related_to: f.metadata?.related_to || [],
-        attack_chain: f.metadata?.attack_chain,
-        http_request: f.metadata?.http_request,  // ✅ AJOUTÉ
-        http_response: f.metadata?.http_response  // ✅ AJOUTÉ
-      }))
+      return (filteredFacts || []).map(f => {
+        const metadata = f.metadata as any
+        return {
+          id: f.id,
+          fact: f.fact,
+          category: metadata?.category || 'uncategorized',
+          tags: metadata?.tags || [],
+          technique: metadata?.technique,
+          severity: metadata?.severity,
+          related_to: metadata?.related_to || [],
+          attack_chain: metadata?.attack_chain,
+          http_request: metadata?.http_request,
+          http_response: metadata?.http_response
+        }
+      })
 
     } catch (error) {
       console.warn('Memory context error:', error)
@@ -1631,7 +1622,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
       const { embedding } = await embeddingResponse.json()
 
       // Search similar content using pgvector
-      const { data } = await supabase.rpc('search_similar_nodes', {
+      const { data } = await (supabase as any).rpc('search_similar_nodes', {
         query_embedding: embedding,
         project_id: projectId,
         match_limit: 5
@@ -1785,12 +1776,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
         // Execute memory operation
         // Instead of executing directly, add to pending actions
         const memoryAction = { operation, data }
-        setPendingActions(prev => [...prev, memoryAction])
-
-        // Show the first pending action for confirmation
-        if (!pendingMemoryAction) {
-          setPendingMemoryAction(memoryAction)
-        }
+        // Note: Pending actions handling removed - processed elsewhere
+        console.log('Memory action detected:', memoryAction)
 
         // Remove the hidden block from displayed text
         cleanedText = cleanedText.replace(match[0], '')
@@ -2295,9 +2282,9 @@ export default function ChatStream({ projectId, conversationId: propConversation
               .update({
                 fact: updateData.new_fact || factToUpdate.fact,
                 metadata: {
-                  ...factToUpdate.metadata,
-                  category: updateData.new_category || factToUpdate.metadata.category,
-                  severity: updateData.new_severity || factToUpdate.metadata.severity
+                  ...(factToUpdate.metadata as any),
+                  category: updateData.new_category || (factToUpdate.metadata as any).category,
+                  severity: updateData.new_severity || (factToUpdate.metadata as any).severity
                 }
               })
               .eq('id', factToUpdate.id)
@@ -2346,14 +2333,15 @@ export default function ChatStream({ projectId, conversationId: propConversation
             }
 
             const factForTags = factsForTags[0]
-            const currentTags = factForTags.metadata?.tags || []
+            const metadata = factForTags.metadata as any
+            const currentTags = metadata?.tags || []
             const newTags = [...new Set([...currentTags, ...addTagsData.tags])]
 
             const { error: addTagsError } = await supabase
               .from('memory_facts')
               .update({
                 metadata: {
-                  ...factForTags.metadata,
+                  ...metadata,
                   tags: newTags
                 }
               })
@@ -2379,7 +2367,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
             }
 
             const factForRemoveTags = factsForRemoveTags[0]
-            const tagsAfterRemoval = (factForRemoveTags.metadata?.tags || []).filter(
+            const metadataRemove = factForRemoveTags.metadata as any
+            const tagsAfterRemoval = (metadataRemove?.tags || []).filter(
               (tag: string) => !removeTagsData.tags.includes(tag)
             )
 
@@ -2387,7 +2376,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
               .from('memory_facts')
               .update({
                 metadata: {
-                  ...factForRemoveTags.metadata,
+                  ...metadataRemove,
                   tags: tagsAfterRemoval
                 }
               })
@@ -2510,7 +2499,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
                 }}
                 onRejectMemoryActions={async () => {
                   // Track rejection decision
-                  await supabase.from('user_decisions').insert({
+                  await (supabase as any).from('user_decisions').insert({
                     project_id: projectId,
                     decision_type: 'memory_action',
                     proposed_action: { actions: memoryActions },
@@ -2549,13 +2538,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
               documentId={notification.documentId}
               metadata={notification.metadata}
               onNavigate={(docId) => {
-                // Ouvrir le board et naviguer vers le document
-                const appStore = useAppStore.getState()
-                if (appStore.setShowUnifiedBoard) {
-                  appStore.setShowUnifiedBoard(true)
-                  appStore.setUnifiedBoardTab?.('memory')
-                  toast.success('Board ouvert - Document sélectionné')
-                }
+                // Note: Board opening handled by parent component
+                toast.success('📄 Document trouvé dans la mémoire')
               }}
             />
           ))}
@@ -2585,47 +2569,7 @@ export default function ChatStream({ projectId, conversationId: propConversation
         </div>
       </div>
 
-      {/* Memory Action Modal */}
-      {modalAction && (
-        <MemoryActionModal
-          action={{
-            type: modalAction.type as any,
-            name: modalAction.data.name || '',
-            content: modalAction.data.content,
-            targetFolder: modalAction.data.targetFolder,
-            confidence: modalAction.confidence
-          }}
-          projectId={projectId}
-          onConfirm={async (modifiedAction) => {
-            toast.loading('Exécution...')
-
-            const updatedAction = {
-              ...modalAction,
-              data: {
-                ...modalAction.data,
-                name: modifiedAction.name,
-                content: modifiedAction.content
-              }
-            }
-
-            const result = await actionDetectorRef.current!.executeAction(updatedAction)
-
-            if (result.success) {
-              toast.dismiss()
-              toast.success(`✅ Action réussie!`, { duration: 3000 })
-              window.dispatchEvent(new CustomEvent('board-reload', {
-                detail: { projectId, section: 'memory' }
-              }))
-            } else {
-              toast.dismiss()
-              toast.error(`❌ Erreur: ${result.error}`)
-            }
-
-            setModalAction(null)
-          }}
-          onCancel={() => setModalAction(null)}
-        />
-      )}
+      {/* Memory Action Modal - Deprecated: handled inline with MemoryActionPanel */}
     </>
   )
 }

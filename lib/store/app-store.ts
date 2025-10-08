@@ -28,7 +28,7 @@ interface AppState {
   loadProjects: () => Promise<void>
   createProject: (name: string, description?: string) => Promise<any>
   selectProject: (projectId: string) => Promise<void>
-  deleteProject: (projectId: string) => Promise<void>
+  deleteProject: (projectId: string) => Promise<boolean>
   updateCurrentProject: (updates: Partial<Project>) => Promise<void>
 
   addRequests: (requests: HttpRequest[]) => void

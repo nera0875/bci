@@ -11,10 +11,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Allow external access for debugging and browserbase
-  experimental: {
-    allowedDevOrigins: ['84.247.131.60:3000', '84.247.131.60'],
-  },
   // Allow cross-origin access
   async headers() {
     return [

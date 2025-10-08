@@ -40,7 +40,7 @@ export class OptimizationEngine {
    */
   async loadProjectContext(): Promise<void> {
     try {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('project_context')
         .select('*')
         .eq('project_id', this.projectId)
@@ -407,13 +407,14 @@ export class OptimizationEngine {
         }
 
         // Check for unused rules
-        if (rule.last_used && this.daysSince(rule.last_used) > 30) {
+        const ruleAny = rule as any
+        if (ruleAny.last_used && this.daysSince(ruleAny.last_used) > 30) {
           improvements.push({
             ruleId: rule.id,
             ruleName: rule.name,
             confidence: 0.7,
             impact: 'low',
-            reason: `This rule hasn't been used in ${this.daysSince(rule.last_used)} days. Consider archiving or updating.`,
+            reason: `This rule hasn't been used in ${this.daysSince(ruleAny.last_used)} days. Consider archiving or updating.`,
             suggestedChanges: {
               action: 'archive'
             }
@@ -421,13 +422,14 @@ export class OptimizationEngine {
         }
 
         // Check for performance issues
-        if (rule.metadata?.avg_execution_time > 1000) {
+        const metadata = rule.metadata as any
+        if (metadata?.avg_execution_time > 1000) {
           improvements.push({
             ruleId: rule.id,
             ruleName: rule.name,
             confidence: 0.85,
             impact: 'high',
-            reason: `This rule takes ${rule.metadata.avg_execution_time}ms on average. Consider optimizing the action.`,
+            reason: `This rule takes ${metadata.avg_execution_time}ms on average. Consider optimizing the action.`,
             suggestedChanges: {
               optimize_action: true,
               suggested_optimization: this.suggestActionOptimization(rule.action)
@@ -880,7 +882,7 @@ export class OptimizationEngine {
       .limit(50)
 
     const testedEndpoints = new Set(
-      existingFacts?.map(f => f.metadata?.endpoint).filter(Boolean) || []
+      existingFacts?.map(f => (f.metadata as any)?.endpoint).filter(Boolean) || []
     )
 
     // Payment Manipulation Tests
@@ -1031,7 +1033,7 @@ export class OptimizationEngine {
             title: '🔓 Test Privilege Escalation via Parameter',
             description: `Try modifying role/permission parameters to escalate privileges`,
             category: 'privilege_escalation',
-            impact: 'critical',
+            impact: 'high',
             data: {
               test_type: 'privilege_escalation',
               endpoint: url,

@@ -48,7 +48,7 @@ export function ProjectContextSettings({ projectId }: ProjectContextSettingsProp
   const loadContext = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('project_context')
         .select('*')
         .eq('project_id', projectId)
@@ -79,7 +79,7 @@ export function ProjectContextSettings({ projectId }: ProjectContextSettingsProp
     try {
       setSaving(true)
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('project_context')
         .upsert({
           project_id: projectId,

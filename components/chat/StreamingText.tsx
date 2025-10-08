@@ -12,7 +12,7 @@ export default function StreamingText({ content, isComplete }: StreamingTextProp
   const [displayedContent, setDisplayedContent] = useState('')
   const [currentWordIndex, setCurrentWordIndex] = useState(0)
   const wordsRef = useRef<string[]>([])
-  const animationFrameRef = useRef<number>()
+  const animationFrameRef = useRef<number | undefined>(undefined)
   const lastUpdateRef = useRef<number>(0)
 
   useEffect(() => {

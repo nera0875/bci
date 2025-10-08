@@ -76,7 +76,7 @@ export default function TestMatrixView({ projectId }: TestMatrixViewProps) {
 
       if (error) throw error
 
-      setTestResults(data || [])
+      setTestResults((data as any) || [])
 
       // Extract unique endpoints
       const uniqueEndpoints = [...new Set(data?.map(t => t.endpoint) || [])]
@@ -92,7 +92,7 @@ export default function TestMatrixView({ projectId }: TestMatrixViewProps) {
 
   const loadStats = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('get_test_matrix_stats', { filter_project_id: projectId })
 
       if (error) throw error

@@ -15,7 +15,7 @@ export default function SmoothTypewriter({
   speed = 100
 }: SmoothTypewriterProps) {
   const [displayedContent, setDisplayedContent] = useState('')
-  const rafRef = useRef<number>()
+  const rafRef = useRef<number | undefined>(undefined)
   const indexRef = useRef(0)
   const lastTimeRef = useRef(0)
 
