@@ -107,44 +107,57 @@ export default function ProjectGoalHeader({ projectId }: ProjectGoalHeaderProps)
     <Collapsible
       open={isOpen}
       onOpenChange={setIsOpen}
-      className="border-b border-[#E5E5E7] bg-white"
+      className="border-b border-gray-200/80 bg-white"
     >
-      {/* Compact Header */}
+      {/* Modern Header - ChatGPT Style */}
       <CollapsibleTrigger className="w-full group">
-        <div className="flex items-center justify-between px-6 py-3 hover:bg-gray-50/50 transition-colors">
+        <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50/70 transition-all duration-200">
+          {/* Left: Project Name Card */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-100 rounded-lg group-hover:bg-gray-200 transition-colors">
+            {/* Expand/Collapse Button */}
+            <button className="p-2 rounded-lg bg-gray-100/80 hover:bg-gray-200 group-hover:shadow-sm transition-all duration-200">
               {isOpen ? (
-                <ChevronUp className="w-3.5 h-3.5 text-gray-600" />
+                <ChevronUp className="w-4 h-4 text-gray-700" />
               ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-gray-600" />
+                <ChevronDown className="w-4 h-4 text-gray-700" />
               )}
-              <Target className="w-3.5 h-3.5 text-gray-700" />
-            </div>
-            <div className="flex flex-col items-start">
-              <span className="text-sm font-semibold text-gray-900 truncate">
-                {progress.project_name}
-              </span>
-              <span className="text-xs text-gray-500">
-                {progress.facts_validated} facts validés
-              </span>
+            </button>
+
+            {/* Project Name Card */}
+            <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-gray-50 to-gray-100/50 border border-gray-200/60 rounded-xl shadow-sm group-hover:shadow-md group-hover:border-gray-300/60 transition-all duration-200">
+              <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                <Target className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="flex flex-col items-start min-w-0">
+                <span className="text-sm font-semibold text-gray-900 truncate max-w-[300px]">
+                  {progress.project_name}
+                </span>
+                <span className="text-xs text-gray-500 font-medium">
+                  {progress.facts_validated} facts • {progress.total_points} pts
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Mini Progress Indicator */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={cn("h-full transition-all duration-500", getProgressColor())}
-                style={{ width: `${progress.percentage}%` }}
-              />
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-bold text-gray-900 tabular-nums">
-                {progress.percentage}%
+          {/* Right: Progress Indicator */}
+          <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+            {/* Progress Bar */}
+            <div className="flex items-center gap-3">
+              <div className="w-40 h-2.5 bg-gray-100 rounded-full overflow-hidden shadow-inner">
+                <div
+                  className={cn(
+                    "h-full transition-all duration-500 shadow-sm",
+                    getProgressColor()
+                  )}
+                  style={{ width: `${progress.percentage}%` }}
+                />
               </div>
-              <div className="text-xs text-gray-500 tabular-nums">
-                {progress.total_points}/{progress.target_points}
+
+              {/* Stats Badge */}
+              <div className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg shadow-sm group-hover:shadow transition-shadow">
+                <div className="text-sm font-bold text-gray-900 tabular-nums">
+                  {progress.percentage}%
+                </div>
               </div>
             </div>
           </div>
