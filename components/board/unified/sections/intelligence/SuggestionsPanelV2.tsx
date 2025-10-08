@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import {
   ChevronDown, ChevronRight, Edit2, Check, X, Sparkles,
   Shield, Database, TrendingUp, AlertTriangle, Info,
-  Zap, Target, Brain, FileText, Code, Eye
+  Zap, Target, Brain, FileText, Code, Eye, ChevronLeft
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
 interface Suggestion {
   id: string
   project_id: string
-  type: 'storage' | 'rule' | 'improvement' | 'pattern'
+  type: 'rule' | 'pattern' // OPTIMIZED: only 2 types (storage/improvement disabled)
   status: 'pending' | 'accepted' | 'rejected'
   suggestion: any
   confidence: number
@@ -33,15 +33,8 @@ interface SuggestionsPanelV2Props {
   projectId: string
 }
 
+// OPTIMIZED: Only 'rule' and 'pattern' types enabled (storage/improvement disabled)
 const typeConfig = {
-  storage: {
-    icon: Database,
-    color: 'from-blue-500 to-blue-600',
-    bgColor: 'bg-blue-50 dark:bg-blue-950/20',
-    borderColor: 'border-blue-200 dark:border-blue-800',
-    label: 'Storage',
-    emoji: '💾'
-  },
   rule: {
     icon: Shield,
     color: 'from-green-500 to-green-600',
@@ -49,14 +42,6 @@ const typeConfig = {
     borderColor: 'border-green-200 dark:border-green-800',
     label: 'Rule',
     emoji: '🛡️'
-  },
-  improvement: {
-    icon: Sparkles,
-    color: 'from-purple-500 to-purple-600',
-    bgColor: 'bg-purple-50 dark:bg-purple-950/20',
-    borderColor: 'border-purple-200 dark:border-purple-800',
-    label: 'Improvement',
-    emoji: '✨'
   },
   pattern: {
     icon: Brain,
@@ -72,15 +57,20 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected'>('pending')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'storage' | 'rule' | 'improvement' | 'pattern'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'rule' | 'pattern'>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingSuggestion, setEditingSuggestion] = useState<Suggestion | null>(null)
   const [editedData, setEditedData] = useState<any>({})
   const [editMode, setEditMode] = useState<'form' | 'json'>('form')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [regenerating, setRegenerating] = useState<string | null>(null)
+
+  const ITEMS_PER_PAGE = 10
 
   useEffect(() => {
     loadSuggestions()
+    setCurrentPage(1) // Reset to page 1 when filters change
   }, [projectId, filter, typeFilter])
 
   const loadSuggestions = async () => {
@@ -152,14 +142,6 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
 
     try {
       switch (suggestion.type) {
-        case 'storage':
-          // ❌ TODO: Migrer vers memory_facts au lieu de memory_nodes
-          // L'ancien système memory_nodes a été supprimé. Ce cas doit être réimplémenté
-          // pour créer des facts dans memory_facts au lieu de documents dans memory_nodes.
-          toast.error('Type "storage" non supporté - ancien système supprimé')
-          console.warn('Storage suggestion skipped - old memory_nodes system removed')
-          break
-
         case 'rule':
           await supabase.from('rules').insert({
             project_id: projectId,
@@ -184,6 +166,12 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
           })
           toast.success('🎯 Pattern enregistré!')
           break
+
+        default:
+          // storage and improvement types are disabled
+          console.warn(`Suggestion type "${suggestion.type}" is disabled`)
+          toast.error(`Type "${suggestion.type}" non supporté`)
+          break
       }
     } catch (error) {
       console.error('Error executing suggestion:', error)
@@ -202,6 +190,50 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
     if (!editingSuggestion) return
     await handleDecision(editingSuggestion.id, 'accept', editedData)
     setEditDialogOpen(false)
+  }
+
+  const handleRegenerate = async (suggestion: Suggestion) => {
+    try {
+      setRegenerating(suggestion.id)
+
+      // Delete current suggestion
+      await supabase
+        .from('suggestions_queue')
+        .delete()
+        .eq('id', suggestion.id)
+
+      // Generate variation (this would ideally call an AI endpoint)
+      // For now, we'll create a placeholder variation
+      const variation = {
+        ...suggestion.suggestion,
+        title: `${suggestion.suggestion.title} (Variation)`,
+        description: `Alternative approach: ${suggestion.suggestion.description}`
+      }
+
+      // Insert variation
+      await supabase
+        .from('suggestions_queue')
+        .insert({
+          project_id: projectId,
+          type: suggestion.type,
+          confidence: suggestion.confidence,
+          suggestion: variation,
+          metadata: {
+            ...suggestion.metadata,
+            regenerated_from: suggestion.id,
+            generation_count: (suggestion.metadata?.generation_count || 0) + 1
+          },
+          status: 'pending'
+        })
+
+      toast.success('🔄 Suggestion régénérée !')
+      await loadSuggestions()
+    } catch (error) {
+      console.error('Error regenerating:', error)
+      toast.error('Erreur régénération')
+    } finally {
+      setRegenerating(null)
+    }
   }
 
   const renderSuggestionCard = (suggestion: Suggestion) => {
@@ -303,8 +335,6 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
                 {/* Render based on type */}
                 {suggestion.type === 'pattern' && renderPatternDetails(suggestion)}
                 {suggestion.type === 'rule' && renderRuleDetails(suggestion)}
-                {suggestion.type === 'storage' && renderStorageDetails(suggestion)}
-                {suggestion.type === 'improvement' && renderImprovementDetails(suggestion)}
               </motion.div>
             )}
           </AnimatePresence>
@@ -327,6 +357,16 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
               >
                 <Edit2 className="w-4 h-4 mr-1" />
                 Modifier
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleRegenerate(suggestion)}
+                disabled={regenerating === suggestion.id}
+                className="text-purple-600 hover:text-purple-700"
+              >
+                <Sparkles className="w-4 h-4 mr-1" />
+                {regenerating === suggestion.id ? 'Régénération...' : 'Régénérer'}
               </Button>
               <Button
                 size="sm"
@@ -501,6 +541,12 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
     )
   }
 
+  // Pagination calculations
+  const totalPages = Math.ceil(suggestions.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const paginatedSuggestions = suggestions.slice(startIndex, endIndex)
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -518,10 +564,37 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
             <Sparkles className="w-5 h-5 text-purple-500" />
             Suggestions Intelligentes
           </h2>
-          <Badge variant="outline" className="text-sm">
-            {suggestions.filter(s => s.status === 'pending').length} en attente
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-sm font-semibold",
+                suggestions.filter(s => s.status === 'pending').length >= 5
+                  ? "border-red-500 text-red-600 dark:text-red-400"
+                  : "border-blue-500 text-blue-600"
+              )}
+            >
+              {suggestions.filter(s => s.status === 'pending').length} / 5 pending
+            </Badge>
+          </div>
         </div>
+
+        {/* Pause message if 5/5 */}
+        {suggestions.filter(s => s.status === 'pending').length >= 5 && (
+          <div className="mb-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-orange-900 dark:text-orange-100 mb-1">
+                  ⚠️ System Paused (5/5 pending)
+                </h3>
+                <p className="text-sm text-orange-700 dark:text-orange-300">
+                  Review and accept/reject existing suggestions before getting new ones. This prevents suggestion spam and ensures quality.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Type Filter Pills */}
         <div className="flex gap-2 flex-wrap">
@@ -579,9 +652,47 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
             <p>Aucune suggestion disponible</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {suggestions.map(renderSuggestionCard)}
-          </div>
+          <>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {paginatedSuggestions.map(renderSuggestionCard)}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6 px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Précédent
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    Page {currentPage} sur {totalPages}
+                  </span>
+                  <Badge variant="outline" className="text-xs">
+                    {suggestions.length} suggestions
+                  </Badge>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="gap-1"
+                >
+                  Suivant
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

@@ -17,6 +17,10 @@ import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } 
 import { CSS } from '@dnd-kit/utilities'
 import { CategoryPanel, type Category, TagManagementPanel, type TagTemplate } from '@/components/shared'
 import { TagPicker } from '@/components/memory/TagPicker'
+import { HttpRequestViewer } from '@/components/memory/HttpRequestViewer'
+import { BurpRequestPaster } from '@/components/memory/BurpRequestPaster'
+import { FactRelationPicker } from '@/components/memory/FactRelationPicker'
+import type { HttpRequestMetadata, HttpResponseMetadata, FactRelation } from '@/lib/types/http-metadata'
 
 interface Fact {
   id: string
@@ -360,6 +364,16 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   // Show/hide uncategorized facts
   const [showUncategorized, setShowUncategorized] = useState(true)
 
+  // Side panel tabs
+  const [activeTab, setActiveTab] = useState<'details' | 'http'>('details')
+
+  // HTTP Request state
+  const [editedHttpRequest, setEditedHttpRequest] = useState<HttpRequestMetadata | null>(null)
+  const [editedHttpResponse, setEditedHttpResponse] = useState<HttpResponseMetadata | null>(null)
+
+  // Relations state
+  const [editedRelations, setEditedRelations] = useState<FactRelation[]>([])
+
   // Color classes mapping - DARK & BOLD pour meilleure visibilité
   const TAG_COLORS: Record<string, {bg: string, text: string, border: string}> = {
     blue: { bg: 'bg-blue-500/20 dark:bg-blue-500/30', text: 'text-blue-800 dark:text-blue-200 font-semibold', border: 'border-blue-500/40' },
@@ -531,6 +545,22 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     setCustomCategories(categories)
   }
 
+  // Helper to reset all fact editor states
+  const resetFactEditor = () => {
+    setSelectedFact(null)
+    setEditedFact('')
+    setEditedType('general')
+    setEditedTechnique('')
+    setEditedSeverity('')
+    setEditedCategory('')
+    setEditedTags([])
+    setEditedHttpRequest(null)
+    setEditedHttpResponse(null)
+    setEditedRelations([])
+    setActiveTab('details')
+    setIsEditing(false)
+  }
+
   const handleCreateNewFact = () => {
     const newFact: Fact = {
       id: `temp_${Date.now()}`,
@@ -550,6 +580,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     setEditedSeverity('')
     setEditedCategory('')
     setEditedTags([])
+    setEditedHttpRequest(null)  // ✅ Reset HTTP request
+    setEditedHttpResponse(null) // ✅ Reset HTTP response
+    setActiveTab('details')     // ✅ Back to Details tab
     setIsEditing(true)
   }
 
@@ -694,6 +727,17 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     setEditedSeverity(fact.metadata.severity || '')
     setEditedCategory(fact.metadata.category || '')
     setEditedTags(fact.metadata.tags || [])
+    setEditedHttpRequest((fact.metadata as any).http_request || null)
+    setEditedHttpResponse((fact.metadata as any).http_response || null)
+    setEditedRelations((fact.metadata as any).related_to || [])
+
+    // Auto-switch to HTTP tab if HTTP request exists
+    if ((fact.metadata as any).http_request) {
+      setActiveTab('http')
+    } else {
+      setActiveTab('details')
+    }
+
     setIsEditing(false)
   }
 
@@ -714,8 +758,11 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
           technique: editedTechnique || null,
           severity: editedSeverity || null,
           category: editedCategory || null,
-          tags: editedTags
-        }
+          tags: editedTags,
+          ...(editedHttpRequest && { http_request: editedHttpRequest }),
+          ...(editedHttpResponse && { http_response: editedHttpResponse }),
+          ...(editedRelations.length > 0 && { related_to: editedRelations })
+        } as any
       }
 
       // Check if it's a new fact (temp ID)
@@ -768,8 +815,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
         toast.success('Fact updated successfully')
       }
 
-      setSelectedFact(null)
-      setIsEditing(false)
+      resetFactEditor()
     } catch (error: any) {
       console.error('Error saving fact:', error)
       toast.error('Failed to save fact')
@@ -789,7 +835,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
       if (error) throw error
 
       setFacts(facts.filter(f => f.id !== selectedFact.id))
-      setSelectedFact(null)
+      resetFactEditor()
       toast.success('Fact deleted')
     } catch (error: any) {
       console.error('Error deleting fact:', error)
@@ -1077,7 +1123,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   return (
     <div className="h-full flex bg-gray-50 dark:bg-gray-950">
       {/* Main List */}
-      <div className={`flex-1 flex flex-col ${selectedFact ? 'mr-[500px]' : ''} transition-all duration-300`}>
+      <div className={`flex-1 flex flex-col ${selectedFact ? 'mr-[600px]' : ''} transition-all duration-300`}>
         {/* Header */}
         <div className="px-6 py-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
           <div className="flex justify-between items-center mb-4">
@@ -1305,7 +1351,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
       {/* Side Panel */}
       {selectedFact && (
-        <div className="fixed right-0 top-0 h-full w-[500px] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col z-50">
+        <div className="fixed right-0 top-0 h-full w-[600px] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col z-50">
           {/* Panel Header */}
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -1316,13 +1362,44 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               )}
               Fact Details
             </h2>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedFact(null)}>
+            <Button variant="ghost" size="sm" onClick={resetFactEditor}>
               <X className="w-4 h-4" />
             </Button>
           </div>
 
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 dark:border-gray-800">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'details'
+                  ? 'text-purple-600 dark:text-purple-400 border-b-2 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-900/10'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              📝 Details
+            </button>
+            <button
+              onClick={() => setActiveTab('http')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'http'
+                  ? 'text-purple-600 dark:text-purple-400 border-b-2 border-purple-600 dark:border-purple-400 bg-purple-50/50 dark:bg-purple-900/10'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              🌐 HTTP Request
+              {editedHttpRequest && (
+                <Badge className="ml-2 bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30">
+                  ✓
+                </Badge>
+              )}
+            </button>
+          </div>
+
           {/* Panel Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {activeTab === 'details' && (
+              <>
             {/* Fact Content */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1438,6 +1515,17 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               />
             </div>
 
+            {/* Relations */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+              <FactRelationPicker
+                projectId={projectId}
+                currentFactId={selectedFact.id}
+                relations={editedRelations}
+                onChange={setEditedRelations}
+                allFacts={facts}
+              />
+            </div>
+
             {/* Metadata */}
             <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
@@ -1449,6 +1537,47 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 <span>Updated: {new Date(selectedFact.updated_at).toLocaleString()}</span>
               </div>
             </div>
+            </>
+            )}
+
+            {/* HTTP Request Tab */}
+            {activeTab === 'http' && (
+              <div className="space-y-4">
+                {editedHttpRequest ? (
+                  <>
+                    {/* Display existing HTTP request */}
+                    <HttpRequestViewer
+                      request={editedHttpRequest}
+                      response={editedHttpResponse}
+                    />
+
+                    {/* Remove button */}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditedHttpRequest(null)
+                        setEditedHttpResponse(null)
+                        toast.success('HTTP request removed')
+                      }}
+                      className="w-full text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Remove HTTP Request
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {/* Burp Request Paster for adding new request */}
+                    <BurpRequestPaster
+                      onParsed={(request) => {
+                        setEditedHttpRequest(request)
+                        toast.success('HTTP request added!')
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Panel Footer */}

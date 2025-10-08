@@ -20,13 +20,165 @@ import { OptimizationEngine } from '@/lib/services/optimizationEngine'
 import { AIActionDetector, DetectedAction } from '@/lib/services/aiActionDetector'
 import { getStyleSystemPrompt } from '@/components/chat/PromptStyleSelector'
 import { ChatScrollAnchor } from './ChatScrollAnchor'
+import { buildMemoryContext, formatMemoryForPrompt } from '@/lib/services/memoryContextBuilder'
+
+// Token estimation
+const estimateTokens = (text: string) => Math.ceil(text.length / 4)
+
+// Relevance scoring for facts
+const scoreFactRelevance = (fact: any, userMessage: string) => {
+  let score = 0
+  const msgLower = userMessage.toLowerCase()
+
+  // URL/endpoint match
+  if (fact.http_request?.url && msgLower.includes(fact.http_request.url.toLowerCase())) score += 10
+
+  // Technique match
+  const techniques = ['blv', 'idor', 'sqli', 'xss', 'csrf', 'ssrf', 'rce', 'lfi', 'rfi']
+  techniques.forEach(tech => {
+    if (fact.technique?.toLowerCase().includes(tech) && msgLower.includes(tech)) score += 8
+  })
+
+  // Severity boost
+  if (fact.severity === 'critical') score += 5
+  else if (fact.severity === 'high') score += 3
+
+  // Attack chain boost
+  if (fact.attack_chain) score += 4
+
+  // Relations boost
+  if (fact.related_to?.length > 0) score += 2
+
+  // Keyword match
+  const factText = `${fact.fact} ${fact.category || ''}`.toLowerCase()
+  const keywords = msgLower.match(/\b\w{4,}\b/g) || []
+  keywords.forEach(kw => {
+    if (factText.includes(kw)) score += 1
+  })
+
+  return score
+}
+
+// Format HTTP request (compact or full)
+const formatHttpRequest = (httpReq: any, mode: 'compact' | 'full') => {
+  let text = `\n  URL: ${httpReq.method} ${httpReq.url}`
+
+  if (mode === 'full') {
+    // Full headers
+    if (httpReq.headers) {
+      text += `\n  Headers:`
+      Object.entries(httpReq.headers).forEach(([k, v]) => {
+        text += `\n    ${k}: ${v}`
+      })
+    }
+    // Full body
+    if (httpReq.body) {
+      text += `\n  Body: ${typeof httpReq.body === 'object' ? JSON.stringify(httpReq.body, null, 2) : httpReq.body}`
+    }
+  } else {
+    // Compact: key headers only
+    if (httpReq.body) {
+      const bodyStr = typeof httpReq.body === 'object' ? JSON.stringify(httpReq.body) : httpReq.body
+      text += `\n  Body: ${bodyStr.substring(0, 100)}${bodyStr.length > 100 ? '...' : ''}`
+    }
+    if (httpReq.headers?.Authorization) {
+      text += `\n  Auth: ${httpReq.headers.Authorization.substring(0, 50)}...`
+    }
+    if (httpReq.headers?.['X-Session-Id']) {
+      text += `\n  Session: ${httpReq.headers['X-Session-Id']}`
+    }
+    if (httpReq.headers?.Cookie) {
+      text += `\n  Cookie: ${httpReq.headers.Cookie.substring(0, 50)}...`
+    }
+  }
+
+  return text
+}
 
 // Helpers simplifiés
 const buildContextualPrompt = (message: string, targetFolder: string, rulesContext: string, memoryContext: any[], projectGoal: string) => {
+  const MAX_CONTEXT_TOKENS = 8000
+  let currentTokens = 0
   let prompt = message
-  if (projectGoal) prompt += `\n\nObjectif du projet: ${projectGoal}`
-  if (memoryContext.length > 0) prompt += `\n\nContexte mémoire: ${memoryContext.map(m => m.name).join(', ')}`
-  if (rulesContext) prompt += `\n\n${rulesContext}`
+
+  currentTokens += estimateTokens(message)
+
+  if (projectGoal) {
+    const goalText = `\n\nObjectif du projet: ${projectGoal}`
+    prompt += goalText
+    currentTokens += estimateTokens(goalText)
+  }
+
+  // Score and sort facts by relevance
+  const scoredFacts = memoryContext.map(fact => ({
+    fact,
+    score: scoreFactRelevance(fact, message)
+  })).sort((a, b) => b.score - a.score)
+
+  if (scoredFacts.length > 0) {
+    let memorySection = `\n\n=== MÉMOIRE ===\n`
+    const tempFacts: string[] = []
+
+    scoredFacts.forEach(({ fact }, index) => {
+      let factText = `\n[${index + 1}] ${fact.fact}`
+
+      // Metadata
+      if (fact.technique) factText += ` [${fact.technique}]`
+      if (fact.severity) factText += ` (${fact.severity})`
+      if (fact.category) factText += ` - ${fact.category}`
+
+      // HTTP request - try full mode first
+      if (fact.http_request) {
+        const fullHttp = formatHttpRequest(fact.http_request, 'full')
+        const compactHttp = formatHttpRequest(fact.http_request, 'compact')
+
+        // Check if we have space for full version
+        const testTokens = estimateTokens(factText + fullHttp)
+        if (currentTokens + testTokens < MAX_CONTEXT_TOKENS) {
+          factText += fullHttp
+        } else {
+          factText += compactHttp
+        }
+      }
+
+      // Relations
+      if (fact.related_to?.length > 0) {
+        factText += `\n  → Lié à ${fact.related_to.length} fact(s)`
+      }
+
+      // Attack chain info
+      if (fact.attack_chain) {
+        factText += `\n  ⛓️ Chaîne: ${fact.attack_chain.label} (étape ${fact.attack_chain.step}/${fact.attack_chain.total_steps || '?'})`
+      }
+
+      factText += `\n`
+
+      const factTokens = estimateTokens(factText)
+      if (currentTokens + factTokens < MAX_CONTEXT_TOKENS) {
+        tempFacts.push(factText)
+        currentTokens += factTokens
+      }
+    })
+
+    if (tempFacts.length > 0) {
+      memorySection += tempFacts.join('')
+
+      // Add note if some facts were truncated
+      if (tempFacts.length < scoredFacts.length) {
+        memorySection += `\n[${scoredFacts.length - tempFacts.length} facts omis - demandez plus de détails si besoin]\n`
+      }
+
+      prompt += memorySection
+    }
+  }
+
+  if (rulesContext) {
+    const rulesTokens = estimateTokens(rulesContext)
+    if (currentTokens + rulesTokens < MAX_CONTEXT_TOKENS) {
+      prompt += `\n\n${rulesContext}`
+    }
+  }
+
   return prompt
 }
 
@@ -1322,78 +1474,98 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
   const getMemoryContext = async (userMessage?: string) => {
     try {
-      // Load memory search settings from project
-      const { data: projectSettings } = await supabase
-        .from('projects')
-        .select('settings')
-        .eq('id', projectId)
-        .single()
-
-      const memorySearch = projectSettings?.settings?.memorySearch || {
-        enabled: true,
-        similarityThreshold: 0.7,
-        maxResults: 5,
-        minConfidence: 0.6
-      }
-
-      if (!memorySearch.enabled || !userMessage) {
-        console.log('🔍 Memory search disabled or no user message')
+      if (!userMessage) {
+        console.log('🔍 No user message for memory search')
         return []
       }
 
-      // Create embedding for user message
-      const embeddingResponse = await fetch('/api/openai/embeddings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: userMessage, projectId })
-      })
+      // Count total facts
+      const { count } = await supabase
+        .from('memory_facts')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId)
 
-      if (!embeddingResponse.ok) {
-        console.warn('❌ Failed to create embedding for search')
-        return []
-      }
+      const totalFacts = count || 0
+      console.log(`🧠 Memory: ${totalFacts} facts`)
 
-      const { embedding } = await embeddingResponse.json()
+      if (totalFacts === 0) return []
 
-      console.log('🔍 Searching with:', {
-        projectId,
-        threshold: memorySearch.similarityThreshold,
-        maxResults: memorySearch.maxResults,
-        embeddingLength: embedding?.length
-      })
+      // Strategy: < 100 facts = load ALL (best for pentest)
+      if (totalFacts < 100) {
+        console.log('🔍 Loading ALL facts (< 100, optimal for pentest)')
 
-      // Search similar facts using RPC function
-      const { data: similarFacts, error } = await supabase.rpc('search_memory_facts', {
-        query_embedding: embedding,
-        filter_project_id: projectId,
-        match_threshold: memorySearch.similarityThreshold,
-        match_count: memorySearch.maxResults
-      })
+        const { data: allFacts } = await supabase
+          .from('memory_facts')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
 
-      console.log('🔍 RPC returned:', {
-        resultsCount: similarFacts?.length || 0,
-        error: error?.message,
-        sampleResult: similarFacts?.[0]
-      })
+        console.log(`✅ Loaded ${allFacts?.length || 0} facts with relations & attack chains`)
 
-      if (error) {
-        console.warn('❌ Similarity search error:', error)
-        return []
-      }
-
-      // Filter by confidence and format results
-      const filteredFacts = (similarFacts || [])
-        .filter((f: any) => f.similarity >= memorySearch.minConfidence)
-        .map((f: any) => ({
+        return (allFacts || []).map(f => ({
+          id: f.id,
           fact: f.fact,
           category: f.metadata?.category || 'uncategorized',
-          similarity: f.similarity,
-          tags: f.metadata?.tags || []
+          tags: f.metadata?.tags || [],
+          technique: f.metadata?.technique,
+          severity: f.metadata?.severity,
+          related_to: f.metadata?.related_to || [],
+          attack_chain: f.metadata?.attack_chain,
+          http_request: f.metadata?.http_request,  // ✅ AJOUTÉ
+          http_response: f.metadata?.http_response  // ✅ AJOUTÉ
         }))
+      }
 
-      console.log(`🔍 Found ${filteredFacts.length} similar facts (threshold: ${memorySearch.similarityThreshold})`)
+      // Strategy: >= 100 facts = use SQL filters (NO embeddings!)
+      console.log('🔍 Using filtered search (>= 100 facts)')
 
-      return filteredFacts
+      // Detect keywords for filtering
+      const keywords = {
+        endpoint: userMessage.match(/\/[\w/-]+/)?.[0],
+        technique: ['BLV', 'IDOR', 'SQLi', 'XSS', 'CSRF', 'SSRF', 'RCE'].find(t =>
+          userMessage.toUpperCase().includes(t)
+        ),
+        severity: ['critical', 'high', 'medium', 'low'].find(s =>
+          userMessage.toLowerCase().includes(s)
+        )
+      }
+
+      let query = supabase
+        .from('memory_facts')
+        .select('*')
+        .eq('project_id', projectId)
+
+      // Apply filters
+      if (keywords.endpoint) {
+        query = query.or(`metadata->http_request->>url.ilike.%${keywords.endpoint}%,metadata->>endpoint.ilike.%${keywords.endpoint}%`)
+      }
+      if (keywords.technique) {
+        query = query.eq('metadata->>technique', keywords.technique)
+      }
+      if (keywords.severity) {
+        query = query.eq('metadata->>severity', keywords.severity)
+      }
+
+      // Limit results
+      const { data: filteredFacts } = await query
+        .order('created_at', { ascending: false })
+        .limit(keywords.endpoint || keywords.technique ? 100 : 50)
+
+      console.log(`✅ Found ${filteredFacts?.length || 0} facts (filters: ${JSON.stringify(keywords)})`)
+
+      return (filteredFacts || []).map(f => ({
+        id: f.id,
+        fact: f.fact,
+        category: f.metadata?.category || 'uncategorized',
+        tags: f.metadata?.tags || [],
+        technique: f.metadata?.technique,
+        severity: f.metadata?.severity,
+        related_to: f.metadata?.related_to || [],
+        attack_chain: f.metadata?.attack_chain,
+        http_request: f.metadata?.http_request,  // ✅ AJOUTÉ
+        http_response: f.metadata?.http_response  // ✅ AJOUTÉ
+      }))
+
     } catch (error) {
       console.warn('Memory context error:', error)
       return []
@@ -2336,8 +2508,24 @@ export default function ChatStream({ projectId, conversationId: propConversation
 
                   loadMessages() // Reload to show updated state
                 }}
-                onRejectMemoryActions={() => {
+                onRejectMemoryActions={async () => {
+                  // Track rejection decision
+                  await supabase.from('user_decisions').insert({
+                    project_id: projectId,
+                    decision_type: 'memory_action',
+                    proposed_action: { actions: memoryActions },
+                    user_choice: 'reject'
+                  })
+
+                  // Remove MEMORY_ACTION blocks from message content
+                  const updatedContent = message.content.replace(/<!--MEMORY_ACTION[\s\S]*?-->/g, '')
+                  await supabase
+                    .from('chat_messages')
+                    .update({ content: updatedContent })
+                    .eq('id', message.id)
+
                   toast('❌ Actions ignorées')
+                  loadMessages() // Reload to hide the panel
                 }}
               />
             )

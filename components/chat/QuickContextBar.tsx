@@ -556,6 +556,16 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
           </div>
         </div>
       )}
+
+      {/* Builder Modal */}
+      {showBuilder && (
+        <PlaybookBuilderV2
+          projectId={projectId}
+          initialData={editingRule || undefined}
+          onSave={handleSaveRule}
+          onCancel={() => { setShowBuilder(false); setEditingRule(null); }}
+        />
+      )}
     </div>
   )
 }

@@ -589,24 +589,6 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             />
           </div>
 
-          {/* Toggle uncategorized */}
-          {uncategorizedRules.length > 0 && (
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                onClick={() => setShowUncategorized(!showUncategorized)}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all",
-                  showUncategorized
-                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                )}
-              >
-                <span className="text-base">📋</span>
-                <span>Show uncategorized ({uncategorizedRules.length})</span>
-              </button>
-            </div>
-          )}
-
           {/* Bulk Actions Toolbar */}
           {selectedRuleIds.size > 0 && (
             <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center justify-between">

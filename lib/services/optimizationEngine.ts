@@ -28,10 +28,32 @@ export class OptimizationEngine {
   private projectId: string
   private patterns: Map<string, Pattern[]> = new Map()
   private learningHistory: any[] = []
+  private projectContext: any = null
 
   constructor(projectId: string) {
     this.projectId = projectId
     // Utilise le client Supabase partagé au lieu d'en créer un nouveau
+  }
+
+  /**
+   * Load project context for business-aware suggestions
+   */
+  async loadProjectContext(): Promise<void> {
+    try {
+      const { data } = await supabase
+        .from('project_context')
+        .select('*')
+        .eq('project_id', this.projectId)
+        .single()
+
+      if (data) {
+        this.projectContext = data
+        console.log('📋 Project context loaded:', data.business_type, data.business_model)
+      }
+    } catch (error) {
+      // Context not required, suggestions will work without it (just less contextual)
+      console.log('ℹ️ No project context found (optional)')
+    }
   }
 
   /**
@@ -98,33 +120,8 @@ export class OptimizationEngine {
         }
       }
 
-      // Analyser les patterns dans Failed pour suggérer des protections
-      if (failedNodes && failedNodes.length > 0) {
-        const failedPatterns = this.extractPatternsFromMemory(failedNodes, 'failed')
-        for (const pattern of failedPatterns) {
-          if (pattern.frequency >= 3) {
-            suggestions.push({
-              type: 'improvement',
-              confidence: 0.75,
-              suggestion: {
-                title: `Failed Pattern: ${pattern.attackType}`,
-                description: `Detected ${pattern.frequency} failed ${pattern.attackType} attempts. Review these failures to improve testing strategy.`,
-                category: pattern.attackType,
-                impact: 'medium',
-                data: {
-                  attack_type: pattern.attackType,
-                  common_errors: pattern.errors,
-                  suggested_fix: pattern.suggestedFix
-                }
-              },
-              metadata: {
-                source: 'memory_failed_analysis',
-                timestamp: new Date().toISOString()
-              }
-            })
-          }
-        }
-      }
+      // ❌ DISABLED: Failed patterns → improvement suggestions
+      // Reason: Too generic, creates noise. User can review failed tests manually in memory.
     } catch (error) {
       console.error('Error analyzing memory patterns:', error)
     }
@@ -254,45 +251,22 @@ export class OptimizationEngine {
 
   /**
    * Analyze conversation for patterns and generate suggestions
+   * OPTIMIZED: Only generates 'rule' and 'pattern' types (storage/improvement disabled)
    */
   async analyzeConversation(messages: any[]): Promise<OptimizationSuggestion[]> {
     const suggestions: OptimizationSuggestion[] = []
 
-    // Ajouter les suggestions depuis l'analyse mémoire
+    // Ajouter les suggestions depuis l'analyse mémoire (uniquement 'rule', pas 'improvement')
     const memorysuggestions = await this.analyzeMemoryPatterns()
     suggestions.push(...memorysuggestions)
 
-    // Detect repeated queries that could be stored
-    const queryPatterns = this.detectRepeatedQueries(messages)
-    for (const pattern of queryPatterns) {
-      if (pattern.frequency > 3) {
-        suggestions.push({
-          type: 'storage',
-          confidence: Math.min(0.95, 0.7 + (pattern.frequency * 0.05)),
-          suggestion: {
-            title: `Auto-save frequent query: "${pattern.query.substring(0, 50)}..."`,
-            description: `This query has been asked ${pattern.frequency} times. Consider saving it as a memory node for quick access.`,
-            category: pattern.category || 'general',
-            impact: pattern.frequency > 5 ? 'high' : 'medium',
-            data: {
-              query: pattern.query,
-              suggestedPath: pattern.suggestedPath,
-              content: pattern.bestResponse
-            }
-          },
-          metadata: {
-            source: 'query_analysis',
-            timestamp: new Date().toISOString(),
-            related: pattern.relatedQueries
-          }
-        })
-      }
-    }
+    // ❌ DISABLED: Storage suggestions (detectRepeatedQueries)
+    // Reason: Old memory_nodes system removed, not useful for current workflow
 
     // Detect command patterns that could become rules
     const commandPatterns = this.detectCommandPatterns(messages)
     for (const pattern of commandPatterns) {
-      if (pattern.confidence > 0.7) {
+      if (pattern.confidence > 0.75) { // Raised threshold from 0.7 to 0.75
         suggestions.push({
           type: 'rule',
           confidence: pattern.confidence,
@@ -315,25 +289,8 @@ export class OptimizationEngine {
       }
     }
 
-    // Detect inefficient rules that could be improved
-    const ruleImprovements = await this.analyzeRuleEfficiency()
-    for (const improvement of ruleImprovements) {
-      suggestions.push({
-        type: 'improvement',
-        confidence: improvement.confidence,
-        suggestion: {
-          title: `Optimize rule: ${improvement.ruleName}`,
-          description: improvement.reason,
-          impact: improvement.impact,
-          data: improvement.suggestedChanges
-        },
-        metadata: {
-          source: 'rule_analysis',
-          timestamp: new Date().toISOString(),
-          related: [improvement.ruleId]
-        }
-      })
-    }
+    // ❌ DISABLED: Rule efficiency improvements (analyzeRuleEfficiency)
+    // Reason: Too generic, low value, creates noise
 
     return suggestions
   }
@@ -741,16 +698,73 @@ export class OptimizationEngine {
 
   /**
    * Queue a new suggestion for review
+   * OPTIMIZED: Max 5 pending suggestions hard limit
    */
   async queueSuggestion(suggestion: OptimizationSuggestion): Promise<void> {
+    // Check pending count
+    const { count } = await supabase
+      .from('suggestions_queue')
+      .select('*', { count: 'exact', head: true })
+      .eq('project_id', this.projectId)
+      .eq('status', 'pending')
+
+    const MAX_PENDING = 5
+    if (count !== null && count >= MAX_PENDING) {
+      console.warn(`⚠️ Suggestions paused: ${count}/${MAX_PENDING} pending. Review existing suggestions first.`)
+      return // Don't queue, system paused
+    }
+
+    // Check minimum confidence
+    const MIN_CONFIDENCE = 0.75
+    if (suggestion.confidence < MIN_CONFIDENCE) {
+      console.log(`❌ Auto-rejected: confidence ${suggestion.confidence} < ${MIN_CONFIDENCE}`)
+      return // Don't queue, too low quality
+    }
+
+    // Check for duplicates (hash endpoint + type)
+    const hash = this.generateSuggestionHash(suggestion)
+    const { data: existing } = await supabase
+      .from('suggestions_queue')
+      .select('id, created_at, status')
+      .eq('project_id', this.projectId)
+      .eq('metadata->>hash', hash)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (existing) {
+      const hoursSinceCreated = (Date.now() - new Date(existing.created_at).getTime()) / (1000 * 60 * 60)
+
+      // If duplicate exists and was created < 48h ago, skip
+      if (hoursSinceCreated < 48) {
+        console.log(`⏭️ Skipped duplicate suggestion (created ${Math.round(hoursSinceCreated)}h ago)`)
+        return
+      }
+    }
+
+    // Queue the suggestion
     await supabase.from('suggestions_queue').insert({
       project_id: this.projectId,
       type: suggestion.type,
       confidence: suggestion.confidence,
       suggestion: suggestion.suggestion,
-      metadata: suggestion.metadata,
+      metadata: {
+        ...suggestion.metadata,
+        hash // Store hash for deduplication
+      },
       status: 'pending'
     })
+
+    console.log(`✅ Queued suggestion: ${suggestion.suggestion.title} (confidence: ${suggestion.confidence})`)
+  }
+
+  /**
+   * Generate unique hash for suggestion deduplication
+   */
+  private generateSuggestionHash(suggestion: OptimizationSuggestion): string {
+    const data = suggestion.suggestion.data || {}
+    const key = `${suggestion.type}:${data.endpoint || data.name || ''}:${data.test_type || ''}`
+    return Buffer.from(key).toString('base64')
   }
 
   /**
