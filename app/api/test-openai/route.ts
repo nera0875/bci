@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,18 +9,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'API key required' }, { status: 400 })
     }
 
-    const anthropic = new Anthropic({ apiKey })
+    const openai = new OpenAI({ apiKey })
 
     // Quick test with minimal tokens
-    await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+    await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
       max_tokens: 10,
       messages: [{ role: 'user', content: 'Hi' }]
     })
 
     return NextResponse.json({ valid: true })
   } catch (error: any) {
-    console.error('Anthropic key test failed:', error.message)
+    console.error('OpenAI key test failed:', error.message)
     return NextResponse.json({ valid: false, error: error.message }, { status: 401 })
   }
 }

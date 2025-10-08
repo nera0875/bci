@@ -424,7 +424,14 @@ ${matchingRules.map(rule => {
       hasSettings: !!project?.settings
     })
 
-    const anthropicApiKey = project?.api_keys?.anthropic || process.env.ANTHROPIC_API_KEY
+    const anthropicApiKey = project?.api_keys?.anthropic
+
+    if (!anthropicApiKey) {
+      return NextResponse.json(
+        { error: 'No Anthropic API key configured for this project' },
+        { status: 400 }
+      )
+    }
     // Correct model name format - handle various formats
     let customModel = project?.settings?.aiModel || 'claude-sonnet-4-5'
 

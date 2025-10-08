@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import {
-  Plus, FolderOpen, Trash2, Settings,
-  Loader2, Search, Grid3x3, List, Clock, LogOut
+  Plus, FolderOpen, Trash2,
+  Loader2, Search, Grid3x3, List, Clock, LogOut, Eye, EyeOff, CheckCircle, XCircle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -24,6 +24,12 @@ export default function ProjectsClient({ userId }: { userId: string }) {
   const [isCreating, setIsCreating] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectGoal, setNewProjectGoal] = useState('')
+  const [anthropicKey, setAnthropicKey] = useState('')
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [testingAnthropicKey, setTestingAnthropicKey] = useState(false)
+  const [testingOpenaiKey, setTestingOpenaiKey] = useState(false)
+  const [anthropicValid, setAnthropicValid] = useState<boolean | null>(null)
+  const [openaiValid, setOpenaiValid] = useState<boolean | null>(null)
   const [creatingProject, setCreatingProject] = useState(false)
   const [deletingProject, setDeletingProject] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -50,8 +56,42 @@ export default function ProjectsClient({ userId }: { userId: string }) {
     }
   }
 
+  const testAnthropicKey = async (key: string) => {
+    if (!key.trim()) return
+    setTestingAnthropicKey(true)
+    try {
+      const response = await fetch('/api/test-anthropic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key })
+      })
+      setAnthropicValid(response.ok)
+    } catch {
+      setAnthropicValid(false)
+    } finally {
+      setTestingAnthropicKey(false)
+    }
+  }
+
+  const testOpenaiKey = async (key: string) => {
+    if (!key.trim()) return
+    setTestingOpenaiKey(true)
+    try {
+      const response = await fetch('/api/test-openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key })
+      })
+      setOpenaiValid(response.ok)
+    } catch {
+      setOpenaiValid(false)
+    } finally {
+      setTestingOpenaiKey(false)
+    }
+  }
+
   const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return
+    if (!newProjectName.trim() || !anthropicValid) return
 
     setCreatingProject(true)
     try {
@@ -61,6 +101,10 @@ export default function ProjectsClient({ userId }: { userId: string }) {
           name: newProjectName,
           goal: newProjectGoal || null,
           user_id: userId,
+          api_keys: {
+            anthropic: anthropicKey,
+            openai: openaiKey || null
+          }
         })
         .select()
         .single()
@@ -71,9 +115,12 @@ export default function ProjectsClient({ userId }: { userId: string }) {
         setProjects([data, ...projects])
         setNewProjectName('')
         setNewProjectGoal('')
+        setAnthropicKey('')
+        setOpenaiKey('')
+        setAnthropicValid(null)
+        setOpenaiValid(null)
         setIsCreating(false)
-        // Redirect to settings if API keys not configured
-        router.push(`/settings?projectId=${data.id}&setup=true`)
+        router.push(`/chat/${data.id}`)
       }
     } catch (error) {
       console.error('Error creating project:', error)
@@ -137,13 +184,6 @@ export default function ProjectsClient({ userId }: { userId: string }) {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push('/settings')}
-                className="px-4 py-2 text-[#202123] hover:bg-[#F7F7F8] rounded-lg transition-colors flex items-center gap-2"
-              >
-                <Settings className="w-5 h-5" />
-                Settings
-              </button>
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 text-[#6E6E80] hover:bg-[#F7F7F8] rounded-lg transition-colors flex items-center gap-2"
@@ -347,7 +387,8 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                 Nouveau projet
               </h3>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
+                {/* Nom du projet */}
                 <div>
                   <label className="block text-sm font-medium text-[#202123] mb-2">
                     Nom du projet
@@ -359,14 +400,10 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                     placeholder="Mon projet pentesting"
                     className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-[#202123] placeholder:text-[#6E6E80] focus:outline-none focus:ring-2 focus:ring-[#202123] focus:border-transparent"
                     autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        handleCreateProject()
-                      }
-                    }}
                   />
                 </div>
 
+                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-[#202123] mb-2">
                     Description (optionnel)
@@ -375,8 +412,105 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                     value={newProjectGoal}
                     onChange={(e) => setNewProjectGoal(e.target.value)}
                     placeholder="Description courte..."
-                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-[#202123] placeholder:text-[#6E6E80] focus:outline-none focus:ring-2 focus:ring-[#202123] focus:border-transparent resize-none h-24"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-[#202123] placeholder:text-[#6E6E80] focus:outline-none focus:ring-2 focus:ring-[#202123] focus:border-transparent resize-none h-20"
                   />
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 pt-5">
+                  <h4 className="text-sm font-semibold text-[#202123] mb-4">
+                    Configuration API (requis)
+                  </h4>
+
+                  {/* Anthropic API Key */}
+                  <div className="mb-4">
+                    <label className="block text-xs font-medium text-[#6E6E80] mb-2">
+                      Clé API Anthropic (Claude) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        value={anthropicKey}
+                        onChange={(e) => {
+                          setAnthropicKey(e.target.value)
+                          setAnthropicValid(null)
+                        }}
+                        placeholder="sk-ant-..."
+                        className="w-full px-4 py-2.5 pr-24 bg-white border border-gray-300 rounded-lg text-sm text-[#202123] placeholder:text-[#6E6E80] focus:outline-none focus:ring-2 focus:ring-[#202123] focus:border-transparent"
+                      />
+                      <button
+                        onClick={() => testAnthropicKey(anthropicKey)}
+                        disabled={!anthropicKey.trim() || testingAnthropicKey}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 bg-[#F7F7F8] hover:bg-gray-200 rounded text-xs font-medium text-[#202123] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {testingAnthropicKey ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          'Test'
+                        )}
+                      </button>
+                    </div>
+                    {anthropicValid !== null && (
+                      <div className={`flex items-center gap-1.5 mt-2 text-xs ${anthropicValid ? 'text-green-600' : 'text-red-600'}`}>
+                        {anthropicValid ? (
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Clé valide</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Clé invalide</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* OpenAI API Key */}
+                  <div>
+                    <label className="block text-xs font-medium text-[#6E6E80] mb-2">
+                      Clé API OpenAI (optionnel)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        value={openaiKey}
+                        onChange={(e) => {
+                          setOpenaiKey(e.target.value)
+                          setOpenaiValid(null)
+                        }}
+                        placeholder="sk-..."
+                        className="w-full px-4 py-2.5 pr-24 bg-white border border-gray-300 rounded-lg text-sm text-[#202123] placeholder:text-[#6E6E80] focus:outline-none focus:ring-2 focus:ring-[#202123] focus:border-transparent"
+                      />
+                      <button
+                        onClick={() => testOpenaiKey(openaiKey)}
+                        disabled={!openaiKey.trim() || testingOpenaiKey}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 bg-[#F7F7F8] hover:bg-gray-200 rounded text-xs font-medium text-[#202123] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {testingOpenaiKey ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          'Test'
+                        )}
+                      </button>
+                    </div>
+                    {openaiValid !== null && (
+                      <div className={`flex items-center gap-1.5 mt-2 text-xs ${openaiValid ? 'text-green-600' : 'text-red-600'}`}>
+                        {openaiValid ? (
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Clé valide</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Clé invalide</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -386,6 +520,10 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                     setIsCreating(false)
                     setNewProjectName('')
                     setNewProjectGoal('')
+                    setAnthropicKey('')
+                    setOpenaiKey('')
+                    setAnthropicValid(null)
+                    setOpenaiValid(null)
                   }}
                   disabled={creatingProject}
                   className="px-4 py-2 text-[#202123] hover:bg-[#F7F7F8] rounded-lg transition-colors disabled:opacity-50"
@@ -394,7 +532,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                 </button>
                 <button
                   onClick={handleCreateProject}
-                  disabled={!newProjectName.trim() || creatingProject}
+                  disabled={!newProjectName.trim() || !anthropicValid || creatingProject}
                   className="px-5 py-2 bg-[#202123] hover:bg-[#2d2d30] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                 >
                   {creatingProject ? (
@@ -403,7 +541,7 @@ export default function ProjectsClient({ userId }: { userId: string }) {
                       Création...
                     </>
                   ) : (
-                    'Créer'
+                    'Créer le projet'
                   )}
                 </button>
               </div>
