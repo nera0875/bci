@@ -9,6 +9,7 @@ import {
   Shield, Database, TrendingUp, AlertTriangle, Info,
   Zap, Target, Brain, FileText, Code, Eye, ChevronLeft, RefreshCw
 } from 'lucide-react'
+import DynamicIcon from '@/components/shared/DynamicIcon'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +42,8 @@ const typeConfig = {
     bgColor: 'bg-green-50 dark:bg-green-950/20',
     borderColor: 'border-green-200 dark:border-green-800',
     label: 'Rule',
-    emoji: '🛡️'
+    iconName: 'Shield', // Phosphor icon
+    iconColor: '#22c55e'
   },
   pattern: {
     icon: Brain,
@@ -49,7 +51,8 @@ const typeConfig = {
     bgColor: 'bg-orange-50 dark:bg-orange-950/20',
     borderColor: 'border-orange-200 dark:border-orange-800',
     label: 'Pattern',
-    emoji: '🎯'
+    iconName: 'Target', // Phosphor icon
+    iconColor: '#f97316'
   }
 }
 
@@ -287,27 +290,33 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
                 {/* Metadata Badges */}
                 <div className="flex flex-wrap gap-2">
                   {suggestion.suggestion?.category && (
-                    <Badge variant="secondary" className="text-xs">
-                      📁 {suggestion.suggestion.category}
+                    <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                      <DynamicIcon name="Folder" size={12} color="#6b7280" />
+                      {suggestion.suggestion.category}
                     </Badge>
                   )}
                   {suggestion.suggestion?.impact && (
                     <Badge
                       variant="outline"
                       className={cn(
-                        "text-xs",
+                        "text-xs flex items-center gap-1",
                         suggestion.suggestion.impact === 'high' ? "border-red-500 text-red-600" :
                         suggestion.suggestion.impact === 'medium' ? "border-orange-500 text-orange-600" :
                         "border-gray-500 text-gray-600"
                       )}
                     >
-                      {suggestion.suggestion.impact === 'high' ? '🔴' :
-                       suggestion.suggestion.impact === 'medium' ? '🟠' : '⚪'} {suggestion.suggestion.impact}
+                      <DynamicIcon
+                        name={suggestion.suggestion.impact === 'high' ? 'Warning' : suggestion.suggestion.impact === 'medium' ? 'Minus' : 'Circle'}
+                        size={12}
+                        color={suggestion.suggestion.impact === 'high' ? '#ef4444' : suggestion.suggestion.impact === 'medium' ? '#f97316' : '#6b7280'}
+                      />
+                      {suggestion.suggestion.impact}
                     </Badge>
                   )}
                   {suggestion.suggestion?.severity && (
-                    <Badge variant="destructive" className="text-xs">
-                      ⚠️ {suggestion.suggestion.severity}
+                    <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                      <DynamicIcon name="WarningCircle" size={12} color="#ffffff" />
+                      {suggestion.suggestion.severity}
                     </Badge>
                   )}
                 </div>
@@ -501,9 +510,9 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="high">🔴 High</SelectItem>
-              <SelectItem value="medium">🟠 Medium</SelectItem>
-              <SelectItem value="low">⚪ Low</SelectItem>
+              <SelectItem value="high">High (Critical)</SelectItem>
+              <SelectItem value="medium">Medium (Important)</SelectItem>
+              <SelectItem value="low">Low (Minor)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -608,9 +617,10 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
               variant={typeFilter === key ? 'default' : 'outline'}
               size="sm"
               onClick={() => setTypeFilter(key as any)}
-              className="gap-1"
+              className="gap-1 flex items-center"
             >
-              {config.emoji} {config.label}
+              <DynamicIcon name={config.iconName} size={14} color={typeFilter === key ? '#ffffff' : config.iconColor} />
+              {config.label}
             </Button>
           ))}
           <Button

@@ -670,7 +670,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     // 1. D'abord, ajouter toutes les catégories des facts existants
     const categoriesFromFacts = new Set(facts.map(f => f.metadata.category).filter(Boolean))
     categoriesFromFacts.forEach(key => {
-      allCats[key] = {label: key, icon: '📁'}
+      allCats[key] = {label: key, icon: 'Folder'} // Phosphor icon
     })
 
     // 2. Puis, écraser avec les custom (permet de customiser l'icon/label)
@@ -681,7 +681,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     // 3. Ajouter la catégorie système "uncategorized" si des facts sans catégorie existent
     const hasUncategorized = facts.some(f => !f.metadata.category)
     if (hasUncategorized && showUncategorized) {
-      allCats['uncategorized'] = {label: 'No Category', icon: '📂'}
+      allCats['uncategorized'] = {label: 'No Category', icon: 'FolderOpen'} // Phosphor icon
     }
 
     return allCats
@@ -689,7 +689,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
   const getCategoryIcon = (category: string) => {
     const allCats = getAllCategories()
-    return allCats[category]?.icon || '📄'
+    return allCats[category]?.icon || 'File' // Phosphor icon fallback
   }
 
   const getCategoryLabel = (category: string) => {
@@ -1440,7 +1440,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                     const newCatLabel = prompt('Category name:')
                     if (!newCatLabel) return
 
-                    const newCatIcon = prompt('Category icon (emoji):', '📁')
+                    const newCatIcon = prompt('Category icon (Phosphor name):', 'Folder')
                     const newCatKey = newCatLabel.toLowerCase().replace(/\s+/g, '_')
 
                     try {
@@ -1451,7 +1451,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                           projectId,
                           key: newCatKey,
                           label: newCatLabel,
-                          icon: newCatIcon || '📁'
+                          icon: newCatIcon || 'Folder' // Default Phosphor icon
                         })
                       })
 
@@ -1620,7 +1620,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 id: cat, // ID stable = key actuel
                 value: cat,
                 label: cat,
-                icon: '📁',
+                icon: 'Folder', // Phosphor icon
                 color: 'gray' as const
               }))
 

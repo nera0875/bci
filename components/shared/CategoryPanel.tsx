@@ -8,14 +8,15 @@ import { toast } from 'sonner'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { EmojiPicker } from './EmojiPicker'
+import IconColorPicker from './IconColorPicker'
+import DynamicIcon from './DynamicIcon'
 
 export interface Category {
   id?: string // ID stable pour détecter renames
   value: string
   label: string
-  icon: string
-  color: string
+  icon: string // icon_name (Phosphor) au lieu d'emoji
+  color: string // hex color (#6b7280) au lieu de 'gray'/'blue'
   description?: string
 }
 
@@ -24,12 +25,8 @@ export interface CategoryPanelProps {
   onSave: (categories: Category[]) => void
   onCancel: () => void
   title?: string
-  emojis?: string[]
-  colors?: string[]
+  // DEPRECATED: emojis/colors - now using IconColorPicker (Phosphor 9,000 icons)
 }
-
-const DEFAULT_EMOJIS = ['🔐', '🔌', '🧠', '📢', '⚙️', '🐛', '🔥', '⚡', '🎯', '✨', '🚀', '🛡️', '🔍', '💡', '🔧', '📌']
-const DEFAULT_COLORS = ['blue', 'green', 'purple', 'orange', 'red', 'yellow', 'pink', 'gray']
 
 function SortableCategory({
   category,
@@ -65,7 +62,11 @@ function SortableCategory({
         <GripVertical size={16} className="text-gray-400" />
       </div>
 
-      <span className="text-2xl">{category.icon}</span>
+      <DynamicIcon
+        name={category.icon || 'Folder'}
+        size={24}
+        color={category.color || '#6b7280'}
+      />
 
       <div className="flex-1">
         <div className="font-medium text-sm">{category.label}</div>
@@ -99,9 +100,7 @@ export function CategoryPanel({
   categories: initialCategories,
   onSave,
   onCancel,
-  title = 'Manage Categories',
-  emojis = DEFAULT_EMOJIS,
-  colors = DEFAULT_COLORS
+  title = 'Manage Categories'
 }: CategoryPanelProps) {
   const [categories, setCategories] = useState<Category[]>(initialCategories)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -126,8 +125,8 @@ export function CategoryPanel({
     const newCategory: Category = {
       value: `category_${Date.now()}`,
       label: 'New Category',
-      icon: '📌',
-      color: 'gray',
+      icon: 'Folder', // Phosphor icon par défaut
+      color: '#6b7280', // Hex color par défaut
       description: ''
     }
     setEditingCategory(newCategory)
@@ -220,13 +219,15 @@ export function CategoryPanel({
               {categories.find(c => c.value === editingCategory.value) ? 'Edit' : 'New'} Category
             </h3>
 
-            {/* Emoji Picker */}
+            {/* Icon + Color Picker */}
             <div>
-              <label className="block text-sm font-medium mb-2">Icon</label>
-              <EmojiPicker
-                value={editingCategory.icon}
-                onChange={(icon) => setEditingCategory({ ...editingCategory, icon })}
-                suggestions={emojis}
+              <label className="block text-sm font-medium mb-2">Icône & Couleur</label>
+              <IconColorPicker
+                icon={editingCategory.icon}
+                color={editingCategory.color}
+                onIconChange={(icon) => setEditingCategory({ ...editingCategory, icon })}
+                onColorChange={(color) => setEditingCategory({ ...editingCategory, color })}
+                size="md"
               />
             </div>
 
@@ -268,32 +269,7 @@ export function CategoryPanel({
               />
             </div>
 
-            {/* Color */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Color</label>
-              <div className="flex gap-2 flex-wrap">
-                {colors.map(color => (
-                  <button
-                    key={color}
-                    onClick={() => setEditingCategory({ ...editingCategory, color })}
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      editingCategory.color === color ? 'border-blue-500 scale-110' : 'border-gray-300'
-                    }`}
-                    style={{
-                      backgroundColor:
-                        color === 'gray' ? '#9ca3af' :
-                        color === 'blue' ? '#3b82f6' :
-                        color === 'green' ? '#10b981' :
-                        color === 'purple' ? '#a855f7' :
-                        color === 'orange' ? '#f97316' :
-                        color === 'red' ? '#ef4444' :
-                        color === 'yellow' ? '#eab308' :
-                        color === 'pink' ? '#ec4899' : color
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
+            {/* Color picker now integrated in IconColorPicker above */}
 
             <div className="flex gap-2 pt-4">
               <Button onClick={handleSaveEdit} className="flex-1 bg-green-600 hover:bg-green-700">

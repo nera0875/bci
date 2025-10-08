@@ -8,13 +8,15 @@ import { toast } from 'sonner'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import IconColorPicker from '@/components/shared/IconColorPicker'
+import DynamicIcon from '@/components/shared/DynamicIcon'
 
 interface Category {
   id?: string  // UUID from database
   value: string
   label: string
-  icon: string
-  color: string
+  icon: string // icon_name (Phosphor) au lieu d'emoji
+  color: string // hex color au lieu de 'blue'/'red'
 }
 
 interface CategoryManagerProps {
@@ -24,8 +26,7 @@ interface CategoryManagerProps {
   projectId: string
 }
 
-const EMOJI_SUGGESTIONS = ['🔐', '🔌', '🧠', '📢', '⚙️', '🐛', '🔥', '⚡', '🎯', '✨', '🚀', '🛡️', '🔍', '💡', '🔧', '📌']
-const COLOR_OPTIONS = ['blue', 'green', 'purple', 'orange', 'red', 'yellow', 'pink', 'gray']
+// DEPRECATED: Plus d'emojis, utiliser IconPicker (9,000 icônes Phosphor)
 
 function SortableCategory({ category, onEdit, onDelete }: {
   category: Category
@@ -61,7 +62,11 @@ function SortableCategory({ category, onEdit, onDelete }: {
         <GripVertical size={16} className="text-gray-400" />
       </div>
 
-      <span className="text-2xl">{category.icon}</span>
+      <DynamicIcon
+        name={category.icon || 'Shield'}
+        size={24}
+        color={category.color || '#6b7280'}
+      />
 
       <div className="flex-1">
         <div className="font-medium text-sm">{category.label}</div>
@@ -115,8 +120,8 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
     const newCategory: Category = {
       value: `category_${Date.now()}`,
       label: 'New Category',
-      icon: '📌',
-      color: 'gray'
+      icon: 'Shield', // Icon Phosphor par défaut
+      color: '#6b7280' // Hex color par défaut
     }
     setEditingCategory(newCategory)
   }
@@ -272,33 +277,16 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
               {categories.find(c => c.value === editingCategory.value) ? 'Éditer' : 'Nouvelle'} Catégorie
             </h3>
 
-            {/* Emoji */}
+            {/* Icon + Color Picker */}
             <div>
-              <label className="block text-sm font-medium mb-2">Icône</label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="text-4xl p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:scale-110 transition-transform"
-                >
-                  {editingCategory.icon}
-                </button>
-                {showEmojiPicker && (
-                  <div className="absolute mt-2 p-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl z-10 grid grid-cols-8 gap-2">
-                    {EMOJI_SUGGESTIONS.map(emoji => (
-                      <button
-                        key={emoji}
-                        onClick={() => {
-                          setEditingCategory({ ...editingCategory, icon: emoji })
-                          setShowEmojiPicker(false)
-                        }}
-                        className="text-2xl hover:scale-125 transition-transform p-1"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <label className="block text-sm font-medium mb-2">Icône & Couleur</label>
+              <IconColorPicker
+                icon={editingCategory.icon}
+                color={editingCategory.color}
+                onIconChange={(icon) => setEditingCategory({ ...editingCategory, icon })}
+                onColorChange={(color) => setEditingCategory({ ...editingCategory, color })}
+                size="md"
+              />
             </div>
 
             {/* Label */}
@@ -322,22 +310,7 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
               />
             </div>
 
-            {/* Color */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Couleur</label>
-              <div className="flex gap-2 flex-wrap">
-                {COLOR_OPTIONS.map(color => (
-                  <button
-                    key={color}
-                    onClick={() => setEditingCategory({ ...editingCategory, color })}
-                    className={`w-8 h-8 rounded-full border-2 ${
-                      editingCategory.color === color ? 'border-blue-500 scale-110' : 'border-gray-300'
-                    }`}
-                    style={{ backgroundColor: color === 'gray' ? '#9ca3af' : color }}
-                  />
-                ))}
-              </div>
-            </div>
+            {/* Couleur maintenant dans IconColorPicker ci-dessus */}
 
             <div className="flex gap-2 pt-4">
               <Button onClick={handleSaveEdit} className="flex-1 bg-green-600 hover:bg-green-700">

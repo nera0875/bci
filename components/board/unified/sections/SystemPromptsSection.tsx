@@ -365,7 +365,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
             name: editingPrompt.name,
             content: editingPrompt.content,
             category: editingPrompt.category,
-            icon: editingPrompt.icon || '✨',
+            icon: editingPrompt.icon || 'FileCode',
             is_active: editingPrompt.enabled,
             sort_order: editingPrompt.priority
           })
@@ -391,7 +391,7 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
             name: editingPrompt.name,
             content: editingPrompt.content,
             category: editingPrompt.category,
-            icon: editingPrompt.icon || '✨',
+            icon: editingPrompt.icon || 'FileCode',
             is_active: editingPrompt.enabled,
             sort_order: editingPrompt.priority
           })
