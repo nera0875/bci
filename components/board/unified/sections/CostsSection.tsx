@@ -77,7 +77,7 @@ export default function CostsSection({ projectId }: CostsSectionProps) {
         const dailyData: Record<string, { cost: number; saved: number }> = {}
 
         messages.forEach(msg => {
-          const metadata = msg.metadata || {}
+          const metadata = (msg.metadata as any) || {}
           const model = metadata.model || 'claude-3-5-sonnet-20241022'
           const tokens = metadata.tokens || { input: 0, output: 0 }
           const cached = metadata.cached || false
@@ -91,7 +91,7 @@ export default function CostsSection({ projectId }: CostsSectionProps) {
             costByModel[model] = (costByModel[model] || 0) + cost
 
             // Daily tracking
-            const date = new Date(msg.created_at).toLocaleDateString()
+            const date = new Date(msg.created_at || new Date()).toLocaleDateString()
             if (!dailyData[date]) dailyData[date] = { cost: 0, saved: 0 }
             dailyData[date].cost += cost
           } else {
@@ -104,7 +104,7 @@ export default function CostsSection({ projectId }: CostsSectionProps) {
             totalCost += cachedCost
             totalSaved += fullCost - cachedCost
 
-            const date = new Date(msg.created_at).toLocaleDateString()
+            const date = new Date(msg.created_at || new Date()).toLocaleDateString()
             if (!dailyData[date]) dailyData[date] = { cost: 0, saved: 0 }
             dailyData[date].cost += cachedCost
             dailyData[date].saved += fullCost - cachedCost

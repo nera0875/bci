@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { BASE_SYSTEM_PROMPT } from '@/lib/services/systemPrompt'
+import { DEFAULT_MINIMAL_PROMPT } from '@/lib/services/systemPrompt'
 
 export async function GET() {
   return NextResponse.json({
-    prompt: BASE_SYSTEM_PROMPT,
+    prompt: DEFAULT_MINIMAL_PROMPT,
     deprecated: true,
     warning: 'This prompt is deprecated and will be removed soon. Use project.system_prompt instead.'
   })

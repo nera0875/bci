@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         project_id: projectId,
         decision_type: 'accept_rule',
         context: { type: 'rule', trigger: 'IDOR' },
-        proposed_action: { action: 'create_rule', trigger: 'IDOR detected', action: 'Test sequential IDs' },
+        proposed_action: { action: 'create_rule', trigger: 'IDOR detected', description: 'Test sequential IDs' },
         user_choice: 'accept'
       },
       {

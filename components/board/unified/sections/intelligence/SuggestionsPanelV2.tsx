@@ -93,7 +93,7 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
       const { data, error } = await query
 
       if (error) throw error
-      setSuggestions(data || [])
+      setSuggestions((data as any) || [])
     } catch (error) {
       console.error('Error loading suggestions:', error)
       toast.error('Erreur chargement suggestions')
@@ -114,7 +114,7 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
         .eq('id', id)
 
       // Track decision
-      await supabase
+      await (supabase as any)
         .from('user_decisions')
         .insert({
           project_id: projectId,
@@ -143,7 +143,7 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
     try {
       switch (suggestion.type) {
         case 'rule':
-          await supabase.from('rules').insert({
+          await (supabase as any).from('rules').insert({
             project_id: projectId,
             name: finalData.title || 'New Rule',
             trigger_type: 'context',
@@ -157,7 +157,7 @@ export default function SuggestionsPanelV2({ projectId }: SuggestionsPanelV2Prop
           break
 
         case 'pattern':
-          await supabase.from('learned_patterns').insert({
+          await (supabase as any).from('learned_patterns').insert({
             project_id: projectId,
             pattern_data: finalData,
             confidence: suggestion.confidence,

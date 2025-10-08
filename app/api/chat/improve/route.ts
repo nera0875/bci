@@ -30,8 +30,7 @@ export async function POST(req: NextRequest) {
     const stream = await anthropic.messages.stream({
       model: model,
       max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }],
-      stream: true
+      messages: [{ role: 'user', content: prompt }]
     })
 
     // Create ReadableStream for SSE

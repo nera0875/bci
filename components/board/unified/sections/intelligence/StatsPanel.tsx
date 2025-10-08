@@ -83,12 +83,15 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
       // ✅ Cache hit rate (NEW: from chat_messages token usage)
       const { data: allMessages } = await supabase
         .from('chat_messages')
-        .select('token_usage')
+        .select('metadata')
         .eq('project_id', projectId)
         .eq('role', 'assistant')
 
       // Filter client-side to avoid PostgREST syntax issues
-      const messagesWithTokens = allMessages?.filter(msg => msg.token_usage != null) || []
+      const messagesWithTokens = allMessages?.filter(msg => {
+        const metadata = msg.metadata as any
+        return metadata?.tokens != null
+      }) || []
 
       let totalRequests = 0
       let cachedRequests = 0
@@ -97,8 +100,9 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
       if (messagesWithTokens.length > 0) {
         totalRequests = messagesWithTokens.length
         messagesWithTokens.forEach((msg: any) => {
-          if (msg.token_usage?.cached) cachedRequests++
-          if (msg.token_usage?.cost) totalCost += msg.token_usage.cost
+          const metadata = msg.metadata as any
+          if (metadata?.cached) cachedRequests++
+          if (metadata?.cost) totalCost += metadata.cost
         })
       }
 

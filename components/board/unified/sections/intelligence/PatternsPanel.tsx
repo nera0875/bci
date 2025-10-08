@@ -64,8 +64,8 @@ export default function PatternsPanel({ projectId }: PatternsPanelProps) {
 
       if (attackError) throw attackError
 
-      setLearnedPatterns(learned || [])
-      setAttackPatterns(attack || [])
+      setLearnedPatterns((learned as any) || [])
+      setAttackPatterns((attack as any) || [])
     } catch (error) {
       console.error('Error loading patterns:', error)
       toast.error('Erreur chargement patterns')

@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
     const chainMap = new Map<string, any[]>()
 
     facts?.forEach(fact => {
-      const chainId = fact.metadata?.attack_chain?.id
+      const metadata = fact.metadata as any
+      const chainId = metadata?.attack_chain?.id
       if (chainId) {
         if (!chainMap.has(chainId)) {
           chainMap.set(chainId, [])
@@ -51,23 +52,31 @@ export async function GET(request: NextRequest) {
     // Format chains with steps
     const chains = Array.from(chainMap.entries()).map(([chainId, chainFacts]) => {
       // Sort by step number
-      const sortedSteps = chainFacts.sort((a, b) =>
-        (a.metadata?.attack_chain?.step || 0) - (b.metadata?.attack_chain?.step || 0)
-      )
+      const sortedSteps = chainFacts.sort((a, b) => {
+        const aMetadata = a.metadata as any
+        const bMetadata = b.metadata as any
+        return (aMetadata?.attack_chain?.step || 0) - (bMetadata?.attack_chain?.step || 0)
+      })
 
-      const label = sortedSteps[0]?.metadata?.attack_chain?.label || `Attack Chain ${chainId}`
-      const totalSteps = sortedSteps[0]?.metadata?.attack_chain?.total_steps || sortedSteps.length
+      const firstMetadata = sortedSteps[0]?.metadata as any
+      const label = firstMetadata?.attack_chain?.label || `Attack Chain ${chainId}`
+      const totalSteps = firstMetadata?.attack_chain?.total_steps || sortedSteps.length
 
       // Calculate combined severity (highest in chain)
       const severityScores = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
       const maxSeverity = sortedSteps.reduce((max, fact) => {
-        const currentScore = severityScores[fact.metadata?.severity as keyof typeof severityScores] || 0
+        const metadata = fact.metadata as any
+        const currentScore = severityScores[metadata?.severity as keyof typeof severityScores] || 0
         const maxScore = severityScores[max as keyof typeof severityScores] || 0
-        return currentScore > maxScore ? fact.metadata?.severity : max
+        return currentScore > maxScore ? metadata?.severity : max
       }, 'info')
 
       // Extract combined impact
-      const combinedImpact = sortedSteps.find(f => f.metadata?.combined_impact)?.metadata?.combined_impact
+      const combinedImpact = sortedSteps.find(f => {
+        const m = f.metadata as any
+        return m?.combined_impact
+      })
+      const combinedImpactMetadata = combinedImpact?.metadata as any
 
       return {
         id: chainId,
@@ -76,19 +85,22 @@ export async function GET(request: NextRequest) {
         current_steps: sortedSteps.length,
         is_complete: sortedSteps.length === totalSteps,
         severity: maxSeverity,
-        combined_impact: combinedImpact,
-        steps: sortedSteps.map(fact => ({
-          step: fact.metadata?.attack_chain?.step,
-          fact_id: fact.id,
-          description: fact.fact,
-          technique: fact.metadata?.technique,
-          severity: fact.metadata?.severity,
-          prerequisites: fact.metadata?.prerequisites || [],
-          http_request: fact.metadata?.http_request ? {
-            method: fact.metadata.http_request.method,
-            url: fact.metadata.http_request.url
-          } : null
-        })),
+        combined_impact: combinedImpactMetadata?.combined_impact,
+        steps: sortedSteps.map(fact => {
+          const metadata = fact.metadata as any
+          return {
+            step: metadata?.attack_chain?.step,
+            fact_id: fact.id,
+            description: fact.fact,
+            technique: metadata?.technique,
+            severity: metadata?.severity,
+            prerequisites: metadata?.prerequisites || [],
+            http_request: metadata?.http_request ? {
+              method: metadata.http_request.method,
+              url: metadata.http_request.url
+            } : null
+          }
+        }),
         created_at: sortedSteps[0].created_at
       }
     })
@@ -149,7 +161,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       const updatedMetadata = {
-        ...fact?.metadata,
+        ...(fact?.metadata as any || {}),
         attack_chain: {
           id: chainId,
           step: index + 1,
@@ -213,7 +225,8 @@ export async function DELETE(request: NextRequest) {
 
     // Remove attack_chain from metadata
     const updates = facts.map(fact => {
-      const { attack_chain, ...restMetadata } = fact.metadata || {}
+      const metadata = (fact.metadata as any) || {}
+      const { attack_chain, ...restMetadata } = metadata
       return supabase
         .from('memory_facts')
         .update({ metadata: restMetadata })

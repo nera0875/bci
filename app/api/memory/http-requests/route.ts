@@ -37,17 +37,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform for easier consumption
-    const httpRequests = facts?.map(fact => ({
-      id: fact.id,
-      fact: fact.fact,
-      severity: fact.metadata.severity,
-      technique: fact.metadata.technique,
-      category: fact.metadata.category,
-      tags: fact.metadata.tags || [],
-      http_request: fact.metadata.http_request,
-      http_response: fact.metadata.http_response,
-      created_at: fact.created_at
-    })) || []
+    const httpRequests = facts?.map(fact => {
+      const metadata = (fact.metadata as any) || {}
+      return {
+        id: fact.id,
+        fact: fact.fact,
+        severity: metadata.severity,
+        technique: metadata.technique,
+        category: metadata.category,
+        tags: metadata.tags || [],
+        http_request: metadata.http_request,
+        http_response: metadata.http_response,
+        created_at: fact.created_at
+      }
+    }) || []
 
     return NextResponse.json({
       requests: httpRequests,
@@ -120,17 +123,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const httpRequests = facts?.map(fact => ({
-      id: fact.id,
-      fact: fact.fact,
-      severity: fact.metadata.severity,
-      technique: fact.metadata.technique,
-      category: fact.metadata.category,
-      tags: fact.metadata.tags || [],
-      http_request: fact.metadata.http_request,
-      http_response: fact.metadata.http_response,
-      created_at: fact.created_at
-    })) || []
+    const httpRequests = facts?.map(fact => {
+      const metadata = (fact.metadata as any) || {}
+      return {
+        id: fact.id,
+        fact: fact.fact,
+        severity: metadata.severity,
+        technique: metadata.technique,
+        category: metadata.category,
+        tags: metadata.tags || [],
+        http_request: metadata.http_request,
+        http_response: metadata.http_response,
+        created_at: fact.created_at
+      }
+    }) || []
 
     return NextResponse.json({
       requests: httpRequests,
