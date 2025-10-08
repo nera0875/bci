@@ -316,23 +316,14 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
         <div className="p-4 border-b border-[#E5E5E7] space-y-3">
           {/* Project Name Card */}
           <div className="flex items-center gap-3 px-3 py-2.5 bg-gradient-to-r from-gray-50 to-white border border-gray-200/80 rounded-xl shadow-sm hover:shadow-md hover:border-gray-300/80 transition-all duration-200">
-            <div className="p-1.5 bg-white rounded-lg shadow-sm">
-              <Target className="w-4 h-4 text-blue-600" />
+            <div className="p-1.5 bg-gray-900 rounded-lg shadow-sm">
+              <Target className="w-4 h-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-semibold text-gray-900 truncate">{project.name}</h2>
               <p className="text-xs text-gray-500">Pentesting Project</p>
             </div>
           </div>
-
-          {/* New Conversation Button */}
-          <button
-            onClick={createNewConversation}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl hover:from-gray-800 hover:to-gray-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Nouvelle Conversation
-          </button>
 
           {/* Back to Projects Button */}
           <button
@@ -341,6 +332,15 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
           >
             <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             <span className="text-sm font-medium">Retour aux projets</span>
+          </button>
+
+          {/* New Conversation Button */}
+          <button
+            onClick={createNewConversation}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl hover:from-gray-800 hover:to-gray-700 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Nouvelle Conversation
           </button>
         </div>
 
