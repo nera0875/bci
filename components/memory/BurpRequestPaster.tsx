@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle, Check, FileText, Sparkles } from 'lucide-react'
+import { AlertTriangle, Check, FileText, Zap } from 'lucide-react'
 import { parseBurpRequest, type HttpRequestMetadata } from '@/lib/types/http-metadata'
 import { HttpRequestViewer } from './HttpRequestViewer'
 
@@ -94,9 +94,9 @@ Authorization: Bearer xxx
         <Button
           onClick={handleParse}
           disabled={!rawRequest.trim()}
-          className="w-full bg-gradient-to-r from-purple-500 to-blue-500"
+          className="w-full bg-gradient-to-r from-gray-700 to-gray-900 text-white hover:from-gray-800 hover:to-black"
         >
-          <Sparkles className="w-4 h-4 mr-2" />
+          <Zap className="w-4 h-4 mr-2" />
           Parse Request
         </Button>
       )}

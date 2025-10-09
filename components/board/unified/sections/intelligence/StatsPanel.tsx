@@ -231,7 +231,7 @@ export default function StatsPanel({ projectId }: StatsPanelProps) {
             icon={Target}
             label="Règles Actives"
             value={metrics.activeRules}
-            color="bg-purple-600"
+            color="bg-gray-700"
           />
           <StatCard
             icon={TrendingUp}

@@ -8,12 +8,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import AITextEditorModal from '@/components/editor/AITextEditorModal'
 import { toast } from 'sonner'
+import IconColorPicker from '@/components/shared/IconColorPicker'
+import DynamicIcon from '@/components/shared/DynamicIcon'
 
 interface PlaybookData {
   id?: string
   name: string
   description?: string
-  icon?: string  // Emoji
+  icon?: string  // icon_name (Phosphor) au lieu d'emoji
+  color?: string // hex color pour l'icon
   category?: string // Deprecated - use category_id
   category_id?: string
   trigger_type: 'endpoint' | 'context' | 'always'
@@ -42,16 +45,15 @@ const TAG_SUGGESTIONS = [
   'burp', 'automated', 'manual', 'critical', 'high', 'medium', 'low'
 ]
 
-// Emoji picker icons
-const RULE_EMOJIS = ['🎯', '⚡', '🔥', '✨', '🚀', '🛡️', '🔍', '🎨', '💡', '🔧', '⚙️', '📌']
+// DEPRECATED: RULE_EMOJIS - now using IconPicker (9,000 Phosphor icons)
 
 export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: PlaybookBuilderV2Props) {
   // États de base
   const [name, setName] = useState(initialData?.name || '')
   const [description, setDescription] = useState(initialData?.description || '')
-  const [icon, setIcon] = useState(initialData?.icon || '🎯')
+  const [icon, setIcon] = useState(initialData?.icon || 'Target')
+  const [color, setColor] = useState(initialData?.color || '#3b82f6')
   const [categoryId, setCategoryId] = useState(initialData?.category_id || '')
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
   // Charger les catégories de rules depuis Supabase (rule_categories)
   const [ruleCategories, setRuleCategories] = useState<Array<{ id: string; value: string; label: string; icon: string }>>([])
@@ -74,7 +76,7 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
           id: cat.id,
           value: cat.key,
           label: cat.label,
-          icon: cat.icon || '📁'
+          icon: cat.icon_name || cat.icon || 'Folder' // Backward compat
         }))
         setRuleCategories(formatted)
       }
@@ -92,7 +94,7 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
         const formatted = categories.map((cat: any) => ({
           value: cat.key,
           label: cat.label,
-          icon: cat.icon || '📁'
+          icon: cat.icon_name || cat.icon || 'Folder' // Backward compat
         }))
         setMemoryCategories(formatted)
       }
@@ -133,6 +135,7 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
       name: name.trim(),
       description: description.trim(),
       icon,
+      color,
       category_id: categoryId || undefined,
       trigger_type: triggerType,
       trigger_config: triggerConfig,
@@ -166,10 +169,10 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
   }
 
   const tabs = [
-    { id: 'basic' as const, label: 'Basic Info', icon: '📝' },
-    { id: 'trigger' as const, label: 'Trigger', icon: '🎯' },
-    { id: 'target' as const, label: 'Target Facts', icon: '🎨' },
-    { id: 'action' as const, label: 'Action', icon: '⚡' }
+    { id: 'basic' as const, label: 'Basic Info', iconName: 'FileText', color: '#6b7280' },
+    { id: 'trigger' as const, label: 'Trigger', iconName: 'Target', color: '#3b82f6' },
+    { id: 'target' as const, label: 'Target Facts', iconName: 'Palette', color: '#a855f7' },
+    { id: 'action' as const, label: 'Action', iconName: 'Lightning', color: '#22c55e' }
   ]
 
   return (
@@ -207,7 +210,11 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
                     : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                 }`}
               >
-                <span className="text-lg">{tab.icon}</span>
+                <DynamicIcon
+                  name={tab.iconName}
+                  size={18}
+                  color={activeTab === tab.id ? (document.documentElement.classList.contains('dark') ? '#111827' : '#ffffff') : tab.color}
+                />
                 <span className="text-sm">{tab.label}</span>
               </button>
             ))}
@@ -218,38 +225,20 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
             {/* TAB: Basic Info */}
             {activeTab === 'basic' && (
               <div className="space-y-6">
-                {/* Emoji + Name */}
+                {/* Icon + Color + Name */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
-                    Icon & Name
+                    Icône & Nom
                   </label>
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className="text-4xl hover:scale-110 transition-transform p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                        title="Change icon"
-                      >
-                        {icon}
-                      </button>
-                      {showEmojiPicker && (
-                        <div className="absolute top-full left-0 mt-2 p-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl z-20 grid grid-cols-6 gap-2">
-                          {RULE_EMOJIS.map(emoji => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => {
-                                setIcon(emoji)
-                                setShowEmojiPicker(false)
-                              }}
-                              className="text-3xl hover:scale-125 transition-transform p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <IconColorPicker
+                        icon={icon}
+                        color={color}
+                        onIconChange={setIcon}
+                        onColorChange={setColor}
+                        size="md"
+                      />
                     </div>
                     <Input
                       value={name}
@@ -337,8 +326,8 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
             {/* TAB: Target Facts */}
             {activeTab === 'target' && (
               <div className="space-y-4">
-                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-                  <p className="text-sm text-purple-900 dark:text-purple-200">
+                <div className="p-4 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-900 dark:text-gray-200">
                     🎨 <strong>Target Facts</strong> cible où appliquer cette règle (optionnel). Si vide, la règle s'applique partout.
                   </p>
                 </div>
@@ -385,7 +374,7 @@ export function PlaybookBuilderV2({ projectId, initialData, onSave, onCancel }: 
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <span className="text-2xl">{cat.icon}</span>
+                                <DynamicIcon name={cat.icon} size={24} color="#6b7280" />
                                 <div>
                                   <div className="font-medium text-sm">{cat.label}</div>
                                   <div className="text-xs text-gray-500">{cat.value}</div>

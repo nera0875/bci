@@ -29,9 +29,9 @@ export interface TagManagementPanelProps {
 const COLORS = [
   { name: 'blue', label: 'Bleu', bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200', hex: '#3b82f6' },
   { name: 'green', label: 'Vert', bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200', hex: '#10b981' },
-  { name: 'purple', label: 'Violet', bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-200', hex: '#a855f7' },
+  { name: 'purple', label: 'Gris', bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', hex: '#6b7280' },
   { name: 'orange', label: 'Orange', bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-200', hex: '#f97316' },
-  { name: 'pink', label: 'Rose', bg: 'bg-pink-100', text: 'text-pink-700', border: 'border-pink-200', hex: '#ec4899' },
+  { name: 'pink', label: 'Gris clair', bg: 'bg-gray-200', text: 'text-gray-800', border: 'border-gray-300', hex: '#9ca3af' },
   { name: 'yellow', label: 'Jaune', bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200', hex: '#eab308' },
   { name: 'red', label: 'Rouge', bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200', hex: '#ef4444' },
   { name: 'gray', label: 'Gris', bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', hex: '#9ca3af' }

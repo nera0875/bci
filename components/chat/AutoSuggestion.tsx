@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, Edit2, FolderPlus, Sparkles, AlertCircle, ChevronRight } from 'lucide-react'
+import { Check, X, Edit2, FolderPlus, Lightbulb, AlertCircle, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -111,11 +111,11 @@ export default function AutoSuggestion({
   const renderRuleSuggestion = (s: RuleSuggestion) => (
     <>
       <div className="flex items-start gap-3">
-        <Sparkles size={20} className="text-purple-600 mt-0.5" />
+        <Lightbulb size={20} className="text-gray-700 dark:text-gray-400 mt-0.5" />
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-medium">Rule Suggestion</span>
-            <span className="text-sm text-purple-600 dark:text-purple-400">
+            <span className="text-sm text-gray-700 dark:text-gray-400">
               Pattern detected ({s.occurrences} times)
             </span>
           </div>
@@ -124,7 +124,7 @@ export default function AutoSuggestion({
             I've noticed a recurring pattern. Create this rule?
           </p>
 
-          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-gray-500">Name:</span>
@@ -138,7 +138,7 @@ export default function AutoSuggestion({
 
               {isExpanded && (
                 <>
-                  <div className="pt-2 border-t border-purple-200 dark:border-purple-800">
+                  <div className="pt-2 border-t border-gray-300 dark:border-gray-700">
                     <span className="text-xs font-medium text-gray-500">Action:</span>
                     <div className="mt-1 text-sm bg-white dark:bg-gray-900 rounded p-2">
                       {s.action}

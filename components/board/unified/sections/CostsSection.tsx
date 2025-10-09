@@ -238,11 +238,11 @@ export default function CostsSection({ projectId }: CostsSectionProps) {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg p-4"
+              className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/20 dark:to-gray-700/20 rounded-lg p-4"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Avg Cost/Call</span>
-                <Zap className="text-purple-500" size={18} />
+                <Zap className="text-gray-700" size={18} />
               </div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
                 {formatCurrency(metrics.averageCostPerCall)}

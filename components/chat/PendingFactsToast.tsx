@@ -136,7 +136,7 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-4 max-w-md border-l-4 border-purple-500">
+    <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-4 max-w-md border-l-4 border-gray-700">
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -155,14 +155,14 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
             onClick={() => toggleFact(fact.id)}
             className={`p-2 rounded border cursor-pointer transition-colors ${
               selected.has(fact.id)
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                ? 'border-gray-700 bg-gray-100 dark:bg-gray-800'
                 : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
             }`}
           >
             <div className="flex items-start gap-2">
               <div className="mt-0.5">
                 {selected.has(fact.id) ? (
-                  <CheckSquare size={16} className="text-purple-600" />
+                  <CheckSquare size={16} className="text-gray-700" />
                 ) : (
                   <Square size={16} className="text-gray-400" />
                 )}
@@ -196,7 +196,7 @@ export function PendingFactsToast({ projectId, facts, onValidated }: PendingFact
         <Button
           onClick={handleValidate}
           disabled={selected.size === 0}
-          className="flex-1 bg-purple-600 hover:bg-purple-700"
+          className="flex-1 bg-gray-700 hover:bg-gray-800"
           size="sm"
         >
           ✅ Valider ({selected.size})

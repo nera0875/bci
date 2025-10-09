@@ -17,6 +17,7 @@ import { CategoryManager } from '@/components/rules/CategoryManager'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import DynamicIcon from '@/components/shared/DynamicIcon'
 
 interface Rule {
   id: string
@@ -52,7 +53,7 @@ function DroppableCategory({ category, children }: { category: string; children:
       ref={setNodeRef}
       className={cn(
         "transition-all",
-        isOver && "bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-400 dark:ring-blue-500 rounded"
+        isOver && "bg-gray-50 dark:bg-gray-900/20 ring-2 ring-gray-400 dark:ring-gray-500 rounded"
       )}
     >
       {children}
@@ -91,9 +92,9 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
       style={style}
       className={cn(
         "group flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800",
-        "hover:border-blue-300 dark:hover:border-blue-600 transition-all",
-        rule.enabled && "border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-950/20",
-        isChecked && "bg-purple-50 dark:bg-purple-900/20"
+        "hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md transition-all duration-200",
+        rule.enabled && "border-gray-400 dark:border-gray-500 bg-gray-50 dark:bg-gray-950/20 shadow-sm",
+        isChecked && "bg-gray-100 dark:bg-gray-800"
       )}
     >
       {/* Selection Checkbox */}
@@ -102,9 +103,9 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
         className="cursor-pointer p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-all flex-shrink-0"
       >
         {isChecked ? (
-          <CheckSquare size={18} className="text-purple-600 dark:text-purple-400" />
+          <CheckSquare size={18} className="text-gray-700 dark:text-gray-400" />
         ) : (
-          <Square size={18} className="text-gray-400 group-hover:text-purple-500 transition-colors" />
+          <Square size={18} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
         )}
       </div>
 
@@ -123,11 +124,11 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
         className={cn(
           "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
           rule.enabled
-            ? "bg-blue-500 border-blue-500"
-            : "border-gray-300 dark:border-gray-600 hover:border-blue-400"
+            ? "bg-gray-900 border-gray-900 dark:bg-gray-100 dark:border-gray-100"
+            : "border-gray-300 dark:border-gray-600 hover:border-gray-400"
         )}
       >
-        {rule.enabled && <Check size={14} className="text-white" />}
+        {rule.enabled && <Check size={14} className={cn(rule.enabled && "text-white dark:text-gray-900")} />}
       </button>
 
       {/* Priority badge */}
@@ -220,8 +221,8 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           id: cat.id,  // UUID for API calls
           value: cat.key,
           label: cat.label,
-          icon: cat.icon || '📁',
-          color: 'gray' // Default color (can be extended later)
+          icon: cat.icon_name || cat.icon || 'Shield', // ✅ Use icon_name from DB
+          color: cat.icon_color || '#6b7280' // ✅ Use icon_color from DB
         }))
         setCategories(formatted)
       }
@@ -254,7 +255,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
         .from('rules')
         .select(`
         *,
-        rule_category:rule_categories!category_id(id, key, label, icon, description)
+        rule_category:rule_categories!category_id(id, key, label, icon_name, icon_color, description)
       `)
       .eq('project_id', projectId)
         .order('priority', { ascending: true })
@@ -537,25 +538,28 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                🛡️ Rules & Playbooks
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {filteredRules.length} rules • {filteredRules.filter(r => r.enabled).length} active
-              </p>
+            <div className="flex items-center gap-3">
+              <Shield className="text-gray-700 dark:text-gray-400" size={24} />
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Rules & Playbooks
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {filteredRules.length} rules • {filteredRules.filter(r => r.enabled).length} active
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
               {uncategorizedRules.length > 0 && (
-                <label className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                <label className="flex items-center gap-2 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700 cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors shadow-sm">
                   <input
                     type="checkbox"
                     checked={showUncategorized}
                     onChange={(e) => setShowUncategorized(e.target.checked)}
                     className="w-4 h-4 text-orange-600 bg-white dark:bg-gray-800 border-orange-300 rounded focus:ring-orange-500 cursor-pointer"
                   />
-                  <span className="text-sm">📋</span>
+                  <FileText size={14} className="text-orange-700 dark:text-orange-400" />
                   <span className="text-xs font-medium text-gray-900 dark:text-white whitespace-nowrap">
                     Uncategorized ({uncategorizedRules.length})
                   </span>
@@ -570,7 +574,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
               </Button>
               <Button
                 onClick={() => { setEditingRule(null); setShowBuilder(true); }}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-gray-900 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-300 dark:text-gray-900 shadow-sm"
               >
                 <Plus size={16} className="mr-2" />
                 New Rule
@@ -591,9 +595,9 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
 
           {/* Bulk Actions Toolbar */}
           {selectedRuleIds.size > 0 && (
-            <div className="mt-4 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg flex items-center justify-between">
+            <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Badge className="bg-purple-600 text-white">
+                <Badge className="bg-gray-700 text-white">
                   {selectedRuleIds.size} selected
                 </Badge>
                 <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -619,7 +623,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           {/* Uncategorized section */}
           {showUncategorized && uncategorizedRules.length > 0 && (
             <DroppableCategory key="uncategorized" category="uncategorized">
-              <div className="border border-orange-300 dark:border-orange-700 rounded-lg overflow-hidden">
+              <div className="border border-orange-300 dark:border-orange-700 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
                 {/* Category Header */}
                 <div className="w-full flex items-center justify-between p-4 bg-orange-50 dark:bg-orange-900/20">
                   <button
@@ -628,7 +632,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                   >
                     <div className="flex items-center gap-3">
                       {expandedCategories.has('uncategorized') ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      <span className="text-2xl">📋</span>
+                      <FileText size={20} className="text-orange-600 dark:text-orange-400" />
                       <div className="text-left">
                         <h3 className="font-semibold text-gray-900 dark:text-white">
                           Uncategorized
@@ -674,7 +678,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
 
             return (
               <DroppableCategory key={category.value} category={category.value}>
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
                   {/* Category Header */}
                   <div className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800">
                     <button
@@ -683,7 +687,11 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                     >
                       <div className="flex items-center gap-3">
                         {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        <span className="text-2xl">{category.icon}</span>
+                        <DynamicIcon
+                          name={category.icon}
+                          size={20}
+                          color={category.color}
+                        />
                         <div className="text-left">
                           <h3 className="font-semibold text-gray-900 dark:text-white">
                             {category.label}
@@ -700,7 +708,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                           e.stopPropagation()
                           selectAllInCategory(category.value, categoryRules)
                         }}
-                        className="text-xs text-purple-600 dark:text-purple-400 hover:underline px-2 py-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                        className="text-xs text-gray-700 dark:text-gray-400 hover:underline px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                       >
                         {allSelected ? 'Deselect All' : 'Select All'}
                       </button>

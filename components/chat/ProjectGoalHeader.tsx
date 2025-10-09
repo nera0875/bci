@@ -99,7 +99,7 @@ export default function ProjectGoalHeader({ projectId }: ProjectGoalHeaderProps)
   const getProgressColor = () => {
     if (progress.percentage >= 100) return 'bg-green-500'
     if (progress.percentage >= 75) return 'bg-blue-500'
-    if (progress.percentage >= 50) return 'bg-purple-500'
+    if (progress.percentage >= 50) return 'bg-gray-700'
     return 'bg-gray-400'
   }
 

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Bold, Italic, Code, List, ListOrdered, Heading1, Heading2,
-  Sparkles, RefreshCw, Eye, Edit3, Undo2, ChevronRight, X
+  Wand2, RefreshCw, Eye, Edit3, Undo2, ChevronRight, X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -236,7 +236,7 @@ Return ONLY the improved markdown content, nothing else.`
               <button
                 onClick={() => handleImprove(true)}
                 disabled={isImproving}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white rounded transition-colors disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white rounded transition-colors disabled:cursor-not-allowed"
               >
                 {isImproving ? (
                   <>
@@ -245,7 +245,7 @@ Return ONLY the improved markdown content, nothing else.`
                   </>
                 ) : (
                   <>
-                    <Sparkles size={12} />
+                    <Wand2 size={12} />
                     <span>Sélection</span>
                   </>
                 )}
@@ -254,7 +254,7 @@ Return ONLY the improved markdown content, nothing else.`
               <button
                 onClick={() => handleImprove(false)}
                 disabled={isImproving}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 disabled:from-gray-400 disabled:to-gray-500 text-white rounded transition-colors disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-800 hover:to-black disabled:from-gray-400 disabled:to-gray-500 text-white rounded transition-colors disabled:cursor-not-allowed"
               >
                 {isImproving ? (
                   <>
@@ -263,7 +263,7 @@ Return ONLY the improved markdown content, nothing else.`
                   </>
                 ) : (
                   <>
-                    <Sparkles size={12} />
+                    <Wand2 size={12} />
                     <span>Tout</span>
                   </>
                 )}
@@ -384,7 +384,7 @@ Return ONLY the improved markdown content, nothing else.`
             <Button
               onClick={onSave}
               disabled={isImproving}
-              className="bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600"
+              className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-800 hover:to-black"
             >
               Enregistrer
             </Button>

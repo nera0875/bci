@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, Copy, X } from 'lucide-react'
+import { Wand2, Copy, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import MarkdownEditorPro from '@/components/editor/MarkdownEditorPro'
@@ -154,17 +154,17 @@ export default function FloatingAIButton({
             "relative p-3 rounded-full shadow-lg transition-all duration-300",
             "hover:scale-110 active:scale-95 cursor-grab active:cursor-grabbing",
             isActive
-              ? "bg-gradient-to-r from-violet-500 to-purple-600 text-white animate-pulse"
+              ? "bg-gradient-to-r from-gray-700 to-gray-900 text-white animate-pulse"
               : "bg-gray-800 text-gray-300 hover:bg-gray-700"
           )}
           title="AI Text Assistant - Drag to move, Click to open"
         >
-          <Sparkles size={20} />
+          <Wand2 size={20} />
 
           {/* Glow effect when active */}
           {isActive && (
             <motion.div
-              className="absolute inset-0 rounded-full bg-violet-400 opacity-50 blur-xl"
+              className="absolute inset-0 rounded-full bg-gray-400 opacity-50 blur-xl"
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
@@ -207,9 +207,12 @@ export default function FloatingAIButton({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      ✨ AI Text Assistant
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <Wand2 className="text-gray-700 dark:text-gray-400" size={20} />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        AI Text Assistant
+                      </h3>
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Améliorez votre texte sélectionné avec l'IA
                     </p>

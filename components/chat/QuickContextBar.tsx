@@ -144,7 +144,7 @@ export function QuickContextBar({ currentStyle, onStyleChange, onContextSelect, 
         .from('rules')
         .select(`
           *,
-          rule_category:rule_categories!category_id(id, key, label, icon, description)
+          rule_category:rule_categories!category_id(id, key, label, icon_name, icon_color, description)
         `)
         .eq('project_id', projectId)
         .order('priority', { ascending: true })

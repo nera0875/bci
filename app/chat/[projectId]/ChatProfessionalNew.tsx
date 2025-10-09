@@ -139,7 +139,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
           systemPrompt: p.content,
           custom: true,
           category: p.category,
-          icon: p.icon || '✨'
+          icon: p.icon || '' // No fallback emoji
         }))
         setCustomStyles(styles)
 
@@ -560,7 +560,7 @@ export default function ChatProfessionalNew({ params }: { params: Promise<{ proj
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => stopStreamingFn?.()}
-                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium flex items-center gap-2 transition-colors"
+                  className="px-6 py-3 bg-gray-900 hover:bg-gray-700 dark:bg-gray-100 dark:hover:bg-gray-300 text-white dark:text-gray-900 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm"
                 >
                   <Square className="w-4 h-4" />
                   Arrêter
