@@ -33,7 +33,8 @@ interface SystemPrompt {
   // Supabase fields (aligned with DB schema)
   is_active?: boolean
   sort_order?: number
-  icon?: string
+  icon_name?: string
+  icon_color?: string
   description?: string
 }
 
@@ -198,7 +199,8 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
           enabled: p.is_active ?? false,
           priority: p.sort_order ?? 0,
           createdAt: p.created_at,
-          icon: p.icon,
+          icon_name: p.icon_name,
+          icon_color: p.icon_color,
           description: p.description
         }))
 
@@ -365,7 +367,8 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
             name: editingPrompt.name,
             content: editingPrompt.content,
             category: editingPrompt.category,
-            icon: editingPrompt.icon || 'FileCode',
+            icon_name: editingPrompt.icon_name || 'FileCode',
+            icon_color: editingPrompt.icon_color || '#6b7280',
             is_active: editingPrompt.enabled,
             sort_order: editingPrompt.priority
           })
@@ -391,7 +394,8 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
             name: editingPrompt.name,
             content: editingPrompt.content,
             category: editingPrompt.category,
-            icon: editingPrompt.icon || 'FileCode',
+            icon_name: editingPrompt.icon_name || 'FileCode',
+            icon_color: editingPrompt.icon_color || '#6b7280',
             is_active: editingPrompt.enabled,
             sort_order: editingPrompt.priority
           })
@@ -450,7 +454,8 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
           name: `${prompt.name} (Copy)`,
           content: prompt.content,
           category: prompt.category,
-          icon: prompt.icon || '✨',
+          icon_name: prompt.icon_name || 'FileCode',
+          icon_color: prompt.icon_color || '#6b7280',
           is_active: false,
           sort_order: prompts.length + 1
         })
@@ -469,7 +474,8 @@ export default function SystemPromptsSection({ projectId }: SystemPromptsProps) 
         enabled: created.is_active,
         priority: created.sort_order,
         createdAt: created.created_at,
-        icon: created.icon
+        icon_name: created.icon_name,
+        icon_color: created.icon_color
       }])
 
       toast.success('Prompt duplicated!')
