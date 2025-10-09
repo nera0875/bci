@@ -21,6 +21,16 @@ export default function DynamicIcon({
   // Récupérer l'icône dynamiquement depuis Phosphor
   const Icon = PhosphorIcons[name as keyof typeof PhosphorIcons] as any || Circle
 
+  // Debug logging
+  const iconExists = !!(PhosphorIcons[name as keyof typeof PhosphorIcons])
+  console.log('🔍 DynamicIcon:', {
+    name,
+    exists: iconExists,
+    usingFallback: !iconExists,
+    color,
+    size
+  })
+
   return (
     <Icon
       size={size}

@@ -8,8 +8,8 @@ import { toast } from 'sonner'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import IconColorPicker from '@/components/shared/IconColorPicker'
 import DynamicIcon from '@/components/shared/DynamicIcon'
+import IconPickerNotion from '@/components/shared/IconPickerNotion'
 
 interface Category {
   id?: string  // UUID from database
@@ -146,7 +146,8 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
             id: exists.id, // ✅ Use UUID from database
             key: editingCategory.value,
             label: editingCategory.label,
-            icon: editingCategory.icon,
+            icon_name: editingCategory.icon, // ✅ Send as icon_name
+            icon_color: editingCategory.color, // ✅ Send as icon_color
             description: editingCategory.label
           })
         })
@@ -168,7 +169,8 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
             projectId,
             key: editingCategory.value,
             label: editingCategory.label,
-            icon: editingCategory.icon,
+            icon_name: editingCategory.icon, // ✅ Send as icon_name
+            icon_color: editingCategory.color, // ✅ Send as icon_color
             description: editingCategory.label
           })
         })
@@ -185,8 +187,8 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
           id: newCategory.id,
           value: newCategory.key,
           label: newCategory.label,
-          icon: newCategory.icon,
-          color: 'gray'
+          icon: newCategory.icon_name || newCategory.icon || 'Shield',
+          color: newCategory.icon_color || '#6b7280'
         }])
       }
 
@@ -280,12 +282,11 @@ export function CategoryManager({ categories: initialCategories, onSave, onCance
             {/* Icon + Color Picker */}
             <div>
               <label className="block text-sm font-medium mb-2">Icône & Couleur</label>
-              <IconColorPicker
-                icon={editingCategory.icon}
+              <IconPickerNotion
+                value={editingCategory.icon}
                 color={editingCategory.color}
-                onIconChange={(icon) => setEditingCategory({ ...editingCategory, icon })}
+                onChange={(icon) => setEditingCategory({ ...editingCategory, icon })}
                 onColorChange={(color) => setEditingCategory({ ...editingCategory, color })}
-                size="md"
               />
             </div>
 

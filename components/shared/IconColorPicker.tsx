@@ -1,6 +1,6 @@
 'use client'
 
-import IconPicker from './IconPicker'
+import IconPickerFull from './IconPickerFull'
 import ColorPicker from './ColorPicker'
 import DynamicIcon from './DynamicIcon'
 import { cn } from '@/lib/utils'
@@ -40,7 +40,7 @@ export default function IconColorPicker({
 
       <div className="flex items-center gap-2">
         {/* Icon Picker */}
-        <IconPicker
+        <IconPickerFull
           value={icon}
           onChange={onIconChange}
           color={color}

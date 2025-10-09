@@ -21,6 +21,7 @@ import { TagPicker } from '@/components/memory/TagPicker'
 import { HttpRequestViewer } from '@/components/memory/HttpRequestViewer'
 import { BurpRequestPaster } from '@/components/memory/BurpRequestPaster'
 import { FactRelationPicker } from '@/components/memory/FactRelationPicker'
+import DynamicIcon from '@/components/shared/DynamicIcon'
 import type { HttpRequestMetadata, HttpResponseMetadata, FactRelation } from '@/lib/types/http-metadata'
 
 interface Fact {
@@ -52,6 +53,7 @@ function SortableCategory({
   category,
   label,
   icon,
+  color,
   count,
   isExpanded,
   onToggle,
@@ -63,6 +65,7 @@ function SortableCategory({
   category: string
   label: string
   icon: string
+  color?: string
   count: number
   isExpanded: boolean
   onToggle: () => void
@@ -146,7 +149,7 @@ function SortableCategory({
               ) : (
                 <ChevronRight className="w-5 h-5 text-gray-500 transition-transform duration-200" />
               )}
-              <span className="text-2xl transition-transform duration-150 hover:scale-110">{icon}</span>
+              <DynamicIcon name={icon} size={24} color={color || '#6b7280'} />
               <div className="text-left">
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                   {label}
@@ -355,7 +358,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
 
   // Category management state
   const [isManagingCategories, setIsManagingCategories] = useState(false)
-  const [customCategories, setCustomCategories] = useState<Array<{key: string, label: string, icon: string, description?: string}>>([])
+  const [customCategories, setCustomCategories] = useState<Array<{key: string, label: string, icon: string, color: string, description?: string}>>([])
   const [editingCategoryKey, setEditingCategoryKey] = useState<string | null>(null)
 
   // Tag management state
@@ -479,7 +482,8 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
         const formatted = data.categories.map((c: any) => ({
           key: c.key,
           label: c.label,
-          icon: c.icon,
+          icon: c.icon_name || c.icon || 'Folder', // ✅ Use icon_name from DB
+          color: c.icon_color || '#6b7280', // ✅ Use icon_color from DB (not used in FactsMemoryViewPro yet)
           description: c.description,
           id: c.id // Garder l'ID pour UPDATE/DELETE
         }))
@@ -540,7 +544,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     return TAG_COLORS[color] || TAG_COLORS.gray
   }
 
-  const saveCustomCategories = async (categories: Array<{key: string, label: string, icon: string, id?: string}>) => {
+  const saveCustomCategories = async (categories: Array<{key: string, label: string, icon: string, color: string, id?: string}>) => {
     // Utilisé pour UPDATE en batch (rare)
     // Note: Pour CREATE/UPDATE/DELETE individuels, on utilise directement l'API
     setCustomCategories(categories)
@@ -665,23 +669,23 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   }
 
   const getAllCategories = () => {
-    const allCats: Record<string, {label: string, icon: string}> = {}
+    const allCats: Record<string, {label: string, icon: string, color: string}> = {}
 
     // 1. D'abord, ajouter toutes les catégories des facts existants
     const categoriesFromFacts = new Set(facts.map(f => f.metadata.category).filter(Boolean))
     categoriesFromFacts.forEach(key => {
-      allCats[key] = {label: key, icon: 'Folder'} // Phosphor icon
+      allCats[key] = {label: key, icon: 'Folder', color: '#6b7280'} // Phosphor icon with default color
     })
 
-    // 2. Puis, écraser avec les custom (permet de customiser l'icon/label)
+    // 2. Puis, écraser avec les custom (permet de customiser l'icon/label/color)
     customCategories.forEach(cat => {
-      allCats[cat.key] = {label: cat.label, icon: cat.icon}
+      allCats[cat.key] = {label: cat.label, icon: cat.icon, color: cat.color || '#6b7280'}
     })
 
     // 3. Ajouter la catégorie système "uncategorized" si des facts sans catégorie existent
     const hasUncategorized = facts.some(f => !f.metadata.category)
     if (hasUncategorized && showUncategorized) {
-      allCats['uncategorized'] = {label: 'No Category', icon: 'FolderOpen'} // Phosphor icon
+      allCats['uncategorized'] = {label: 'No Category', icon: 'FolderOpen', color: '#6b7280'} // Phosphor icon with default color
     }
 
     return allCats
@@ -690,6 +694,11 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   const getCategoryIcon = (category: string) => {
     const allCats = getAllCategories()
     return allCats[category]?.icon || 'File' // Phosphor icon fallback
+  }
+
+  const getCategoryColor = (category: string) => {
+    const allCats = getAllCategories()
+    return allCats[category]?.color || '#6b7280' // Default gray color
   }
 
   const getCategoryLabel = (category: string) => {
@@ -1265,6 +1274,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                   category={category}
                   label={getCategoryLabel(category)}
                   icon={getCategoryIcon(category)}
+                  color={getCategoryColor(category)}
                   count={categoryFacts.length}
                   isExpanded={expandedCategories.has(category)}
                   onToggle={() => toggleCategory(category)}
@@ -1320,7 +1330,12 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                     <div className="p-1 bg-blue-50 dark:bg-blue-900/30 rounded">
                       <GripVertical size={18} className="text-blue-500" />
                     </div>
-                    <span className="text-2xl filter drop-shadow-lg">{getCategoryIcon(activeId.replace('category-', ''))}</span>
+                    <DynamicIcon
+                      name={getCategoryIcon(activeId.replace('category-', ''))}
+                      size={24}
+                      color={getCategoryColor(activeId.replace('category-', ''))}
+                      className="filter drop-shadow-lg"
+                    />
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{getCategoryLabel(activeId.replace('category-', ''))}</span>
                   </div>
                 </div>
@@ -1427,9 +1442,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                   className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900"
                 >
                   <option value="">No Category</option>
-                  {Object.entries(getAllCategories()).map(([key, {label, icon}]) => (
+                  {Object.entries(getAllCategories()).map(([key, {label}]) => (
                     <option key={key} value={key}>
-                      {icon} {label}
+                      {label}
                     </option>
                   ))}
                 </select>
@@ -1451,7 +1466,9 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                           projectId,
                           key: newCatKey,
                           label: newCatLabel,
-                          icon: newCatIcon || 'Folder' // Default Phosphor icon
+                          icon_name: newCatIcon || 'Folder', // ✅ Use icon_name instead of icon
+                          icon_color: '#6b7280', // ✅ Default gray color
+                          description: newCatLabel
                         })
                       })
 
@@ -1460,9 +1477,12 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                         setEditedCategory(newCatKey)
                         toast.success('Category created!')
                       } else {
-                        toast.error('Failed to create category')
+                        const errorData = await response.json()
+                        console.error('Error creating category:', errorData)
+                        toast.error(`Failed to create category: ${errorData.error || 'Unknown error'}`)
                       }
                     } catch (error) {
+                      console.error('Error creating category:', error)
                       toast.error('Failed to create category')
                     }
                   }}

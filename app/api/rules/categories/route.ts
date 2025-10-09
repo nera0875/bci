@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const body = await request.json()
-    const { projectId, key, label, icon, description } = body
+    const { projectId, key, label, icon, icon_name, icon_color, description } = body
 
     if (!projectId || !key || !label) {
       return NextResponse.json(
@@ -54,15 +54,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Support both old (icon emoji) and new (icon_name + icon_color) format
+    const insertData: any = {
+      project_id: projectId,
+      key: key.toLowerCase().replace(/\s+/g, '_'),
+      label,
+      description: description || null
+    }
+
+    // New format (preferred)
+    if (icon_name) {
+      insertData.icon_name = icon_name
+      insertData.icon_color = icon_color || '#6b7280'
+    }
+    // Fallback to old format
+    else if (icon) {
+      insertData.icon = icon
+    }
+    // Default
+    else {
+      insertData.icon_name = 'Shield'
+      insertData.icon_color = '#6b7280'
+    }
+
     const { data, error } = await (supabase as any)
       .from('rule_categories')
-      .insert({
-        project_id: projectId,
-        key: key.toLowerCase().replace(/\s+/g, '_'),
-        label,
-        icon: icon || '📁',
-        description: description || null
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -79,7 +96,7 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
     const body = await request.json()
-    const { id, key, label, icon, description } = body
+    const { id, key, label, icon, icon_name, icon_color, description } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -88,8 +105,17 @@ export async function PUT(request: NextRequest) {
     const updates: any = {}
     if (key !== undefined) updates.key = key.toLowerCase().replace(/\s+/g, '_')
     if (label !== undefined) updates.label = label
-    if (icon !== undefined) updates.icon = icon
     if (description !== undefined) updates.description = description
+
+    // New format (preferred)
+    if (icon_name !== undefined) {
+      updates.icon_name = icon_name
+      if (icon_color !== undefined) updates.icon_color = icon_color
+    }
+    // Fallback to old format
+    else if (icon !== undefined) {
+      updates.icon = icon
+    }
 
     const { data, error } = await (supabase as any)
       .from('rule_categories')

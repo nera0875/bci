@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, key, label, icon, description } = body
+    const { projectId, key, label, icon, icon_name, icon_color, description } = body
 
     if (!projectId || !key || !label) {
       return NextResponse.json(
@@ -43,13 +43,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if category with same key already exists
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from('memory_categories')
       .select('id')
       .eq('project_id', projectId)
       .eq('key', key)
-      .single()
+      .maybeSingle() // Use maybeSingle() instead of single() to avoid error when no row exists
 
+    // Only return error if category actually exists (not if checkError is "no rows")
     if (existing) {
       return NextResponse.json(
         { error: 'Category with this key already exists' },
@@ -57,15 +58,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Support both old (icon emoji) and new (icon_name + icon_color) format
+    const insertData: any = {
+      project_id: projectId,
+      key: key.toLowerCase().replace(/\s+/g, '_'),
+      label,
+      description: description || null
+    }
+
+    // Always use new format (icon_name + icon_color)
+    insertData.icon_name = icon_name || icon || 'Folder'
+    insertData.icon_color = icon_color || '#6b7280'
+
     const { data, error } = await supabase
       .from('memory_categories')
-      .insert({
-        project_id: projectId,
-        key: key.toLowerCase().replace(/\s+/g, '_'),
-        label,
-        icon: icon || '📁',
-        description: description || null
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -81,7 +88,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, key, label, icon, description } = body
+    const { id, key, label, icon, icon_name, icon_color, description } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -90,8 +97,17 @@ export async function PUT(request: NextRequest) {
     const updates: any = {}
     if (key !== undefined) updates.key = key.toLowerCase().replace(/\s+/g, '_')
     if (label !== undefined) updates.label = label
-    if (icon !== undefined) updates.icon = icon
     if (description !== undefined) updates.description = description
+
+    // Always use new format (icon_name + icon_color)
+    if (icon_name !== undefined) {
+      updates.icon_name = icon_name
+    } else if (icon !== undefined) {
+      updates.icon_name = icon // Convert old icon param to icon_name
+    }
+    if (icon_color !== undefined) {
+      updates.icon_color = icon_color
+    }
 
     const { data, error } = await supabase
       .from('memory_categories')

@@ -8,51 +8,32 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
-interface IconPickerProps {
+interface IconPickerFullProps {
   value?: string // Icon name (ex: "Folder", "Shield", "Brain")
   onChange: (iconName: string) => void
   trigger?: React.ReactNode
   color?: string // Couleur de l'icône affichée
 }
 
-// Liste des icônes populaires Phosphor (triées par catégorie)
-const POPULAR_ICONS = [
-  // Files & Folders
-  'Folder', 'FolderOpen', 'File', 'FileText', 'Files', 'Archive',
-  // Security
-  'Shield', 'ShieldCheck', 'ShieldWarning', 'Lock', 'LockKey', 'Key',
-  // Tech & Code
-  'Code', 'Terminal', 'Database', 'HardDrive', 'Cloud', 'CloudCheck',
-  // Communication
-  'ChatCircle', 'Envelope', 'Bell', 'Phone', 'VideoCamera', 'Broadcast',
-  // UI Elements
-  'Square', 'Circle', 'Triangle', 'Star', 'Heart', 'Flag',
-  // Actions
-  'Check', 'X', 'Plus', 'Minus', 'Gear', 'Wrench',
-  // Navigation
-  'ArrowRight', 'ArrowLeft', 'CaretRight', 'House', 'Compass', 'Target',
-  // Business
-  'Briefcase', 'Money', 'ChartLine', 'TrendUp', 'Percent', 'Receipt',
-  // Objects
-  'Lightbulb', 'Rocket', 'Crown', 'Fire', 'Lightning', 'Sparkle',
-  // Nature
-  'Tree', 'Plant', 'Sun', 'Moon', 'CloudRain', 'Snowflake',
-  // People
-  'User', 'Users', 'UserCircle', 'IdentificationCard', 'Skull', 'Smiley',
-  // Media
-  'Image', 'Camera', 'MusicNote', 'FilmReel', 'Play', 'Pause'
-]
+// Extraire TOUS les noms d'icônes Phosphor (9000+)
+const ALL_PHOSPHOR_ICONS = Object.keys(PhosphorIcons).filter(
+  key => typeof PhosphorIcons[key as keyof typeof PhosphorIcons] === 'function'
+    && !key.includes('Icon') // Exclure les variants "Icon"
+    && key !== 'IconContext'
+)
 
-export default function IconPicker({ value, onChange, trigger, color = 'currentColor' }: IconPickerProps) {
+export default function IconPickerFull({ value, onChange, trigger, color = 'currentColor' }: IconPickerFullProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
 
   // Filtrer les icônes par recherche
   const filteredIcons = useMemo(() => {
-    if (!search) return POPULAR_ICONS
-    return POPULAR_ICONS.filter(name =>
-      name.toLowerCase().includes(search.toLowerCase())
-    )
+    if (!search) return ALL_PHOSPHOR_ICONS.slice(0, 200) // Limit initial display
+
+    const searchLower = search.toLowerCase()
+    return ALL_PHOSPHOR_ICONS
+      .filter(name => name.toLowerCase().includes(searchLower))
+      .slice(0, 200) // Limit results to 200 for performance
   }, [search])
 
   // Icône actuellement sélectionnée
@@ -76,11 +57,11 @@ export default function IconPicker({ value, onChange, trigger, color = 'currentC
 
       {/* Icon Picker Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <PhosphorIcons.Sparkle size={20} className="text-gray-700 dark:text-gray-400" />
-              Choose Icon
+              Choose Icon - {ALL_PHOSPHOR_ICONS.length.toLocaleString()} icons available
             </DialogTitle>
           </DialogHeader>
 
@@ -90,8 +71,9 @@ export default function IconPicker({ value, onChange, trigger, color = 'currentC
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search icons..."
+              placeholder="Search icons... (ex: folder, shield, brain)"
               className="pl-9 pr-9"
+              autoFocus
             />
             {search && (
               <button
@@ -104,23 +86,21 @@ export default function IconPicker({ value, onChange, trigger, color = 'currentC
           </div>
 
           {/* Icons Grid */}
-          <ScrollArea className="h-96">
+          <ScrollArea className="h-[500px]">
             {filteredIcons.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
                 <PhosphorIcons.MagnifyingGlass size={48} className="mb-2 opacity-20" />
                 <p className="text-sm">No icons found</p>
+                <p className="text-xs text-gray-400 mt-1">Try a different search term</p>
               </div>
             ) : (
-              <div className="grid grid-cols-8 gap-2 p-2">
+              <div className="grid grid-cols-10 gap-2 p-2">
                 {filteredIcons.map((iconName) => {
                   const Icon = PhosphorIcons[iconName as keyof typeof PhosphorIcons] as any
                   const isSelected = value === iconName
 
                   // Protection: Si l'icône n'existe pas, on skip
-                  if (!Icon) {
-                    console.warn(`IconPicker: Icon "${iconName}" not found in Phosphor Icons`)
-                    return null
-                  }
+                  if (!Icon) return null
 
                   return (
                     <button
@@ -130,7 +110,7 @@ export default function IconPicker({ value, onChange, trigger, color = 'currentC
                         setOpen(false)
                       }}
                       className={cn(
-                        "flex items-center justify-center w-12 h-12 rounded-lg transition-all",
+                        "flex flex-col items-center justify-center p-2 rounded-lg transition-all",
                         "hover:bg-gray-100 dark:hover:bg-gray-800",
                         isSelected && "bg-gray-900 dark:bg-gray-100"
                       )}
@@ -145,6 +125,14 @@ export default function IconPicker({ value, onChange, trigger, color = 'currentC
                             : "text-gray-700 dark:text-gray-400"
                         )}
                       />
+                      <span className={cn(
+                        "text-[9px] mt-1 truncate w-full text-center",
+                        isSelected
+                          ? "text-white dark:text-gray-900"
+                          : "text-gray-500 dark:text-gray-500"
+                      )}>
+                        {iconName}
+                      </span>
                     </button>
                   )
                 })}
@@ -154,7 +142,16 @@ export default function IconPicker({ value, onChange, trigger, color = 'currentC
 
           {/* Stats */}
           <div className="text-xs text-gray-500 text-center pt-2 border-t">
-            {filteredIcons.length} icons {search && `matching "${search}"`}
+            {search ? (
+              <>
+                Showing {filteredIcons.length} of {ALL_PHOSPHOR_ICONS.length.toLocaleString()} icons
+                {filteredIcons.length === 200 && ' (limited to 200 for performance)'}
+              </>
+            ) : (
+              <>
+                Showing first 200 of {ALL_PHOSPHOR_ICONS.length.toLocaleString()} icons - use search to find more
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

@@ -17,6 +17,7 @@ import { CategoryManager } from '@/components/rules/CategoryManager'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import DynamicIcon from '@/components/shared/DynamicIcon'
 
 interface Rule {
   id: string
@@ -220,8 +221,8 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           id: cat.id,  // UUID for API calls
           value: cat.key,
           label: cat.label,
-          icon: cat.icon || '📁',
-          color: 'gray' // Default color (can be extended later)
+          icon: cat.icon_name || cat.icon || 'Shield', // ✅ Use icon_name from DB
+          color: cat.icon_color || '#6b7280' // ✅ Use icon_color from DB
         }))
         setCategories(formatted)
       }
@@ -254,7 +255,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
         .from('rules')
         .select(`
         *,
-        rule_category:rule_categories!category_id(id, key, label, icon, description)
+        rule_category:rule_categories!category_id(id, key, label, icon_name, icon_color, description)
       `)
       .eq('project_id', projectId)
         .order('priority', { ascending: true })
@@ -686,7 +687,11 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                     >
                       <div className="flex items-center gap-3">
                         {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        <span className="text-2xl">{category.icon}</span>
+                        <DynamicIcon
+                          name={category.icon}
+                          size={20}
+                          color={category.color}
+                        />
                         <div className="text-left">
                           <h3 className="font-semibold text-gray-900 dark:text-white">
                             {category.label}
