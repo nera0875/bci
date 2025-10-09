@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
           factsContext = `
 ## 🧠 MÉMOIRE ACTIVE (${memoryFacts.length} facts pertinents)
 
-${memoryFacts.map((fact: any) => {
+${memoryFacts.map((fact: any, index: number) => {
   const meta = fact.metadata || {}
   const details = []
   if (meta.category) details.push(`📁 ${meta.category}`)
@@ -71,7 +71,28 @@ ${memoryFacts.map((fact: any) => {
   if (meta.result) details.push(meta.result === 'success' ? '✅ Success' : '❌ Failed')
   if (meta.tags?.length > 0) details.push(`🏷️ ${meta.tags.join(', ')}`)
 
-  return `• ${fact.fact}\n  ${details.join(' | ')} (${(fact.similarity * 100).toFixed(0)}% match)`
+  // Exposer blocks structure pour les 2 premiers facts (learning by example)
+  let blocksInfo = ''
+  if (index < 2 && meta.blocks && Array.isArray(meta.blocks) && meta.blocks.length > 0) {
+    const blockTypes = meta.blocks.slice(0, 3).map((b: any) => b.type).join(' → ')
+    blocksInfo = `\n  📦 Structure: ${blockTypes}${meta.blocks.length > 3 ? ` (+${meta.blocks.length - 3} more)` : ''}`
+
+    // Montrer 1 exemple concret de block pour apprentissage
+    if (meta.blocks[0]) {
+      const firstBlock = meta.blocks[0]
+      let blockExample = ''
+      if (firstBlock.type === 'http_request') {
+        blockExample = `\n  💡 Ex: {"type":"http_request","method":"${firstBlock.method}","url":"${firstBlock.url}"}`
+      } else if (firstBlock.type === 'heading') {
+        blockExample = `\n  💡 Ex: {"type":"heading","content":"${firstBlock.content}","level":${firstBlock.level}}`
+      } else if (firstBlock.type === 'test_result') {
+        blockExample = `\n  💡 Ex: {"type":"test_result","name":"${firstBlock.name}","status":"${firstBlock.status}"}`
+      }
+      blocksInfo += blockExample
+    }
+  }
+
+  return `• ${fact.fact}\n  ${details.join(' | ')} (${(fact.similarity * 100).toFixed(0)}% match)${blocksInfo}`
 }).join('\n\n')}
 
 ---
@@ -146,6 +167,31 @@ ${categories.map((cat: any) => `- **${cat.icon} ${cat.label}** (key: \`${cat.key
       console.warn('⚠️ Categories load failed (non-blocking):', err)
     }
 
+    // PHASE 1.2c: GET AVAILABLE TAGS (dynamic learning)
+    let tagsContextFormatted = ''
+    try {
+      const { data: tags } = await supabase
+        .from('tag_templates')
+        .select('name, color')
+        .eq('project_id', projectId)
+        .order('name', { ascending: true })
+
+      if (tags && tags.length > 0) {
+        tagsContextFormatted = `
+## 🏷️ TAGS DISPONIBLES (${tags.length} tags)
+
+${tags.map((t: any) => `- **${t.name}** (${t.color || 'default'})`).join('\n')}
+
+⚠️ Utilise ces tags existants quand approprié, ou crée de nouveaux tags si nécessaire.
+
+---
+`
+        console.log('🏷️ Loaded', tags.length, 'tag templates')
+      }
+    } catch (err) {
+      console.warn('⚠️ Tags load failed (non-blocking):', err)
+    }
+
     // PHASE 1.3: GET ACTIVE RULES FROM PROJECT (Structured)
     // Séparer rules "always" (instructions permanentes) VS rules "conditional" (déclenchées par contexte)
     let rulesAlwaysFormatted = ''
@@ -154,10 +200,10 @@ ${categories.map((cat: any) => `- **${cat.icon} ${cat.label}** (key: \`${cat.key
     try {
       const { data: activeRules } = await supabase
         .from('rules')
-        .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, action_instructions, target_categories, target_tags, enabled, sort_order')
+        .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, action_instructions, target_categories, target_tags, enabled, priority')
         .eq('project_id', projectId)
         .eq('enabled', true)
-        .order('sort_order', { ascending: true })
+        .order('priority', { ascending: true })
         .limit(50)
 
       if (activeRules && activeRules.length > 0) {
@@ -168,11 +214,11 @@ ${categories.map((cat: any) => `- **${cat.icon} ${cat.label}** (key: \`${cat.key
           console.log('🎨 Loading rules linked to template:', currentTemplateId)
           const { data: linkedRules } = await supabase
             .from('rules')
-            .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, action_instructions, target_categories, target_tags, enabled, sort_order')
+            .select('id, name, icon, category, trigger_type, trigger_config, action_type, action_config, action_instructions, target_categories, target_tags, enabled, priority')
             .eq('project_id', projectId)
             .eq('linked_template_id', currentTemplateId)
             .eq('enabled', true)
-            .order('sort_order', { ascending: true })
+            .order('priority', { ascending: true })
 
           if (linkedRules && linkedRules.length > 0) {
             // Merge avec les rules déjà chargées (éviter doublons)
@@ -397,9 +443,10 @@ ${matchingRules.map(rule => {
     // 1. Project Context (nom, goal)
     // 2. System Prompts (rôle global, personnalité)
     // 3. Rules Always (instructions permanentes : MEMORY_ACTION, Formatting, etc.)
-    // 4. Categories disponibles
-    // 5. Memory Facts (RAG similarity - mémoire active)
-    // 6. Rules Conditional (si keyword X → action Y)
+    // 4. Categories disponibles (learning by example)
+    // 5. Tags disponibles (learning by example)
+    // 6. Memory Facts (RAG similarity - mémoire active avec blocks structure)
+    // 7. Rules Conditional (si keyword X → action Y)
 
     const finalSystemPrompt =
       projectContext +                       // 1. Contexte projet
@@ -409,10 +456,11 @@ ${matchingRules.map(rule => {
       rulesAlwaysFormatted +                 // 3. Rules "always" (instructions système permanentes)
       '\n\n---\n\n' +
       categoriesContextFormatted +           // 4. Catégories memory disponibles
-      memoryContextFormatted +               // 5. Memory Facts (RAG similarity)
+      tagsContextFormatted +                 // 5. Tags disponibles
+      memoryContextFormatted +               // 6. Memory Facts (RAG similarity)
       '\n\n---\n\n' +
-      matchedRulesPrompt +                   // 6a. Rules auto-détectées (priorité haute)
-      rulesConditionalFormatted              // 6b. Rules conditionnelles
+      matchedRulesPrompt +                   // 7a. Rules auto-détectées (priorité haute)
+      rulesConditionalFormatted              // 7b. Rules conditionnelles
 
     console.log('✅ Final prompt built, length:', finalSystemPrompt.length)
 

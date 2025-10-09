@@ -2218,7 +2218,8 @@ export default function ChatStream({ projectId, conversationId: propConversation
             tags: cleanedTags,
             severity: factData.severity || 'low',
             technique: factData.technique || null,
-            endpoint: factData.endpoint || null
+            endpoint: factData.endpoint || null,
+            blocks: factData.blocks || []  // ✅ FIX: Save blocks in metadata
           }
         })
         .select()
@@ -2252,7 +2253,54 @@ export default function ChatStream({ projectId, conversationId: propConversation
             // Process in background without blocking
             processFactCreation(factData).then(result => {
               if (result.success) {
-                showToast(`✅ Fact saved successfully!`, 'success')
+                // ✅ Toast avec preview blocks
+                const blocks = factData.blocks || []
+                const blockTypes = blocks.map((b: any) => b.type).join(' → ')
+
+                toast.custom((t) => (
+                  <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-4 max-w-md border-l-4 border-green-500">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                        <span className="text-lg">✅</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          Fact saved!
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
+                          {factData.fact}
+                        </p>
+                        {blocks.length > 0 && (
+                          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span className="font-medium">📦 {blocks.length} block{blocks.length !== 1 ? 's' : ''}</span>
+                            <div className="mt-1 text-[10px] font-mono text-purple-600 dark:text-purple-400 truncate">
+                              {blockTypes}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('open-bci-board', {
+                            detail: { section: 'memory' }
+                          }))
+                          toast.dismiss(t.id)
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
+                      >
+                        📝 View in Memory
+                      </button>
+                      <button
+                        onClick={() => toast.dismiss(t.id)}
+                        className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs rounded transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                ), { duration: 8000 })
               } else {
                 showToast(`❌ Failed to save fact`, 'error')
               }
