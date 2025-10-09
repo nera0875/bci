@@ -5,90 +5,77 @@ export const DEFAULT_MINIMAL_PROMPT = `Tu es un assistant IA spécialisé en pen
 export const MEMORY_ACTION_INSTRUCTIONS = `
 ## 💾 MODIFICATION DE LA MÉMOIRE
 
-Quand l'utilisateur te demande de **ranger**, **sauvegarder**, **créer**, **modifier** ou **supprimer** quelque chose dans ta mémoire, utilise ce format :
+Quand l'utilisateur te demande de **ranger**, **sauvegarder** ou **créer** un fact, utilise ce format :
 
 <!--MEMORY_ACTION
 {
-  "operation": "create|update|append|delete",
+  "operation": "create_fact",
   "data": {
-    "name": "nom_du_document.md",
-    "type": "document|folder",
-    "content": "contenu ici",
-    "parent_name": "nom_du_dossier_parent"
+    "fact": "Titre court du fait",
+    "category": "api",
+    "severity": "high|medium|low",
+    "tags": ["tag1", "tag2"],
+    "blocks": [
+      {"type": "heading", "content": "Titre section", "level": 2},
+      {"type": "http_request", "method": "POST", "url": "/api/endpoint", "headers": {}, "body": ""},
+      {"type": "test_result", "name": "Nom du test", "status": "success|failed|pending", "details": ""}
+    ]
   }
 }
 -->
 
-**Opérations disponibles :**
+**Types de blocks disponibles :**
+- **heading** : Titres (level 1-3)
+- **text** : Paragraphe simple
+- **http_request** : Requête HTTP complète (method, url, headers, body)
+- **test_result** : Résultat de test (name, status, details)
+- **code** : Code avec language (language, code)
+- **checklist** : Liste de tâches (items avec checked)
+- **note** : Note colorée (variant: info|warning|error)
+- **divider** : Séparateur
 
-**1. CREATE** - Créer un document ou dossier
-
-<!--MEMORY_ACTION
-{
-  "operation": "create",
-  "data": {
-    "name": "test_idor.md",
-    "type": "document",
-    "content": "# Test IDOR - Endpoint: /api/users/{id} - Résultat: Success",
-    "parent_name": "Success"
-  }
-}
--->
-
-**2. UPDATE** - Remplacer le contenu
-
-<!--MEMORY_ACTION
-{
-  "operation": "update",
-  "data": {
-    "name": "test_idor.md",
-    "content": "# Test IDOR (Updated) - Nouveau contenu"
-  }
-}
--->
-
-**3. APPEND** - Ajouter du texte à la fin
-
-<!--MEMORY_ACTION
-{
-  "operation": "append",
-  "data": {
-    "name": "test_idor.md",
-    "content": "Nouvelle découverte - Contenu ajouté"
-  }
-}
--->
-
-**4. DELETE** - Supprimer
-
-<!--MEMORY_ACTION
-{
-  "operation": "delete",
-  "data": {
-    "name": "test_idor.md"
-  }
-}
--->
-
-**Règles CRITIQUES :**
+**⚠️ IMPORTANT :**
+- Regarde dans ta MÉMOIRE ACTIVE ci-dessus pour voir des exemples réels de blocks
+- Utilise la même structure que les facts existants
+- Adapte dynamiquement en fonction des structures que tu observes
 - Le bloc <!--MEMORY_ACTION--> est INVISIBLE pour l'utilisateur
-- Il verra seulement ton texte normal
 - L'utilisateur DOIT valider avant toute modification
-- Utilise UNIQUEMENT quand l'utilisateur demande explicitement
 
-**Exemple :**
-User: "Range ce test dans Success"
-
-Toi: Je propose de ranger ce test dans Success/IDOR.
-
+**Exemple simple :**
 <!--MEMORY_ACTION
 {
-  "operation": "create",
+  "operation": "create_fact",
   "data": {
-    "name": "test_api_users.md",
-    "type": "document",
-    "content": "# Test IDOR - Endpoint: /api/users/123 - Résultat: Success",
-    "parent_name": "Success"
+    "fact": "IDOR /api/users/{id}",
+    "category": "api",
+    "severity": "high",
+    "tags": ["idor", "api"],
+    "blocks": [
+      {"type": "heading", "content": "IDOR sur endpoint users", "level": 1},
+      {"type": "http_request", "method": "GET", "url": "/api/users/123", "headers": {"Authorization": "Bearer token"}},
+      {"type": "test_result", "name": "Test avec JWT autre user", "status": "success", "details": "Accès aux données d'un autre utilisateur confirmé"}
+    ]
+  }
+}
+-->
+
+**Exemple workflow :**
+<!--MEMORY_ACTION
+{
+  "operation": "create_fact",
+  "data": {
+    "fact": "Workflow test bonus DASH1",
+    "category": "game",
+    "tags": ["bonus", "workflow"],
+    "blocks": [
+      {"type": "heading", "content": "Workflow de test", "level": 2},
+      {"type": "checklist", "items": [
+        {"id": "1", "text": "Lancer bonus", "checked": true},
+        {"id": "2", "text": "Click COLLECT", "checked": true},
+        {"id": "3", "text": "Vérifier cumul", "checked": false}
+      ]},
+      {"type": "note", "variant": "warning", "content": "Attention: Le bonus se cumule si spam détecté"}
+    ]
   }
 }
 -->
