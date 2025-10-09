@@ -89,8 +89,6 @@ const PHOSPHOR_ICONS_LIST = [
 // Use the comprehensive manually-curated list
 const ICON_LIST = PHOSPHOR_ICONS_LIST.sort() // Alphabetical order
 
-console.log('📦 ICON_LIST ready:', ICON_LIST.length, 'Phosphor icons')
-
 // Quick colors (style Notion)
 const QUICK_COLORS = [
   { name: 'Gray', value: '#6b7280' },
@@ -123,29 +121,19 @@ export default function IconPickerNotion({
   const [selectedColor, setSelectedColor] = useState(color)
   const [recentIcons, setRecentIcons] = useState<string[]>([])
 
-  // Debug: Log icon list when component mounts
-  console.log('🔍 IconPickerNotion mounted - ICON_LIST length:', ICON_LIST.length)
-  console.log('🔍 First 20 icons:', ICON_LIST.slice(0, 20))
-
   // Detect if value is emoji or icon name
   const isEmoji = value && /\p{Emoji}/u.test(value) && value.length <= 4
 
   // Filter icons
   const filteredIcons = useMemo(() => {
-    console.log('🔍 filteredIcons - search:', search, 'ICON_LIST.length:', ICON_LIST.length)
-
     if (!search) {
-      const result = ICON_LIST.slice(0, 200)
-      console.log('✅ No search - returning first 200 icons, result.length:', result.length)
-      return result
+      return ICON_LIST.slice(0, 200)
     }
 
     const searchLower = search.toLowerCase()
-    const result = ICON_LIST
+    return ICON_LIST
       .filter(name => name.toLowerCase().includes(searchLower))
       .slice(0, 200)
-    console.log('✅ Search filtered - result.length:', result.length)
-    return result
   }, [search])
 
   // Filter emojis
@@ -270,13 +258,13 @@ export default function IconPickerNotion({
           </div>
 
           {/* Tabs */}
-          <Tabs defaultValue="emoji" className="flex-1">
+          <Tabs defaultValue="icons" className="flex-1">
             <TabsList className="w-full justify-start rounded-none border-b border-gray-200 dark:border-gray-800 bg-transparent px-6">
-              <TabsTrigger value="emoji" className="rounded-none border-b-2 border-transparent data-[state=active]:border-gray-900 dark:data-[state=active]:border-gray-100">
-                Emoji
-              </TabsTrigger>
               <TabsTrigger value="icons" className="rounded-none border-b-2 border-transparent data-[state=active]:border-gray-900 dark:data-[state=active]:border-gray-100">
                 Icônes
+              </TabsTrigger>
+              <TabsTrigger value="emoji" className="rounded-none border-b-2 border-transparent data-[state=active]:border-gray-900 dark:data-[state=active]:border-gray-100">
+                Emoji
               </TabsTrigger>
               <TabsTrigger value="upload" className="rounded-none border-b-2 border-transparent data-[state=active]:border-gray-900 dark:data-[state=active]:border-gray-100">
                 Charger
@@ -353,11 +341,10 @@ export default function IconPickerNotion({
                     </h4>
                     {filteredIcons.length === 0 ? (
                       <p className="text-sm text-gray-400 py-8 text-center">
-                        🔍 No icons found - filteredIcons.length = {filteredIcons.length}
+                        Aucune icône trouvée
                       </p>
                     ) : (
                       <div className="grid grid-cols-10 gap-2">
-                        {console.log('🎨 Rendering', filteredIcons.length, 'icons in grid')}
                         {filteredIcons.map((iconName) => {
                           const isSelected = value === iconName
                           return (
