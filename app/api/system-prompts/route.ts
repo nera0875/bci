@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { projectId, name, content, description, category, icon, is_active, sort_order } = body
+    const { projectId, name, content, description, category, icon_name, icon_color, is_active, sort_order } = body
 
     if (!projectId || !name || !content) {
       return NextResponse.json(
@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
         content,
         description: description || null,
         category: category || null,
-        icon: icon || '✨',
+        icon_name: icon_name || 'FileCode',
+        icon_color: icon_color || '#6b7280',
         is_active: is_active || false,
         sort_order: sort_order || 0
       })
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, content, description, category, icon, is_active, sort_order } = body
+    const { id, name, content, description, category, icon_name, icon_color, is_active, sort_order } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -84,7 +85,8 @@ export async function PUT(request: NextRequest) {
     if (content !== undefined) updates.content = content
     if (description !== undefined) updates.description = description
     if (category !== undefined) updates.category = category
-    if (icon !== undefined) updates.icon = icon
+    if (icon_name !== undefined) updates.icon_name = icon_name
+    if (icon_color !== undefined) updates.icon_color = icon_color
     if (is_active !== undefined) updates.is_active = is_active
     if (sort_order !== undefined) updates.sort_order = sort_order
 
