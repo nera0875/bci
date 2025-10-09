@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronRight, Filter,
   Save, Calendar, Tag, Edit2, GripVertical,
   CheckSquare, Square, Database, FileText, Folder,
-  FolderOpen, Globe
+  FolderOpen, Globe, Sparkles, Blocks
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -18,11 +18,11 @@ import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } 
 import { CSS } from '@dnd-kit/utilities'
 import { CategoryPanel, type Category, TagManagementPanel, type TagTemplate } from '@/components/shared'
 import { TagPicker } from '@/components/memory/TagPicker'
-import { HttpRequestViewer } from '@/components/memory/HttpRequestViewer'
-import { BurpRequestPaster } from '@/components/memory/BurpRequestPaster'
-import { FactRelationPicker } from '@/components/memory/FactRelationPicker'
 import DynamicIcon from '@/components/shared/DynamicIcon'
-import type { HttpRequestMetadata, HttpResponseMetadata, FactRelation } from '@/lib/types/http-metadata'
+import { QuickAddFactV2 } from '@/components/memory/QuickAddFactV2'
+import { BlockList } from '@/components/memory/BlockList'
+import { EditableBlockList } from '@/components/memory/EditableBlockList'
+import type { Block } from '@/types/memory'
 
 interface Fact {
   id: string
@@ -39,6 +39,7 @@ interface Fact {
     position?: number
     confidence: number
     tags?: string[]
+    blocks?: Block[]
   }
   created_at: string
   updated_at: string
@@ -351,7 +352,6 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   const [isEditing, setIsEditing] = useState(false)
   const [editedFact, setEditedFact] = useState('')
   const [editedType, setEditedType] = useState('')
-  const [editedTechnique, setEditedTechnique] = useState('')
   const [editedSeverity, setEditedSeverity] = useState('')
   const [editedCategory, setEditedCategory] = useState('')
   const [editedTags, setEditedTags] = useState<string[]>([])
@@ -368,15 +368,11 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
   // Show/hide uncategorized facts
   const [showUncategorized, setShowUncategorized] = useState(true)
 
-  // Side panel tabs
-  const [activeTab, setActiveTab] = useState<'details' | 'http'>('details')
+  // QuickAddFact state
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
 
-  // HTTP Request state
-  const [editedHttpRequest, setEditedHttpRequest] = useState<HttpRequestMetadata | null>(null)
-  const [editedHttpResponse, setEditedHttpResponse] = useState<HttpResponseMetadata | null>(null)
-
-  // Relations state
-  const [editedRelations, setEditedRelations] = useState<FactRelation[]>([])
+  // Blocks state
+  const [editedBlocks, setEditedBlocks] = useState<Block[]>([])
 
   // Color classes mapping - DARK & BOLD pour meilleure visibilité
   const TAG_COLORS: Record<string, {bg: string, text: string, border: string}> = {
@@ -555,14 +551,10 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     setSelectedFact(null)
     setEditedFact('')
     setEditedType('general')
-    setEditedTechnique('')
     setEditedSeverity('')
     setEditedCategory('')
     setEditedTags([])
-    setEditedHttpRequest(null)
-    setEditedHttpResponse(null)
-    setEditedRelations([])
-    setActiveTab('details')
+    setEditedBlocks([])
     setIsEditing(false)
   }
 
@@ -573,7 +565,8 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
       metadata: {
         type: 'general',
         confidence: 1.0,
-        tags: []
+        tags: [],
+        blocks: []
       },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -581,13 +574,10 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     setSelectedFact(newFact)
     setEditedFact('')
     setEditedType('general')
-    setEditedTechnique('')
     setEditedSeverity('')
     setEditedCategory('')
     setEditedTags([])
-    setEditedHttpRequest(null)  // ✅ Reset HTTP request
-    setEditedHttpResponse(null) // ✅ Reset HTTP response
-    setActiveTab('details')     // ✅ Back to Details tab
+    setEditedBlocks([])
     setIsEditing(true)
   }
 
@@ -733,21 +723,10 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
     setSelectedFact(fact)
     setEditedFact(fact.fact)
     setEditedType(fact.metadata.type)
-    setEditedTechnique(fact.metadata.technique || '')
     setEditedSeverity(fact.metadata.severity || '')
     setEditedCategory(fact.metadata.category || '')
     setEditedTags(fact.metadata.tags || [])
-    setEditedHttpRequest((fact.metadata as any).http_request || null)
-    setEditedHttpResponse((fact.metadata as any).http_response || null)
-    setEditedRelations((fact.metadata as any).related_to || [])
-
-    // Auto-switch to HTTP tab if HTTP request exists
-    if ((fact.metadata as any).http_request) {
-      setActiveTab('http')
-    } else {
-      setActiveTab('details')
-    }
-
+    setEditedBlocks(fact.metadata.blocks || [])
     setIsEditing(false)
   }
 
@@ -765,13 +744,10 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
         metadata: {
           ...selectedFact.metadata,
           type: editedType,
-          technique: editedTechnique || null,
           severity: editedSeverity || null,
           category: editedCategory || null,
           tags: editedTags,
-          ...(editedHttpRequest && { http_request: editedHttpRequest }),
-          ...(editedHttpResponse && { http_response: editedHttpResponse }),
-          ...(editedRelations.length > 0 && { related_to: editedRelations })
+          blocks: editedBlocks
         } as any
       }
 
@@ -1150,6 +1126,15 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Refresh
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowQuickAdd(!showQuickAdd)}
+                className={showQuickAdd ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700' : ''}
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Quick Add
+              </Button>
               <Button size="sm" className="bg-gray-900 hover:bg-gray-700 text-white dark:bg-gray-100 dark:hover:bg-gray-300 dark:text-gray-900" onClick={handleCreateNewFact}>
                 <Plus className="w-4 h-4 mr-2" />
                 New Fact
@@ -1245,6 +1230,56 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
             </select>
           </div>
         </div>
+
+        {/* QuickAddFactV2 Component */}
+        {showQuickAdd && (
+          <div className="px-6 py-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <QuickAddFactV2
+              projectId={projectId}
+              onSave={async (parsed) => {
+                // Generate embedding
+                let embedding = null
+                try {
+                  const embeddingRes = await fetch('/api/openai/embeddings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: parsed.fact, projectId })
+                  })
+                  if (embeddingRes.ok) {
+                    const embData = await embeddingRes.json()
+                    embedding = embData.embedding
+                  }
+                } catch (err) {
+                  console.warn('Embedding generation failed:', err)
+                }
+
+                // Save to memory_facts
+                const { error } = await supabase
+                  .from('memory_facts')
+                  .insert({
+                    project_id: projectId,
+                    fact: parsed.fact,
+                    metadata: {
+                      category: parsed.category,
+                      tags: parsed.tags,
+                      blocks: parsed.blocks,
+                      type: 'general',
+                      confidence: 1.0
+                    },
+                    embedding
+                  })
+
+                if (error) throw error
+
+                // Reload and close
+                await loadFacts()
+                setShowQuickAdd(false)
+                toast.success('✨ Fact created with blocks!')
+              }}
+              onCancel={() => setShowQuickAdd(false)}
+            />
+          </div>
+        )}
 
         {/* Grouped Facts List */}
         <DndContext
@@ -1384,53 +1419,40 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
             </Button>
           </div>
 
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 dark:border-gray-800">
-            <button
-              onClick={() => setActiveTab('details')}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'details'
-                  ? 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-700 dark:border-gray-400 bg-gray-100 dark:bg-gray-800'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-            >
-              📝 Details
-            </button>
-            <button
-              onClick={() => setActiveTab('http')}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'http'
-                  ? 'text-gray-900 dark:text-gray-100 border-b-2 border-gray-700 dark:border-gray-400 bg-gray-100 dark:bg-gray-800'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-            >
-              🌐 HTTP Request
-              {editedHttpRequest && (
-                <Badge className="ml-2 bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30">
-                  ✓
+          {/* Content Header - Simplified */}
+          <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Blocks className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Content
+                </h3>
+              </div>
+              {editedBlocks.length > 0 && (
+                <Badge className="bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30">
+                  {editedBlocks.length} block{editedBlocks.length !== 1 ? 's' : ''}
                 </Badge>
               )}
-            </button>
+            </div>
           </div>
 
-          {/* Panel Content */}
+          {/* Panel Content - Unified Blocks Editor */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {activeTab === 'details' && (
-              <>
-            {/* Fact Content */}
+            {/* Title */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Description
+                Title *
               </label>
-              <textarea
+              <input
+                type="text"
                 value={editedFact}
                 onChange={(e) => setEditedFact(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 min-h-[100px]"
-                placeholder="Fact description..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900"
+                placeholder="Short title for this fact..."
               />
             </div>
 
-            {/* Category avec bouton + pour créer */}
+            {/* Category */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 📁 Category
@@ -1466,8 +1488,8 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                           projectId,
                           key: newCatKey,
                           label: newCatLabel,
-                          icon_name: newCatIcon || 'Folder', // ✅ Use icon_name instead of icon
-                          icon_color: '#6b7280', // ✅ Default gray color
+                          icon_name: newCatIcon || 'Folder',
+                          icon_color: '#6b7280',
                           description: newCatLabel
                         })
                       })
@@ -1511,20 +1533,6 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               </select>
             </div>
 
-            {/* Technique */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Technique
-              </label>
-              <input
-                type="text"
-                value={editedTechnique}
-                onChange={(e) => setEditedTechnique(e.target.value)}
-                placeholder="e.g., BizLogic, IDOR, SQLi..."
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900"
-              />
-            </div>
-
             {/* Tags */}
             <div>
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
@@ -1537,15 +1545,64 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               />
             </div>
 
-            {/* Relations */}
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-              <FactRelationPicker
-                projectId={projectId}
-                currentFactId={selectedFact.id}
-                relations={editedRelations}
-                onChange={setEditedRelations}
-                allFacts={facts}
-              />
+            {/* Unified Blocks Editor */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Content Blocks
+                </label>
+                {editedBlocks.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    Add structured content blocks
+                  </p>
+                )}
+              </div>
+
+              {/* EditableBlockList or conversion prompt */}
+              {selectedFact?.metadata.blocks !== undefined ? (
+                <EditableBlockList
+                  blocks={editedBlocks}
+                  onChange={(newBlocks) => setEditedBlocks(newBlocks)}
+                />
+              ) : (
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm mb-2 text-blue-900 dark:text-blue-100">
+                    This fact uses the old format. Convert to blocks to enable structured content editing.
+                  </p>
+                  <Button
+                    onClick={async () => {
+                      if (!selectedFact) return
+
+                      // Parse existing fact content into blocks
+                      try {
+                        const response = await fetch('/api/memory/parse', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            input: selectedFact.fact,
+                            projectId
+                          })
+                        })
+
+                        if (response.ok) {
+                          const parsed = await response.json()
+                          setEditedBlocks(parsed.blocks || [])
+                          toast.success('✨ Converted to blocks!')
+                        } else {
+                          toast.error('Failed to convert')
+                        }
+                      } catch (error) {
+                        console.error('Conversion error:', error)
+                        toast.error('Failed to convert')
+                      }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Convert to Blocks
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Metadata */}
@@ -1559,47 +1616,6 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 <span>Updated: {new Date(selectedFact.updated_at).toLocaleString()}</span>
               </div>
             </div>
-            </>
-            )}
-
-            {/* HTTP Request Tab */}
-            {activeTab === 'http' && (
-              <div className="space-y-4">
-                {editedHttpRequest ? (
-                  <>
-                    {/* Display existing HTTP request */}
-                    <HttpRequestViewer
-                      request={editedHttpRequest}
-                      response={editedHttpResponse}
-                    />
-
-                    {/* Remove button */}
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setEditedHttpRequest(null)
-                        setEditedHttpResponse(null)
-                        toast.success('HTTP request removed')
-                      }}
-                      className="w-full text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Remove HTTP Request
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    {/* Burp Request Paster for adding new request */}
-                    <BurpRequestPaster
-                      onParsed={(request) => {
-                        setEditedHttpRequest(request)
-                        toast.success('HTTP request added!')
-                      }}
-                    />
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Panel Footer */}
@@ -1626,7 +1642,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               value: c.key,
               label: c.label,
               icon: c.icon,
-              color: 'gray' as const,
+              color: c.color || '#6b7280',
               description: c.description
             }))
 
@@ -1641,7 +1657,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                 value: cat,
                 label: cat,
                 icon: 'Folder', // Phosphor icon
-                color: 'gray' as const
+                color: '#6b7280'
               }))
 
             return [...customCats, ...factOnlyCategories]
@@ -1656,6 +1672,7 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
               key: c.value,
               label: c.label,
               icon: c.icon,
+              color: c.color || '#6b7280',
               description: c.description
             }))
 
@@ -1683,7 +1700,8 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                     id: (existing as any).id,
                     key: cat.key,
                     label: cat.label,
-                    icon: cat.icon,
+                    icon_name: cat.icon,
+                    icon_color: cat.color || '#6b7280',
                     description: cat.description
                   })
                 })
@@ -1696,7 +1714,8 @@ export default function FactsMemoryViewPro({ projectId }: FactsMemoryViewProProp
                     projectId,
                     key: cat.key,
                     label: cat.label,
-                    icon: cat.icon,
+                    icon_name: cat.icon,
+                    icon_color: cat.color || '#6b7280',
                     description: cat.description
                   })
                 })
