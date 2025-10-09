@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import * as PhosphorIcons from '@phosphor-icons/react'
 import { Search, X, Upload, Sparkle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -60,7 +60,7 @@ const PHOSPHOR_ICONS_LIST = [
   'Warning', 'WarningCircle', 'Info', 'Question', 'ShieldCheck', 'ShieldWarning',
 
   // Business & Office
-  'Briefcase', 'BriefcaseMetal', 'Package', 'Box', 'Archive', 'Folder', 'FolderNotch',
+  'Briefcase', 'BriefcaseMetal', 'Package', 'Box', 'Archive', 'FolderNotch',
 
   // Social & Misc
   'ThumbsUp', 'ThumbsDown', 'Smiley', 'SmileyXEyes', 'EyeSlash', 'Eye',
@@ -122,31 +122,39 @@ export default function IconPickerNotion({
   const [search, setSearch] = useState('')
   const [selectedColor, setSelectedColor] = useState(color)
   const [recentIcons, setRecentIcons] = useState<string[]>([])
-
-  // Debug: Log icon list when component mounts
-  console.log('🔍 IconPickerNotion mounted - ICON_LIST length:', ICON_LIST.length)
-  console.log('🔍 First 20 icons:', ICON_LIST.slice(0, 20))
+  const [displayLimit, setDisplayLimit] = useState(60) // Limite d'affichage (optimisé pour performance)
 
   // Detect if value is emoji or icon name
   const isEmoji = value && /\p{Emoji}/u.test(value) && value.length <= 4
 
-  // Filter icons
+  // Filter icons avec limit progressif
   const filteredIcons = useMemo(() => {
-    console.log('🔍 filteredIcons - search:', search, 'ICON_LIST.length:', ICON_LIST.length)
-
-    if (!search) {
-      const result = ICON_LIST.slice(0, 200)
-      console.log('✅ No search - returning first 200 icons, result.length:', result.length)
-      return result
-    }
-
     const searchLower = search.toLowerCase()
-    const result = ICON_LIST
-      .filter(name => name.toLowerCase().includes(searchLower))
-      .slice(0, 200)
-    console.log('✅ Search filtered - result.length:', result.length)
-    return result
+    const filtered = search
+      ? ICON_LIST.filter(name => name.toLowerCase().includes(searchLower))
+      : ICON_LIST
+
+    return filtered.slice(0, displayLimit)
+  }, [search, displayLimit])
+
+  // Toutes les icônes filtrées (pour compteur)
+  const totalFiltered = useMemo(() => {
+    if (!search) return ICON_LIST.length
+    return ICON_LIST.filter(name => name.toLowerCase().includes(search.toLowerCase())).length
   }, [search])
+
+  // Fonction load more
+  const loadMoreIcons = () => {
+    setDisplayLimit(prev => prev + 60)
+  }
+
+  // Reset displayLimit quand recherche change
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    setDisplayLimit(60)
+  }
+
+  const hasMoreIcons = filteredIcons.length < totalFiltered
 
   // Filter emojis
   const filteredEmojis = useMemo(() => {
@@ -214,6 +222,7 @@ export default function IconPickerNotion({
       {/* Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl p-0 gap-0" aria-describedby="icon-picker-description">
+          <DialogTitle className="sr-only">Icon Picker</DialogTitle>
           {/* Header with color picker */}
           <div className="p-6 pb-4 border-b border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between mb-4">
@@ -253,14 +262,14 @@ export default function IconPickerNotion({
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <Input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Filtrer..."
                 className="pl-9 pr-9 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800"
                 autoFocus
               />
               {search && (
                 <button
-                  onClick={() => setSearch('')}
+                  onClick={() => handleSearchChange('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   <X size={16} />
@@ -349,45 +358,56 @@ export default function IconPickerNotion({
                   {/* All Icons */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
-                      {search ? `Résultats (${filteredIcons.length})` : 'Toutes les icônes'}
+                      {search ? `Résultats (${filteredIcons.length}/${totalFiltered})` : 'Toutes les icônes'}
                     </h4>
                     {filteredIcons.length === 0 ? (
                       <p className="text-sm text-gray-400 py-8 text-center">
-                        🔍 No icons found - filteredIcons.length = {filteredIcons.length}
+                        🔍 Aucune icône trouvée
                       </p>
                     ) : (
-                      <div className="grid grid-cols-10 gap-2">
-                        {console.log('🎨 Rendering', filteredIcons.length, 'icons in grid')}
-                        {filteredIcons.map((iconName) => {
-                          const isSelected = value === iconName
-                          return (
-                            <button
-                              key={iconName}
-                              onClick={() => handleIconSelect(iconName)}
-                              className={cn(
-                                "flex flex-col items-center justify-center p-2 rounded-lg transition-all",
-                                "hover:bg-gray-100 dark:hover:bg-gray-800",
-                                isSelected && "bg-gray-900 dark:bg-gray-100 ring-2 ring-gray-400"
-                              )}
-                              title={iconName}
-                            >
-                              <DynamicIcon
-                                name={iconName}
-                                size={20}
-                                color={isSelected ? '#fff' : selectedColor}
-                              />
-                              <span className={cn(
-                                "text-[8px] mt-0.5 truncate w-full text-center",
-                                isSelected
-                                  ? "text-white dark:text-gray-900 font-medium"
-                                  : "text-gray-400"
-                              )}>
-                                {iconName}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
+                      <>
+                        <div className="grid grid-cols-10 gap-2">
+                          {filteredIcons.map((iconName) => {
+                            const isSelected = value === iconName
+                            return (
+                              <button
+                                key={iconName}
+                                onClick={() => handleIconSelect(iconName)}
+                                className={cn(
+                                  "flex flex-col items-center justify-center p-2 rounded-lg transition-all",
+                                  "hover:bg-gray-100 dark:hover:bg-gray-800",
+                                  isSelected && "bg-gray-900 dark:bg-gray-100 ring-2 ring-gray-400"
+                                )}
+                                title={iconName}
+                              >
+                                <DynamicIcon
+                                  name={iconName}
+                                  size={20}
+                                  color={isSelected ? '#fff' : selectedColor}
+                                />
+                                <span className={cn(
+                                  "text-[8px] mt-0.5 truncate w-full text-center",
+                                  isSelected
+                                    ? "text-white dark:text-gray-900 font-medium"
+                                    : "text-gray-400"
+                                )}>
+                                  {iconName}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {/* Load More Button */}
+                        {hasMoreIcons && (
+                          <button
+                            onClick={loadMoreIcons}
+                            className="mt-4 w-full px-4 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
+                          >
+                            Charger plus ({totalFiltered - filteredIcons.length} restantes)
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  claude-hub:
+    image: intelligenceassist/claude-hub:latest
+    container_name: claude-hub
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      # GitHub Configuration
+      - BOT_USERNAME=nera0875  # Ton username GitHub
+      - GITHUB_TOKEN=${GITHUB_TOKEN}  # Token GitHub (permissions: repo, workflow)
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}  # Secret pour webhook
+
+      # Claude Max OAuth (ton abonnement)
+      - CLAUDE_ACCESS_TOKEN=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
+      - CLAUDE_REFRESH_TOKEN=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
+
+      # Optional: Log level
+      - LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data  # Pour sauvegarder les données
+      - ./logs:/app/logs  # Pour les logs

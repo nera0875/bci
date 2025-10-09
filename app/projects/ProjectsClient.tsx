@@ -136,17 +136,17 @@ export default function ProjectsClient({ userId }: { userId: string }) {
 
     setCreatingProject(true)
     try {
+      // Use RPC function to create project + add user as owner
       const { data, error } = await (supabase as any)
-        .from('projects')
-        .insert({
-          name: newProjectName,
-          goal: newProjectGoal || null,
-          user_id: userId,
-          api_keys: {
+        .rpc('create_project_with_member', {
+          p_name: newProjectName,
+          p_goal: newProjectGoal || null,
+          p_user_id: userId,
+          p_api_keys: {
             anthropic: anthropicKey,
             openai: openaiKey || null
           },
-          settings: {
+          p_settings: {
             memorySearch: {
               enabled: true,
               embeddingsEnabled: false,
@@ -156,13 +156,12 @@ export default function ProjectsClient({ userId }: { userId: string }) {
             }
           }
         })
-        .select()
         .single()
 
       if (error) throw error
 
       if (data) {
-        setProjects([data, ...projects])
+        setProjects([{ ...data, role: 'owner' }, ...projects])
         setNewProjectName('')
         setNewProjectGoal('')
         setAnthropicKey('')

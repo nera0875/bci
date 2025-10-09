@@ -260,7 +260,7 @@ export default function RulesManager({ projectId }: RulesManagerProps) {
       </div>
 
       <div className="text-sm text-gray-500">
-        {rules.length} of 2 results
+        {rules.length} result{rules.length !== 1 ? 's' : ''}
       </div>
 
       {/* Editor Dialog */}

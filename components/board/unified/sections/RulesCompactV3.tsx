@@ -25,6 +25,7 @@ interface Rule {
   description?: string
   enabled: boolean
   icon?: string
+  color?: string
   category?: string
   category_id?: string
   trigger_type?: string
@@ -62,7 +63,7 @@ function DroppableCategory({ category, children }: { category: string; children:
 }
 
 // Sortable rule item
-function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, onDuplicate }: {
+function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, onDuplicate, editingInline, inlineEditValue, onStartInlineEdit, onCancelInlineEdit, onSaveInlineEdit, onInlineEditChange, onInlineKeyDown }: {
   rule: Rule
   isChecked: boolean
   onToggle: (id: string) => void
@@ -70,6 +71,13 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
   onEdit: (rule: Rule) => void
   onDelete: (id: string) => void
   onDuplicate: (rule: Rule) => void
+  editingInline: { ruleId: string; field: 'name' | 'instructions' } | null
+  inlineEditValue: string
+  onStartInlineEdit: (ruleId: string, field: 'name' | 'instructions', currentValue: string) => void
+  onCancelInlineEdit: () => void
+  onSaveInlineEdit: () => void
+  onInlineEditChange: (value: string) => void
+  onInlineKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void
 }) {
   const {
     attributes,
@@ -85,6 +93,40 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
     transition,
     opacity: isDragging ? 0.5 : 1
   }
+
+  // Amélioration de la logique de preview
+  const getPreviewText = () => {
+    const rawText = rule.action_instructions || rule.description || 'No instructions configured'
+
+    // Nettoyer le markdown
+    const cleanText = rawText
+      .replace(/^#+\s*/gm, '') // Enlever headers
+      .replace(/\*\*/g, '')     // Enlever bold
+      .replace(/\*/g, '')       // Enlever italique
+      .replace(/`/g, '')        // Enlever code
+      .trim()
+
+    // Si le texte est très court (< 20 chars), l'afficher tel quel
+    if (cleanText.length < 20) {
+      return cleanText
+    }
+
+    // Sinon, prendre les premières lignes significatives
+    const lines = cleanText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 5) // Lignes avec au moins 5 caractères
+
+    if (lines.length === 0) {
+      return cleanText.substring(0, 100)
+    }
+
+    const preview = lines.slice(0, 2).join(' ')
+    return preview.length > 150 ? preview.substring(0, 150) + '...' : preview
+  }
+
+  const isEditingName = editingInline?.ruleId === rule.id && editingInline?.field === 'name'
+  const isEditingInstructions = editingInline?.ruleId === rule.id && editingInline?.field === 'instructions'
 
   return (
     <div
@@ -120,7 +162,10 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
 
       {/* Enabled Checkbox */}
       <button
-        onClick={() => onToggle(rule.id)}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle(rule.id)
+        }}
         className={cn(
           "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
           rule.enabled
@@ -139,43 +184,87 @@ function SortableRule({ rule, isChecked, onToggle, onCheck, onEdit, onDelete, on
       {/* Icon + Name & Instructions preview */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-lg">{rule.icon || '🎯'}</span>
-          <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
-            {rule.name}
-          </span>
+          <DynamicIcon name={rule.icon || 'Target'} size={18} color={rule.color || '#6b7280'} />
+
+          {/* Inline edit NAME */}
+          {isEditingName ? (
+            <Input
+              autoFocus
+              value={inlineEditValue}
+              onChange={(e) => onInlineEditChange(e.target.value)}
+              onKeyDown={onInlineKeyDown}
+              onBlur={onSaveInlineEdit}
+              className="h-6 text-sm font-medium flex-1"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                onStartInlineEdit(rule.id, 'name', rule.name)
+              }}
+              className="font-medium text-sm text-gray-900 dark:text-white truncate cursor-text hover:bg-gray-100 dark:hover:bg-gray-700 px-1 rounded"
+              title="Double-clic pour éditer"
+            >
+              {rule.name}
+            </span>
+          )}
         </div>
 
-        {/* Preview simplifié des instructions */}
-        <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
-          {(rule.action_instructions || rule.description || 'No instructions configured')
-            .replace(/^#+\s*/gm, '') // Enlever les markdown headers
-            .replace(/\*\*/g, '') // Enlever le bold
-            .split('\n')
-            .filter(line => line.trim().length > 10) // Garder que les lignes avec du contenu
-            .slice(0, 2) // Prendre les 2 premières lignes
-            .join(' ')
-            .substring(0, 150)}...
-        </div>
+        {/* Inline edit INSTRUCTIONS */}
+        {isEditingInstructions ? (
+          <textarea
+            autoFocus
+            value={inlineEditValue}
+            onChange={(e) => onInlineEditChange(e.target.value)}
+            onKeyDown={onInlineKeyDown}
+            onBlur={onSaveInlineEdit}
+            className="w-full text-xs text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded p-1 resize-none"
+            rows={3}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              const value = rule.action_instructions || rule.description || ''
+              onStartInlineEdit(rule.id, 'instructions', value)
+            }}
+            className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 cursor-text hover:bg-gray-100 dark:hover:bg-gray-700 px-1 rounded"
+            title="Double-clic pour éditer"
+          >
+            {getPreviewText()}
+          </div>
+        )}
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={() => onEdit(rule)}
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit(rule)
+          }}
           className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-          title="Edit"
+          title="Full edit (icon, triggers, category...)"
         >
           <Edit2 size={14} />
         </button>
         <button
-          onClick={() => onDuplicate(rule)}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDuplicate(rule)
+          }}
           className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
           title="Duplicate"
         >
           <Copy size={14} />
         </button>
         <button
-          onClick={() => onDelete(rule.id)}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(rule.id)
+          }}
           className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-600"
           title="Delete"
         >
@@ -197,6 +286,17 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set())
   const [showUncategorized, setShowUncategorized] = useState(true)
 
+  // Quick add states
+  const [quickAddCategory, setQuickAddCategory] = useState<string | null>(null)
+  const [quickAddName, setQuickAddName] = useState('')
+  const [quickAddInstructions, setQuickAddInstructions] = useState('')
+  const [quickAddStep, setQuickAddStep] = useState<'name' | 'instructions'>('name')
+  const [isCreatingQuick, setIsCreatingQuick] = useState(false)
+
+  // Inline editing states
+  const [editingInline, setEditingInline] = useState<{ ruleId: string; field: 'name' | 'instructions' } | null>(null)
+  const [inlineEditValue, setInlineEditValue] = useState('')
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -205,10 +305,197 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
     })
   )
 
-  // Load categories from Supabase (rule_categories table)
+  // Inline editing handlers
+  const startInlineEdit = (ruleId: string, field: 'name' | 'instructions', currentValue: string) => {
+    setEditingInline({ ruleId, field })
+    setInlineEditValue(currentValue)
+  }
+
+  const cancelInlineEdit = () => {
+    setEditingInline(null)
+    setInlineEditValue('')
+  }
+
+  const saveInlineEdit = async () => {
+    if (!editingInline) return
+    if (!inlineEditValue.trim()) {
+      toast.error('La valeur ne peut pas être vide')
+      return
+    }
+
+    try {
+      const updateData: any = {}
+      if (editingInline.field === 'name') {
+        updateData.name = inlineEditValue.trim()
+      } else {
+        updateData.action_instructions = inlineEditValue.trim()
+        updateData.description = inlineEditValue.trim()
+      }
+
+      const { error } = await supabase
+        .from('rules')
+        .update(updateData)
+        .eq('id', editingInline.ruleId)
+
+      if (error) throw error
+
+      // Optimistic UI update
+      setRules(rules.map(r =>
+        r.id === editingInline.ruleId
+          ? { ...r, ...updateData }
+          : r
+      ))
+
+      toast.success('Rule mise à jour !')
+      cancelInlineEdit()
+    } catch (error) {
+      console.error('Error updating rule:', error)
+      toast.error('Erreur lors de la sauvegarde')
+    }
+  }
+
+  const handleInlineKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      cancelInlineEdit()
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      saveInlineEdit()
+    }
+    // Shift+Enter pour nouvelle ligne dans textarea
+  }
+
+  // Quick add handlers
+  const handleStartQuickAdd = (categoryId: string) => {
+    setQuickAddCategory(categoryId)
+    setQuickAddStep('name')
+    setQuickAddName('')
+    setQuickAddInstructions('')
+    // Auto-expand category if collapsed
+    if (!expandedCategories.has(categoryId)) {
+      setExpandedCategories(new Set([...expandedCategories, categoryId]))
+    }
+  }
+
+  const handleQuickAddCancel = () => {
+    setQuickAddCategory(null)
+    setQuickAddName('')
+    setQuickAddInstructions('')
+    setQuickAddStep('name')
+  }
+
+  const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      handleQuickAddCancel()
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      handleQuickAddSubmit()
+    }
+  }
+
+  const handleQuickAddSubmit = async () => {
+    if (quickAddStep === 'name') {
+      if (!quickAddName.trim()) {
+        toast.error('Le nom est requis')
+        return
+      }
+      setQuickAddStep('instructions')
+    } else {
+      // Step instructions - create the rule
+      if (!quickAddInstructions.trim()) {
+        toast.error('Les instructions sont requises')
+        return
+      }
+
+      setIsCreatingQuick(true)
+      try {
+        // Determine category_id (null for uncategorized)
+        const categoryId = quickAddCategory === 'uncategorized' ? null : quickAddCategory
+
+        // Find max priority for this category
+        const categoryRules = categoryId === null
+          ? rules.filter(r => !r.category_id)
+          : rules.filter(r => r.category_id === categoryId)
+
+        const maxPriority = categoryRules.length > 0
+          ? Math.max(...categoryRules.map(r => r.priority || 0))
+          : rules.length
+
+        const { error } = await supabase
+          .from('rules')
+          .insert({
+            project_id: projectId,
+            name: quickAddName.trim(),
+            description: quickAddInstructions.trim(),
+            icon: 'Target',
+            color: '#3b82f6',
+            category_id: categoryId,
+            trigger: 'always',
+            action: quickAddInstructions.trim(),
+            action_instructions: quickAddInstructions.trim(),
+            enabled: false,
+            priority: maxPriority + 1,
+            trigger_type: 'always'
+          })
+
+        if (error) throw error
+
+        toast.success('Rule créée !')
+        handleQuickAddCancel()
+        await loadRules()
+      } catch (error) {
+        console.error('Error creating rule:', error)
+        toast.error('Erreur création rule')
+      } finally {
+        setIsCreatingQuick(false)
+      }
+    }
+  }
+
+  // Load categories + rules in parallel for faster loading
   useEffect(() => {
-    loadCategories()
+    loadData()
   }, [projectId])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+
+      // Execute both requests in parallel
+      const [categoriesRes, rulesRes] = await Promise.all([
+        fetch(`/api/rules/categories?projectId=${projectId}`),
+        supabase
+          .from('rules')
+          .select(`
+            *,
+            rule_category:rule_categories!category_id(id, key, label, icon_name, icon_color, description)
+          `)
+          .eq('project_id', projectId)
+          .order('priority', { ascending: true })
+      ])
+
+      // Process categories
+      const { categories: supabaseCategories } = await categoriesRes.json()
+      if (supabaseCategories && supabaseCategories.length > 0) {
+        const formatted = supabaseCategories.map((cat: any) => ({
+          id: cat.id,
+          value: cat.key,
+          label: cat.label,
+          icon: cat.icon_name || cat.icon || 'Shield',
+          color: cat.icon_color || '#6b7280'
+        }))
+        setCategories(formatted)
+      }
+
+      // Process rules
+      if (rulesRes.error) throw rulesRes.error
+      setRules((rulesRes.data as any) || [])
+    } catch (error) {
+      console.error('Error loading data:', error)
+      toast.error('Erreur chargement rules')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const loadCategories = async () => {
     try {
@@ -216,13 +503,12 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
       const { categories: supabaseCategories } = await response.json()
 
       if (supabaseCategories && supabaseCategories.length > 0) {
-        // Convert Supabase format to component format (include id for deletion)
         const formatted = supabaseCategories.map((cat: any) => ({
-          id: cat.id,  // UUID for API calls
+          id: cat.id,
           value: cat.key,
           label: cat.label,
-          icon: cat.icon_name || cat.icon || 'Shield', // ✅ Use icon_name from DB
-          color: cat.icon_color || '#6b7280' // ✅ Use icon_color from DB
+          icon: cat.icon_name || cat.icon || 'Shield',
+          color: cat.icon_color || '#6b7280'
         }))
         setCategories(formatted)
       }
@@ -231,42 +517,32 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
     }
   }
 
-  const handleSaveCategories = async (newCategories: typeof categories) => {
-    try {
-      // ℹ️ CategoryManager fait déjà les appels API individuels (POST/PUT/DELETE)
-      // Ici on recharge juste depuis la DB pour synchroniser
-      setShowCategoryManager(false)
-      await loadCategories() // Reload from DB
-      toast.success('Catégories sauvegardées !')
-    } catch (error) {
-      console.error('Error reloading categories:', error)
-      toast.error('Erreur lors du rechargement')
-    }
-  }
-
-  useEffect(() => {
-    loadRules()
-  }, [projectId])
-
   const loadRules = async () => {
     try {
-      setLoading(true)
       const { data, error } = await supabase
         .from('rules')
         .select(`
-        *,
-        rule_category:rule_categories!category_id(id, key, label, icon_name, icon_color, description)
-      `)
-      .eq('project_id', projectId)
+          *,
+          rule_category:rule_categories!category_id(id, key, label, icon_name, icon_color, description)
+        `)
+        .eq('project_id', projectId)
         .order('priority', { ascending: true })
 
       if (error) throw error
       setRules((data as any) || [])
     } catch (error) {
       console.error('Error loading rules:', error)
-      toast.error('Erreur chargement rules')
-    } finally {
-      setLoading(false)
+    }
+  }
+
+  const handleSaveCategories = async (newCategories: typeof categories) => {
+    try {
+      setShowCategoryManager(false)
+      await loadCategories()
+      toast.success('Catégories sauvegardées !')
+    } catch (error) {
+      console.error('Error reloading categories:', error)
+      toast.error('Erreur lors du rechargement')
     }
   }
 
@@ -316,6 +592,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
           name: `${rule.name} (copy)`,
           description: rule.description,
           icon: rule.icon,
+          color: rule.color,
           category: rule.category,
           category_id: (rule as any).category_id,
           trigger_type: rule.trigger_type,
@@ -397,6 +674,7 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             name: ruleData.name,
             description: ruleData.description,
             icon: ruleData.icon,
+            color: ruleData.color,
             category_id: ruleData.category_id,
             trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
             action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
@@ -420,7 +698,8 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
             project_id: projectId,
             name: ruleData.name,
             description: ruleData.description,
-            icon: ruleData.icon || '🎯',
+            icon: ruleData.icon || 'Target',
+            color: ruleData.color || '#3b82f6',
             category_id: ruleData.category_id,
             trigger: ruleData.trigger_config?.keywords?.join(', ') || 'manual',
             action: ruleData.action_instructions || ruleData.action_config?.instructions || ruleData.description || 'Execute rule',
@@ -643,11 +922,108 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                       </div>
                     </div>
                   </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleStartQuickAdd('uncategorized')
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300 bg-white dark:bg-orange-900/20 border border-orange-300 dark:border-orange-600 rounded hover:bg-orange-50 dark:hover:bg-orange-900/30 transition-colors"
+                      title="Quick add rule"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Category Rules */}
                 {expandedCategories.has('uncategorized') && (
                   <div className="p-4 space-y-2 bg-white dark:bg-gray-900">
+                    {/* Quick Add Inline UI for Uncategorized */}
+                    {quickAddCategory === 'uncategorized' && (
+                      <div className="p-3 border-2 border-dashed border-orange-400 dark:border-orange-500 rounded-lg bg-orange-50 dark:bg-orange-900/20 space-y-2">
+                        {quickAddStep === 'name' ? (
+                          <div>
+                            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                              Rule Name
+                            </label>
+                            <Input
+                              autoFocus
+                              placeholder="Enter rule name..."
+                              value={quickAddName}
+                              onChange={(e) => setQuickAddName(e.target.value)}
+                              onKeyDown={handleQuickAddKeyDown}
+                              disabled={isCreatingQuick}
+                              className="text-sm"
+                            />
+                            <div className="flex items-center gap-2 mt-2">
+                              <button
+                                onClick={handleQuickAddSubmit}
+                                disabled={!quickAddName.trim() || isCreatingQuick}
+                                className="px-3 py-1 text-xs font-medium bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 rounded hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Next
+                              </button>
+                              <button
+                                onClick={handleQuickAddCancel}
+                                disabled={isCreatingQuick}
+                                className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                              >
+                                Cancel
+                              </button>
+                              <span className="text-xs text-gray-500 ml-auto">Press Enter to continue</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                              Instructions for AI
+                            </label>
+                            <Input
+                              autoFocus
+                              placeholder="Enter instructions..."
+                              value={quickAddInstructions}
+                              onChange={(e) => setQuickAddInstructions(e.target.value)}
+                              onKeyDown={handleQuickAddKeyDown}
+                              disabled={isCreatingQuick}
+                              className="text-sm"
+                            />
+                            <div className="flex items-center gap-2 mt-2">
+                              <button
+                                onClick={handleQuickAddSubmit}
+                                disabled={!quickAddInstructions.trim() || isCreatingQuick}
+                                className="px-3 py-1 text-xs font-medium bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 rounded hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                              >
+                                {isCreatingQuick ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white dark:border-gray-900"></div>
+                                    Creating...
+                                  </>
+                                ) : (
+                                  'Create Rule'
+                                )}
+                              </button>
+                              <button
+                                onClick={() => setQuickAddStep('name')}
+                                disabled={isCreatingQuick}
+                                className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                              >
+                                Back
+                              </button>
+                              <button
+                                onClick={handleQuickAddCancel}
+                                disabled={isCreatingQuick}
+                                className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                              >
+                                Cancel
+                              </button>
+                              <span className="text-xs text-gray-500 ml-auto">Press Enter to create</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <SortableContext items={uncategorizedRules.map(r => r.id)} strategy={verticalListSortingStrategy}>
                       {uncategorizedRules.map(rule => (
                         <SortableRule
@@ -662,6 +1038,13 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                           onEdit={(r) => { setEditingRule(r); setShowBuilder(true); }}
                           onDelete={handleDeleteRule}
                           onDuplicate={handleDuplicateRule}
+                          editingInline={editingInline}
+                          inlineEditValue={inlineEditValue}
+                          onStartInlineEdit={startInlineEdit}
+                          onCancelInlineEdit={cancelInlineEdit}
+                          onSaveInlineEdit={saveInlineEdit}
+                          onInlineEditChange={(value) => setInlineEditValue(value)}
+                          onInlineKeyDown={handleInlineKeyDown}
                         />
                       ))}
                     </SortableContext>
@@ -702,22 +1085,119 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                         </div>
                       </div>
                     </button>
-                    {categoryRules.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      {categoryRules.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            selectAllInCategory(category.value, categoryRules)
+                          }}
+                          className="text-xs text-gray-700 dark:text-gray-400 hover:underline px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          {allSelected ? 'Deselect All' : 'Select All'}
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          selectAllInCategory(category.value, categoryRules)
+                          handleStartQuickAdd((category as any).id)
                         }}
-                        className="text-xs text-gray-700 dark:text-gray-400 hover:underline px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        title="Quick add rule"
                       >
-                        {allSelected ? 'Deselect All' : 'Select All'}
+                        <Plus size={14} />
                       </button>
-                    )}
+                    </div>
                   </div>
 
                   {/* Category Rules */}
                   {isExpanded && (
                     <div className="p-4 space-y-2 bg-white dark:bg-gray-900">
+                      {/* Quick Add Inline UI */}
+                      {quickAddCategory === (category as any).id && (
+                        <div className="p-3 border-2 border-dashed border-gray-400 dark:border-gray-500 rounded-lg bg-gray-50 dark:bg-gray-800/50 space-y-2">
+                          {quickAddStep === 'name' ? (
+                            <div>
+                              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                                Rule Name
+                              </label>
+                              <Input
+                                autoFocus
+                                placeholder="Enter rule name..."
+                                value={quickAddName}
+                                onChange={(e) => setQuickAddName(e.target.value)}
+                                onKeyDown={handleQuickAddKeyDown}
+                                disabled={isCreatingQuick}
+                                className="text-sm"
+                              />
+                              <div className="flex items-center gap-2 mt-2">
+                                <button
+                                  onClick={handleQuickAddSubmit}
+                                  disabled={!quickAddName.trim() || isCreatingQuick}
+                                  className="px-3 py-1 text-xs font-medium bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 rounded hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                                <button
+                                  onClick={handleQuickAddCancel}
+                                  disabled={isCreatingQuick}
+                                  className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                >
+                                  Cancel
+                                </button>
+                                <span className="text-xs text-gray-500 ml-auto">Press Enter to continue</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                                Instructions for AI
+                              </label>
+                              <Input
+                                autoFocus
+                                placeholder="Enter instructions..."
+                                value={quickAddInstructions}
+                                onChange={(e) => setQuickAddInstructions(e.target.value)}
+                                onKeyDown={handleQuickAddKeyDown}
+                                disabled={isCreatingQuick}
+                                className="text-sm"
+                              />
+                              <div className="flex items-center gap-2 mt-2">
+                                <button
+                                  onClick={handleQuickAddSubmit}
+                                  disabled={!quickAddInstructions.trim() || isCreatingQuick}
+                                  className="px-3 py-1 text-xs font-medium bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 rounded hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  {isCreatingQuick ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white dark:border-gray-900"></div>
+                                      Creating...
+                                    </>
+                                  ) : (
+                                    'Create Rule'
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => setQuickAddStep('name')}
+                                  disabled={isCreatingQuick}
+                                  className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                >
+                                  Back
+                                </button>
+                                <button
+                                  onClick={handleQuickAddCancel}
+                                  disabled={isCreatingQuick}
+                                  className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                                >
+                                  Cancel
+                                </button>
+                                <span className="text-xs text-gray-500 ml-auto">Press Enter to create</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {categoryRules.length === 0 ? (
                         <div className="text-center py-8 text-gray-400 text-sm">
                           No rules in this category yet
@@ -737,6 +1217,13 @@ export default function RulesCompactV3({ projectId }: RulesCompactV3Props) {
                               onEdit={(r) => { setEditingRule(r); setShowBuilder(true); }}
                               onDelete={handleDeleteRule}
                               onDuplicate={handleDuplicateRule}
+                              editingInline={editingInline}
+                              inlineEditValue={inlineEditValue}
+                              onStartInlineEdit={startInlineEdit}
+                              onCancelInlineEdit={cancelInlineEdit}
+                              onSaveInlineEdit={saveInlineEdit}
+                              onInlineEditChange={(value) => setInlineEditValue(value)}
+                              onInlineKeyDown={handleInlineKeyDown}
                             />
                           ))}
                         </SortableContext>
