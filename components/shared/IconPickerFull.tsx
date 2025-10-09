@@ -13,28 +13,56 @@ interface IconPickerFullProps {
   onChange: (iconName: string) => void
   trigger?: React.ReactNode
   color?: string // Couleur de l'icône affichée
+  size?: number // Taille de l'icône dans le trigger (default: 20)
 }
 
-// Extraire TOUS les noms d'icônes Phosphor (9000+)
-const ALL_PHOSPHOR_ICONS = Object.keys(PhosphorIcons).filter(
-  key => typeof PhosphorIcons[key as keyof typeof PhosphorIcons] === 'function'
-    && !key.includes('Icon') // Exclure les variants "Icon"
-    && key !== 'IconContext'
-)
+// Extraction dynamique de TOUTES les icônes Phosphor (1500+)
+// Exclusion uniquement des exports utilitaires et du module SSR
+const ALL_PHOSPHOR_ICONS = Object.keys(PhosphorIcons)
+  .filter(key => {
+    // Exclure les exports utilitaires et non-composants
+    const excludeList = ['IconContext', 'IconBase', 'SSR', 'Icon', 'IconProps', 'IconWeight']
+    if (excludeList.includes(key)) return false
 
-export default function IconPickerFull({ value, onChange, trigger, color = 'currentColor' }: IconPickerFullProps) {
+    // Vérifier que c'est un export valide (composant React)
+    const exported = PhosphorIcons[key as keyof typeof PhosphorIcons]
+    return exported !== undefined && exported !== null
+  })
+  .sort()
+
+export default function IconPickerFull({ value, onChange, trigger, color = 'currentColor', size = 20 }: IconPickerFullProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [displayLimit, setDisplayLimit] = useState(300) // Nombre d'icônes à afficher
 
   // Filtrer les icônes par recherche
   const filteredIcons = useMemo(() => {
-    if (!search) return ALL_PHOSPHOR_ICONS.slice(0, 200) // Limit initial display
-
     const searchLower = search.toLowerCase()
-    return ALL_PHOSPHOR_ICONS
-      .filter(name => name.toLowerCase().includes(searchLower))
-      .slice(0, 200) // Limit results to 200 for performance
+    const filtered = search
+      ? ALL_PHOSPHOR_ICONS.filter(name => name.toLowerCase().includes(searchLower))
+      : ALL_PHOSPHOR_ICONS
+
+    return filtered.slice(0, displayLimit)
+  }, [search, displayLimit])
+
+  // Toutes les icônes filtrées (pour le compteur)
+  const totalFiltered = useMemo(() => {
+    if (!search) return ALL_PHOSPHOR_ICONS.length
+    return ALL_PHOSPHOR_ICONS.filter(name => name.toLowerCase().includes(search.toLowerCase())).length
   }, [search])
+
+  // Fonction pour charger plus d'icônes
+  const loadMore = () => {
+    setDisplayLimit(prev => prev + 300)
+  }
+
+  // Reset du displayLimit quand on change la recherche
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    setDisplayLimit(300)
+  }
+
+  const hasMore = filteredIcons.length < totalFiltered
 
   // Icône actuellement sélectionnée
   const SelectedIcon = value && PhosphorIcons[value as keyof typeof PhosphorIcons]
@@ -52,7 +80,7 @@ export default function IconPickerFull({ value, onChange, trigger, color = 'curr
           "bg-white dark:bg-gray-800"
         )}
       >
-        {trigger || <SelectedIcon size={20} color={color} weight="regular" />}
+        {trigger || <SelectedIcon size={size} color={color} weight="regular" />}
       </button>
 
       {/* Icon Picker Dialog */}
@@ -70,14 +98,14 @@ export default function IconPickerFull({ value, onChange, trigger, color = 'curr
             <Search size={16} className="absolute left-3 top-3 text-gray-400" />
             <Input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search icons... (ex: folder, shield, brain)"
               className="pl-9 pr-9"
               autoFocus
             />
             {search && (
               <button
-                onClick={() => setSearch('')}
+                onClick={() => handleSearchChange('')}
                 className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
               >
                 <X size={16} />
@@ -119,11 +147,7 @@ export default function IconPickerFull({ value, onChange, trigger, color = 'curr
                       <Icon
                         size={24}
                         weight="regular"
-                        className={cn(
-                          isSelected
-                            ? "text-white dark:text-gray-900"
-                            : "text-gray-700 dark:text-gray-400"
-                        )}
+                        color={isSelected ? (document.documentElement.classList.contains('dark') ? '#111827' : '#ffffff') : color}
                       />
                       <span className={cn(
                         "text-[9px] mt-1 truncate w-full text-center",
@@ -140,18 +164,23 @@ export default function IconPickerFull({ value, onChange, trigger, color = 'curr
             )}
           </ScrollArea>
 
-          {/* Stats */}
-          <div className="text-xs text-gray-500 text-center pt-2 border-t">
-            {search ? (
-              <>
-                Showing {filteredIcons.length} of {ALL_PHOSPHOR_ICONS.length.toLocaleString()} icons
-                {filteredIcons.length === 200 && ' (limited to 200 for performance)'}
-              </>
-            ) : (
-              <>
-                Showing first 200 of {ALL_PHOSPHOR_ICONS.length.toLocaleString()} icons - use search to find more
-              </>
+          {/* Stats & Load More */}
+          <div className="flex flex-col gap-2 pt-3 border-t">
+            {/* Load More Button */}
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                className="mx-auto px-4 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
+              >
+                Load More Icons ({totalFiltered - filteredIcons.length} remaining)
+              </button>
             )}
+
+            {/* Stats */}
+            <div className="text-xs text-gray-500 text-center">
+              Showing {filteredIcons.length.toLocaleString()} of {totalFiltered.toLocaleString()} icons
+              {search && ` matching "${search}"`}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

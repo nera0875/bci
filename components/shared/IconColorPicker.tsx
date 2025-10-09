@@ -44,13 +44,7 @@ export default function IconColorPicker({
           value={icon}
           onChange={onIconChange}
           color={color}
-          trigger={
-            <DynamicIcon
-              name={icon}
-              size={sizeMap[size].icon}
-              color={color}
-            />
-          }
+          size={sizeMap[size].icon}
         />
 
         {/* Color Picker */}
