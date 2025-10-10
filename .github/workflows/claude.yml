@@ -35,57 +35,31 @@ jobs:
       
       - name: 🔧 Prepare MCP Config with Secrets
         run: |
-          # Créer un fichier MCP config avec serveurs Smithery
+          # Créer un fichier MCP config avec serveurs HTTP Smithery
           cat > /tmp/mcp-config.json << 'EOF'
           {
             "mcpServers": {
               "supabase": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@smithery/cli@latest",
-                  "run",
-                  "@supabase-community/supabase-mcp",
-                  "--key",
-                  "$SMITHERY_API_KEY",
-                  "--profile",
-                  "rolling-ladybug-4DEfPv",
-                  "--config",
-                  "{\"accessToken\":\"$SUPABASE_ACCESS_TOKEN\",\"projectRef\":\"clcpszhztwfhnvirexao\"}"
-                ]
+                "type": "http",
+                "url": "https://server.smithery.ai/@supabase-community/supabase-mcp/mcp",
+                "headers": {
+                  "X-API-Key": "$SMITHERY_API_KEY",
+                  "X-Supabase-Access-Token": "$SUPABASE_ACCESS_TOKEN",
+                  "X-Project-Ref": "clcpszhztwfhnvirexao"
+                }
               },
               "smithery-ai-server-sequential-thinking": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@smithery/cli@latest",
-                  "run",
-                  "@xinzhongyouhai/mcp-sequentialthinking-tools",
-                  "--key",
-                  "$SMITHERY_API_KEY",
-                  "--profile",
-                  "rolling-ladybug-4DEfPv"
-                ]
+                "type": "http",
+                "url": "https://server.smithery.ai/@xinzhongyouhai/mcp-sequentialthinking-tools/mcp",
+                "headers": {
+                  "X-API-Key": "$SMITHERY_API_KEY"
+                }
               },
               "byterover-mcp": {
                 "command": "npx",
                 "args": [
                   "-y",
                   "@byterover/mcp-server@latest"
-                ]
-              },
-              "chrome-devtools": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@executeautomation/mcp-playwright@latest"
-                ]
-              },
-              "vercel": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@modelcontextprotocol/server-vercel@latest"
                 ]
               }
             }
