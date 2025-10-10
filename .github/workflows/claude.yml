@@ -35,23 +35,37 @@ jobs:
       
       - name: 🔧 Prepare MCP Config with Secrets
         run: |
-          # Créer un fichier MCP config avec serveurs HTTP et NPM
+          # Créer un fichier MCP config avec serveurs Smithery
           cat > /tmp/mcp-config.json << 'EOF'
           {
             "mcpServers": {
               "supabase": {
-                "type": "http",
-                "url": "https://mcp.supabase.com/mcp",
-                "headers": {
-                  "Authorization": "Bearer $SUPABASE_ACCESS_TOKEN"
-                }
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@smithery/cli@latest",
+                  "run",
+                  "@supabase-community/supabase-mcp",
+                  "--key",
+                  "$SMITHERY_API_KEY",
+                  "--profile",
+                  "rolling-ladybug-4DEfPv",
+                  "--config",
+                  "{\"accessToken\":\"$SUPABASE_ACCESS_TOKEN\",\"projectRef\":\"clcpszhztwfhnvirexao\"}"
+                ]
               },
               "smithery-ai-server-sequential-thinking": {
-                "type": "http",
-                "url": "https://server.smithery.ai/@xinzhongyouhai/mcp-sequentialthinking-tools/mcp",
-                "headers": {
-                  "X-API-Key": "$SMITHERY_API_KEY"
-                }
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@smithery/cli@latest",
+                  "run",
+                  "@xinzhongyouhai/mcp-sequentialthinking-tools",
+                  "--key",
+                  "$SMITHERY_API_KEY",
+                  "--profile",
+                  "rolling-ladybug-4DEfPv"
+                ]
               },
               "byterover-mcp": {
                 "command": "npx",
@@ -79,8 +93,8 @@ jobs:
           EOF
           
           # Substituer les variables d'environnement
-          sed -i "s|\$SUPABASE_ACCESS_TOKEN|${{ secrets.SUPABASE_ACCESS_TOKEN }}|g" /tmp/mcp-config.json
           sed -i "s|\$SMITHERY_API_KEY|${{ secrets.SMITHERY_API_KEY }}|g" /tmp/mcp-config.json
+          sed -i "s|\$SUPABASE_ACCESS_TOKEN|${{ secrets.SUPABASE_ACCESS_TOKEN }}|g" /tmp/mcp-config.json
           
           echo "✅ MCP config créé avec secrets injectés"
           cat /tmp/mcp-config.json | jq -r '.mcpServers | keys[]' | while read server; do
