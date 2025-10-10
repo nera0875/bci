@@ -32,10 +32,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🔧 Prepare MCP Config - STDIO Mode
+      - name: 🔧 Create Project MCP Config (.mcp.json)
         run: |
-          # Configuration MCP en mode stdio (command-based) au lieu de HTTP
-          cat > /tmp/mcp-config.json << 'CONFIGEOF'
+          # Créer .mcp.json à la RACINE du projet (project-scoped MCP)
+          # Au lieu d'utiliser --mcp-config qui est bugué (Issue #5593)
+          cat > .mcp.json << 'CONFIGEOF'
           {
             "mcpServers": {
               "supabase": {
@@ -65,12 +66,12 @@ jobs:
           CONFIGEOF
 
           # Substitution des secrets
-          sed -i "s|REPLACE_ACCESS_TOKEN|${{ secrets.SUPABASE_ACCESS_TOKEN }}|g" /tmp/mcp-config.json
-          sed -i "s|REPLACE_SMITHERY_KEY|${{ secrets.SMITHERY_API_KEY }}|g" /tmp/mcp-config.json
+          sed -i "s|REPLACE_ACCESS_TOKEN|${{ secrets.SUPABASE_ACCESS_TOKEN }}|g" .mcp.json
+          sed -i "s|REPLACE_SMITHERY_KEY|${{ secrets.SMITHERY_API_KEY }}|g" .mcp.json
 
-          echo "✅ MCP config créé en mode STDIO"
+          echo "✅ Project MCP config créé: .mcp.json"
           echo "Serveurs configurés:"
-          cat /tmp/mcp-config.json | jq -r '.mcpServers | keys[]' | while read server; do
+          cat .mcp.json | jq -r '.mcpServers | keys[]' | while read server; do
             echo "  - $server"
           done
 
@@ -80,7 +81,6 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: |
-            --mcp-config /tmp/mcp-config.json
             --max-turns 20
             --allowedTools "mcp__supabase__*,mcp__byterover-mcp__*,mcp__smithery-ai-server-sequential-thinking__*"
             --mcp-debug
