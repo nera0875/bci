@@ -82,6 +82,8 @@ jobs:
           claude_args: |
             --mcp-config /tmp/mcp-config.json
             --max-turns 20
+            --allowedTools "mcp__supabase__*,mcp__byterover-mcp__*,mcp__smithery-ai-server-sequential-thinking__*"
+            --mcp-debug
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
