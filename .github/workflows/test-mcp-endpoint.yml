@@ -1,0 +1,80 @@
+name: Test MCP Supabase Endpoint
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-auth-combinations:
+    name: Test Different Auth Combinations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Test 1 - ACCESS_TOKEN seul (Authorization header)
+        run: |
+          echo "=== TEST 1: ACCESS_TOKEN avec Authorization Bearer ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
+
+      - name: Test 2 - ACCESS_TOKEN + Project Ref (comme notre config actuelle)
+        run: |
+          echo "=== TEST 2: ACCESS_TOKEN + X-Supabase-Project-Ref ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            -H "X-Supabase-Project-Ref: clcpszhztwfhnvirexao" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
+
+      - name: Test 3 - SERVICE_ROLE_KEY seul
+        run: |
+          echo "=== TEST 3: SERVICE_ROLE_KEY avec Authorization Bearer ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
+
+      - name: Test 4 - SERVICE_ROLE_KEY + Project Ref
+        run: |
+          echo "=== TEST 4: SERVICE_ROLE_KEY + X-Supabase-Project-Ref ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "X-Supabase-Project-Ref: clcpszhztwfhnvirexao" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
+
+      - name: Test 5 - Les deux tokens combinés
+        run: |
+          echo "=== TEST 5: ACCESS_TOKEN + SERVICE_ROLE_KEY via custom header ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            -H "X-Supabase-Service-Role: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "X-Supabase-Project-Ref: clcpszhztwfhnvirexao" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
+
+      - name: Test 6 - ANON_KEY (au cas où)
+        run: |
+          echo "=== TEST 6: ANON_KEY ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "X-Supabase-Project-Ref: clcpszhztwfhnvirexao" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
+
+      - name: Test 7 - SERVICE_ROLE_KEY via apikey header
+        run: |
+          echo "=== TEST 7: SERVICE_ROLE_KEY via apikey header ==="
+          curl -X POST https://mcp.supabase.com/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "X-Supabase-Project-Ref: clcpszhztwfhnvirexao" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            -v 2>&1 || echo "Failed"
