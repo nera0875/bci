@@ -4,6 +4,8 @@ on:
     types: [created]
   pull_request_review_comment:
     types: [created]
+  issues:
+    types: [opened, assigned]
 
 permissions:
   contents: write
@@ -12,17 +14,18 @@ permissions:
 
 jobs:
   claude:
-    # Only run when @claude is mentioned
-    if: contains(github.event.comment.body, '@claude')
+    # Run when @claude is mentioned in comments OR in issue body
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
