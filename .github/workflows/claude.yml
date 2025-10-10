@@ -33,51 +33,98 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: 🔧 Prepare MCP Config with Secrets
+        run: |
+          # Créer un fichier MCP config temporaire avec les secrets injectés
+          cat > /tmp/mcp-config.json << 'EOF'
+          {
+            "mcpServers": {
+              "supabase": {
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@supabase/mcp-server-supabase@latest",
+                  "--project-ref=clcpszhztwfhnvirexao"
+                ],
+                "env": {
+                  "SUPABASE_ACCESS_TOKEN": "$SUPABASE_ACCESS_TOKEN"
+                }
+              },
+              "byterover-mcp": {
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@byterover/mcp-server@latest"
+                ]
+              },
+              "smithery-ai-server-sequential-thinking": {
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@smithery/cli@latest",
+                  "run",
+                  "@xinzhongyouhai/mcp-sequentialthinking-tools",
+                  "--key",
+                  "$SMITHERY_API_KEY"
+                ]
+              },
+              "linear": {
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@smithery/cli@latest",
+                  "run",
+                  "@tacticlaunch/mcp-linear",
+                  "--key",
+                  "$SMITHERY_API_KEY",
+                  "--profile",
+                  "rolling-ladybug-4DEfPv"
+                ]
+              },
+              "chrome-devtools": {
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@executeautomation/mcp-playwright@latest"
+                ]
+              },
+              "vercel": {
+                "command": "npx",
+                "args": [
+                  "-y",
+                  "@modelcontextprotocol/server-vercel@latest"
+                ]
+              }
+            }
+          }
+          EOF
+          
+          # Substituer les variables d'environnement
+          sed -i "s|\$SUPABASE_ACCESS_TOKEN|${{ secrets.SUPABASE_ACCESS_TOKEN }}|g" /tmp/mcp-config.json
+          sed -i "s|\$SMITHERY_API_KEY|${{ secrets.SMITHERY_API_KEY }}|g" /tmp/mcp-config.json
+          
+          echo "✅ MCP config créé avec secrets injectés"
+          cat /tmp/mcp-config.json | jq -r '.mcpServers | keys[]' | while read server; do
+            echo "  - $server"
+          done
+      
       - name: 🤖 Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          # Authentification
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           
-          # Configuration MCP (charge le fichier)
-          mcp_config: .github/mcp-config.json
-          
-          # Outils autorisés
-          allowed_tools: |
-            Bash(git:*),
-            Read,
-            Write,
-            Edit,
-            Glob,
-            Grep,
-            mcp__supabase__*,
-            mcp__byterover-mcp__*,
-            mcp__smithery-ai-server-sequential-thinking__*,
-            mcp__linear__*,
-            mcp__chrome-devtools__*,
-            mcp__vercel__*
-          
-          # Limite de tours de conversation
-          max_turns: 20
-          
-          # Modèle à utiliser
-          model: claude-sonnet-4-5-20250929
-          
-          # Timeout
-          timeout_minutes: 25
+          claude_args: |
+            --mcp-config /tmp/mcp-config.json
+            --max-turns 20
         env:
-          # Variables d'environnement pour MCP Supabase
+          # Variables pour MCP servers qui les lisent directement
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          
-          # Variables pour Smithery (Sequential Thinking + Linear)
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
-          
-          # GitHub Token
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 📊 Upload Execution Log
@@ -87,3 +134,4 @@ jobs:
           name: claude-execution-log
           path: claude-execution.json
           retention-days: 7
+          if-no-files-found: warn
