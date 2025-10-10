@@ -35,13 +35,17 @@ jobs:
       
       - name: 🔧 Prepare MCP Config with Secrets
         run: |
-          # Utiliser l'endpoint HTTP officiel Supabase (pas Smithery)
+          # Utiliser l'endpoint HTTP officiel Supabase avec headers d'authentification
           cat > /tmp/mcp-config.json << 'EOF'
           {
             "mcpServers": {
               "supabase": {
                 "type": "http",
-                "url": "https://mcp.supabase.com/mcp"
+                "url": "https://mcp.supabase.com/mcp",
+                "headers": {
+                  "Authorization": "Bearer $SUPABASE_ACCESS_TOKEN",
+                  "X-Supabase-Project-Ref": "clcpszhztwfhnvirexao"
+                }
               },
               "smithery-ai-server-sequential-thinking": {
                 "type": "http",
@@ -61,10 +65,11 @@ jobs:
           }
           EOF
           
-          # Substituer le Smithery API key
+          # Substituer les secrets
+          sed -i "s|\$SUPABASE_ACCESS_TOKEN|${{ secrets.SUPABASE_ACCESS_TOKEN }}|g" /tmp/mcp-config.json
           sed -i "s|\$SMITHERY_API_KEY|${{ secrets.SMITHERY_API_KEY }}|g" /tmp/mcp-config.json
           
-          echo "✅ MCP config créé avec endpoint officiel Supabase"
+          echo "✅ MCP config créé avec authentification headers"
           cat /tmp/mcp-config.json | jq -r '.mcpServers | keys[]' | while read server; do
             echo "  - $server"
           done
