@@ -1,0 +1,60 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--project-ref=clcpszhztwfhnvirexao"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      }
+    },
+    "byterover-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@byterover/mcp-server@latest"
+      ]
+    },
+    "smithery-ai-server-sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@xinzhongyouhai/mcp-sequentialthinking-tools",
+        "--key",
+        "${SMITHERY_API_KEY}"
+      ]
+    },
+    "linear": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@tacticlaunch/mcp-linear",
+        "--key",
+        "${SMITHERY_API_KEY}",
+        "--profile",
+        "rolling-ladybug-4DEfPv"
+      ]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@executeautomation/mcp-playwright@latest"
+      ]
+    },
+    "vercel": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-vercel@latest"
+      ]
+    }
+  }
+}

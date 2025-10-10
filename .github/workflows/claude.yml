@@ -46,15 +46,20 @@ jobs:
           # Outils autorisés
           allowed_tools: |
             Bash(git:*),
-            View,
-            GlobTool,
-            GrepTool,
-            BatchTool,
+            Read,
+            Write,
+            Edit,
+            Glob,
+            Grep,
             mcp__supabase__*,
-            mcp__github__*
+            mcp__byterover-mcp__*,
+            mcp__smithery-ai-server-sequential-thinking__*,
+            mcp__linear__*,
+            mcp__chrome-devtools__*,
+            mcp__vercel__*
           
           # Limite de tours de conversation
-          max_turns: 15
+          max_turns: 20
           
           # Modèle à utiliser
           model: claude-sonnet-4-5-20250929
@@ -62,11 +67,17 @@ jobs:
           # Timeout
           timeout_minutes: 25
         env:
-          # Variables d'environnement pour MCP
+          # Variables d'environnement pour MCP Supabase
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          
+          # Variables pour Smithery (Sequential Thinking + Linear)
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+          
+          # GitHub Token
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 📊 Upload Execution Log
