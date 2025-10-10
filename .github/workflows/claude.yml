@@ -35,19 +35,22 @@ jobs:
       
       - name: 🔧 Prepare MCP Config with Secrets
         run: |
-          # Créer un fichier MCP config temporaire avec les secrets injectés
+          # Créer un fichier MCP config avec serveurs HTTP et NPM
           cat > /tmp/mcp-config.json << 'EOF'
           {
             "mcpServers": {
               "supabase": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@supabase/mcp-server-supabase@latest",
-                  "--project-ref=clcpszhztwfhnvirexao"
-                ],
-                "env": {
-                  "SUPABASE_ACCESS_TOKEN": "$SUPABASE_ACCESS_TOKEN"
+                "type": "http",
+                "url": "https://mcp.supabase.com/mcp",
+                "headers": {
+                  "Authorization": "Bearer $SUPABASE_ACCESS_TOKEN"
+                }
+              },
+              "smithery-ai-server-sequential-thinking": {
+                "type": "http",
+                "url": "https://server.smithery.ai/@xinzhongyouhai/mcp-sequentialthinking-tools/mcp",
+                "headers": {
+                  "X-API-Key": "$SMITHERY_API_KEY"
                 }
               },
               "byterover-mcp": {
@@ -55,30 +58,6 @@ jobs:
                 "args": [
                   "-y",
                   "@byterover/mcp-server@latest"
-                ]
-              },
-              "smithery-ai-server-sequential-thinking": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@smithery/cli@latest",
-                  "run",
-                  "@xinzhongyouhai/mcp-sequentialthinking-tools",
-                  "--key",
-                  "$SMITHERY_API_KEY"
-                ]
-              },
-              "linear": {
-                "command": "npx",
-                "args": [
-                  "-y",
-                  "@smithery/cli@latest",
-                  "run",
-                  "@tacticlaunch/mcp-linear",
-                  "--key",
-                  "$SMITHERY_API_KEY",
-                  "--profile",
-                  "rolling-ladybug-4DEfPv"
                 ]
               },
               "chrome-devtools": {
